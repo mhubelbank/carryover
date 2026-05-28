@@ -1,0 +1,149 @@
+/* Buttons. Default is the neutral outline; modifier classes add intent. */
+
+.button {
+  font-size: 14px;
+  padding: 8px 14px;
+  background: var(--color-background-primary);
+  border: 0.5px solid var(--color-border-secondary);
+  border-radius: var(--border-radius-md);
+  color: var(--color-text-primary);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.button:hover {
+  background: var(--color-background-secondary);
+}
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.button--primary {
+  background: var(--color-background-info);
+  color: var(--color-text-info);
+  border-color: var(--color-border-info);
+}
+.button--primary:hover {
+  filter: brightness(0.97);
+  background: var(--color-background-info);
+}
+
+.button--success {
+  background: var(--color-background-success);
+  color: var(--color-text-success);
+  border-color: var(--color-border-success);
+}
+
+.button--danger-text {
+  color: var(--color-text-danger);
+}
+
+.button--ghost {
+  background: transparent;
+  border-color: transparent;
+}
+.button--ghost:hover {
+  background: var(--color-background-secondary);
+}
+
+.button--small {
+  font-size: 13px;
+  padding: 6px 12px;
+}
+
+/* Form controls */
+
+.input,
+.select,
+.textarea {
+  font-size: 14px;
+  padding: 8px 12px;
+  background: var(--color-background-primary);
+  border: 0.5px solid var(--color-border-secondary);
+  border-radius: var(--border-radius-md);
+  color: var(--color-text-primary);
+  box-sizing: border-box;
+  height: 36px;
+  width: 100%;
+}
+.textarea {
+  height: auto;
+  line-height: 1.5;
+  resize: vertical;
+}
+.input:focus,
+.select:focus,
+.textarea:focus {
+  outline: 2px solid var(--color-border-info);
+  outline-offset: -1px;
+}
+
+.label {
+  display: block;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  margin-bottom: 4px;
+}
+
+.field-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--color-text-info);
+}
+
+/* Card — used for settings sections, mock-frames, etc. */
+
+.card {
+  background: var(--color-background-primary);
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: var(--border-radius-lg);
+  padding: 1.25rem;
+}
+
+.card__title {
+  font-size: 16px;
+  font-weight: 500;
+  margin: 0 0 12px 0;
+}
+
+/* Banner — for inline messages */
+
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: var(--border-radius-md);
+  font-size: 13px;
+  border: 0.5px solid;
+}
+
+.banner--info {
+  background: var(--color-background-info);
+  color: var(--color-text-info);
+  border-color: var(--color-border-info);
+}
+.banner--warning {
+  background: var(--color-background-warning);
+  color: var(--color-text-warning);
+  border-color: var(--color-border-warning);
+}
+.banner--danger {
+  background: var(--color-background-danger);
+  color: var(--color-text-danger);
+  border-color: var(--color-border-danger);
+}
+
+/* Layout shell */
+
+.shell {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 1.5rem 1.5rem 4rem 1.5rem;
+}
