@@ -1,6 +1,6 @@
 import { Icon } from "./Icon";
 
-export type NavPage = "today" | "generate" | "students" | "goals" | "schedule" | "settings";
+export type NavPage = "today" | "generate" | "students" | "teachers" | "schedule" | "settings";
 
 interface NavProps {
   current: NavPage;
@@ -11,7 +11,7 @@ const TABS: Array<{ id: Exclude<NavPage, "settings">; label: string }> = [
   { id: "today", label: "Today" },
   { id: "generate", label: "Generate notes" },
   { id: "students", label: "Students" },
-  { id: "goals", label: "Goals" },
+  { id: "teachers", label: "Teachers" },
   { id: "schedule", label: "Schedule" },
 ];
 
