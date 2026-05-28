@@ -1,0 +1,21 @@
+id,studentId,longTermGoal,shortName,archived
+g_joel_1,s_joel,"Joel will regulate his emotions and behaviors by identifying feelings and using appropriate self-regulation strategies.",identify feelings,false
+g_joel_2,s_joel,"Joel will regulate his emotions and behaviors by identifying feelings and using appropriate self-regulation strategies.",identify coping strategies,false
+g_joel_3,s_joel,"Joel will regulate his emotions and behaviors by identifying feelings and using appropriate self-regulation strategies.",use coping skill with prompt,false
+g_joel_4,s_joel,"Joel will regulate his emotions and behaviors by identifying feelings and using appropriate self-regulation strategies.",use coping skill independently,false
+g_joel_5,s_joel,"Joel will recall explicit text details to answer comprehension questions with no more than one verbal prompt.",identify main topic,false
+g_joel_6,s_joel,"Joel will recall explicit text details to answer comprehension questions with no more than one verbal prompt.",answer who questions,false
+g_joel_7,s_joel,"Joel will recall explicit text details to answer comprehension questions with no more than one verbal prompt.",answer what questions,false
+g_joel_8,s_joel,"Joel will produce multi-word utterances using his AAC device across structured activities.",combine two words,false
+g_joel_9,s_joel,"Joel will produce multi-word utterances using his AAC device across structured activities.",combine three words,false
+g_anasur_1,s_anasur,"Anasur will use his SGD to request preferred items and activities across settings.",request a single item,false
+g_anasur_2,s_anasur,"Anasur will use his SGD to request preferred items and activities across settings.",request across two settings,false
+g_anasur_3,s_anasur,"Anasur will answer wh- questions about familiar routines using his SGD.",answer what questions,false
+g_anasur_4,s_anasur,"Anasur will answer wh- questions about familiar routines using his SGD.",answer where questions,false
+g_eduardo_1,s_eduardo,"Eduardo will increase expressive vocabulary to label common objects and actions.",label objects,false
+g_eduardo_2,s_eduardo,"Eduardo will increase expressive vocabulary to label common objects and actions.",label actions,false
+g_eduardo_3,s_eduardo,"Eduardo will increase expressive vocabulary to label common objects and actions.",use two-word phrases,false
+g_alisia_1,s_alisia,"Alisia will follow directions of increasing length within classroom routines.",follow one-step,false
+g_alisia_2,s_alisia,"Alisia will follow directions of increasing length within classroom routines.",follow two-step,false
+g_aiden_1,s_aiden,"Aiden will use his SGD to participate in social greetings and turn-taking.",initiate a greeting,false
+g_aiden_2,s_aiden,"Aiden will use his SGD to participate in social greetings and turn-taking.",take a turn,false
