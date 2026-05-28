@@ -1,0 +1,40 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Dependencies (matches app/node_modules too)
+node_modules/
+.npm/
+.pnp
+.pnp.js
+
+# Build output
+dist/
+dist-ssr/
+*.local
+
+# Vite / TypeScript caches
+.vite/
+*.tsbuildinfo
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Test coverage
+coverage/
+
+# Environment / secrets
+# (Keys live in browser localStorage, not files — but never commit env files.)
+.env
+.env.*
+!.env.example
+
+# Editors
+.idea/
+*.swp
+*.swo
