@@ -1,23 +1,227 @@
-import { Nav, type NavPage } from "../components/Nav";
+import { useState } from "react";
 import { Banner } from "../components/Banner";
+import { Icon } from "../components/Icon";
+import { Nav, type NavPage } from "../components/Nav";
+import { useTerm } from "../context/TermContext";
+import { addDays, daysBetween, formatLong, formatShort, parseDate, startOfDay, weekdayName } from "../domain/dates";
+import { slotStartMinutes } from "../domain/schedule";
+import type { Student } from "../domain/student";
 
-interface TodayProps {
+interface Props {
   onNavigate: (page: NavPage) => void;
 }
 
-export function Today({ onNavigate }: TodayProps) {
+interface Session {
+  timeSlot: string;
+  teacherId: string;
+  studentIds: string[];
+}
+
+export function Today({ onNavigate }: Props) {
+  const { state, teacherById, studentById } = useTerm();
+  const [selected, setSelected] = useState<Date>(() => startOfDay(new Date()));
+  if (state.status !== "ready") return null;
+  const { term, schedule, students } = state.data;
+
+  const now = startOfDay(new Date());
+
+  // IEP status is relative to the real current date, not the previewed day.
+  const overdue = new Set<string>();
+  const overdueStudents: Student[] = [];
+  const tomorrowStudents: Student[] = [];
+  for (const student of students) {
+    const date = parseDate(student.nextIepReview);
+    if (!date) continue;
+    const delta = daysBetween(now, date);
+    if (delta < 0) {
+      overdue.add(student.id);
+      overdueStudents.push(student);
+    } else if (delta === 1) {
+      tomorrowStudents.push(student);
+    }
+  }
+
+  const lastDay = parseDate(term.lastDay);
+  const daysToEnd = lastDay ? daysBetween(now, lastDay) : null;
+  const termEnding = daysToEnd != null && daysToEnd >= 0 && daysToEnd <= 14;
+
+  const sessions = buildSessions(schedule, weekdayName(selected));
+  const studentCount = new Set(sessions.flatMap((s) => s.studentIds)).size;
+
   return (
     <div className="shell">
       <Nav current="today" onNavigate={onNavigate} />
 
-      <h1 style={{ fontSize: 22, marginBottom: 4 }}>Today</h1>
-      <p style={{ color: "var(--color-text-secondary)", fontSize: 14, marginBottom: "1.5rem" }}>
-        Your daily landing page will go here.
-      </p>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "baseline",
+          justifyContent: "space-between",
+          marginBottom: "1.25rem",
+          gap: 12,
+        }}
+      >
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 500, margin: 0 }}>{formatLong(selected)}</h1>
+          <p style={{ margin: "4px 0 0 0", color: "var(--color-text-secondary)", fontSize: 14 }}>
+            {sessions.length} session{sessions.length === 1 ? "" : "s"} · {studentCount} student
+            {studentCount === 1 ? "" : "s"}
+          </p>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="button button--small" onClick={() => setSelected((d) => addDays(d, -1))}>
+            <Icon name="chevron-left" size={14} />
+          </button>
+          <button className="button button--small" onClick={() => setSelected(now)}>
+            Today
+          </button>
+          <button className="button button--small" onClick={() => setSelected((d) => addDays(d, 1))}>
+            <Icon name="chevron-right" size={14} />
+          </button>
+        </div>
+      </div>
 
-      <Banner variant="info" icon="info-circle">
-        Keys saved. Next slice will load your roster and show today's sessions.
-      </Banner>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: "1.25rem" }}>
+        {termEnding && (
+          <Banner
+            variant="warning"
+            icon="calendar-plus"
+            action={
+              <button className="button button--small" disabled>
+                Prepare new term →
+              </button>
+            }
+          >
+            {term.label} ends {lastDay ? formatShort(lastDay) : ""}
+          </Banner>
+        )}
+        {overdueStudents.map((student) => (
+          <Banner
+            key={student.id}
+            variant="danger"
+            action={
+              <button className="button button--small" onClick={() => onNavigate("students")}>
+                Review goals →
+              </button>
+            }
+          >
+            {student.name}'s IEP review was {formatShort(parseDate(student.nextIepReview) ?? now)} — goal
+            update needed before generating notes
+          </Banner>
+        ))}
+        {tomorrowStudents.map((student) => (
+          <Banner key={student.id} variant="info">
+            {student.name}'s IEP review is tomorrow
+          </Banner>
+        ))}
+      </div>
+
+      {sessions.length === 0 ? (
+        <div
+          style={{
+            border: "0.5px dashed var(--color-border-tertiary)",
+            borderRadius: "var(--border-radius-md)",
+            padding: "1.5rem",
+            textAlign: "center",
+            color: "var(--color-text-tertiary)",
+            fontSize: 14,
+          }}
+        >
+          No sessions scheduled for {weekdayName(selected)}.
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {sessions.map((session) => {
+            const blocked = session.studentIds.some((id) => overdue.has(id));
+            const teacher = teacherById.get(session.teacherId);
+            return (
+              <div
+                key={`${session.timeSlot}|${session.teacherId}`}
+                style={{
+                  border: "0.5px solid var(--color-border-tertiary)",
+                  borderRadius: "var(--border-radius-md)",
+                  padding: "14px 16px",
+                  background: blocked ? "var(--color-background-secondary)" : undefined,
+                  opacity: blocked ? 0.85 : 1,
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    marginBottom: 10,
+                    gap: 10,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span style={{ fontSize: 13, fontWeight: 500, color: "var(--color-text-secondary)" }}>
+                      {session.timeSlot}
+                    </span>
+                    <span style={{ color: "var(--color-text-tertiary)" }}>·</span>
+                    <span style={{ fontSize: 14, fontWeight: 500 }}>{teacher?.name ?? "Unknown"}</span>
+                  </div>
+                  <button
+                    className="button button--small"
+                    disabled
+                    title="Note generation arrives in a later slice"
+                  >
+                    {blocked
+                      ? "Blocked — review goals"
+                      : `Generate ${session.studentIds.length} note${session.studentIds.length === 1 ? "" : "s"}`}
+                  </button>
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {session.studentIds.map((id, i) => {
+                    const student = studentById.get(id);
+                    const isOverdue = overdue.has(id);
+                    return (
+                      <span
+                        key={`${id}-${i}`}
+                        style={{
+                          fontSize: 13,
+                          padding: "4px 10px",
+                          borderRadius: "var(--border-radius-md)",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 4,
+                          background: isOverdue
+                            ? "var(--color-background-danger)"
+                            : "var(--color-background-secondary)",
+                          color: isOverdue ? "var(--color-text-danger)" : undefined,
+                        }}
+                      >
+                        {isOverdue && <Icon name="alert-circle" size={13} />}
+                        {student?.name ?? "Unknown"}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
+  );
+}
+
+function buildSessions(
+  schedule: { teacherId: string; dayOfWeek: string; timeSlot: string; studentId: string }[],
+  weekday: string,
+): Session[] {
+  const byKey = new Map<string, Session>();
+  for (const entry of schedule) {
+    if (entry.dayOfWeek !== weekday) continue;
+    const key = `${entry.timeSlot}|${entry.teacherId}`;
+    let session = byKey.get(key);
+    if (!session) {
+      session = { timeSlot: entry.timeSlot, teacherId: entry.teacherId, studentIds: [] };
+      byKey.set(key, session);
+    }
+    session.studentIds.push(entry.studentId);
+  }
+  return [...byKey.values()].sort(
+    (a, b) => slotStartMinutes(a.timeSlot) - slotStartMinutes(b.timeSlot),
   );
 }

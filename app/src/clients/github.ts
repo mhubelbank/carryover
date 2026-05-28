@@ -4,6 +4,12 @@
 const API_BASE = "https://api.github.com";
 const API_VERSION = "2022-11-28";
 
+// Encode each path segment but keep "/" separators — the contents API wants
+// real slashes in the URL path, not a percent-encoded %2F.
+function encodePath(path: string): string {
+  return path.split("/").map(encodeURIComponent).join("/");
+}
+
 export interface RepoInfo {
   fullName: string;
   defaultBranch: string;
@@ -15,6 +21,12 @@ export interface FileContent {
   text: string;
   // The blob SHA of the current version. Required for safe overwrites.
   sha: string;
+}
+
+export interface DirEntry {
+  name: string;
+  path: string;
+  type: "file" | "dir";
 }
 
 export class GitHubError extends Error {
@@ -86,7 +98,7 @@ export class GitHubClient {
   async readFile(path: string): Promise<FileContent | null> {
     try {
       const data = await this.request<{ content: string; sha: string; encoding: string }>(
-        `/repos/${this.owner}/${this.repo}/contents/${encodeURIComponent(path)}`,
+        `/repos/${this.owner}/${this.repo}/contents/${encodePath(path)}`,
       );
       const text =
         data.encoding === "base64"
@@ -101,6 +113,25 @@ export class GitHubClient {
     }
   }
 
+  // List a directory's immediate entries. Returns [] when the directory does
+  // not exist (e.g., no sessions yet), so callers treat "missing" as "empty".
+  async listDir(path: string): Promise<DirEntry[]> {
+    try {
+      const data = await this.request<Array<{ name: string; path: string; type: string }>>(
+        `/repos/${this.owner}/${this.repo}/contents/${encodePath(path)}`,
+      );
+      if (!Array.isArray(data)) return [];
+      return data.map((entry) => ({
+        name: entry.name,
+        path: entry.path,
+        type: entry.type === "dir" ? "dir" : "file",
+      }));
+    } catch (err) {
+      if (err instanceof GitHubError && err.status === 404) return [];
+      throw err;
+    }
+  }
+
   // Write or overwrite a single file. If `sha` is omitted, this creates a new
   // file. Pass the sha from a prior readFile to update an existing file safely.
   async writeFile(
@@ -110,7 +141,7 @@ export class GitHubClient {
     sha?: string,
   ): Promise<void> {
     const b64 = btoa(unescape(encodeURIComponent(content)));
-    await this.request(`/repos/${this.owner}/${this.repo}/contents/${encodeURIComponent(path)}`, {
+    await this.request(`/repos/${this.owner}/${this.repo}/contents/${encodePath(path)}`, {
       method: "PUT",
       body: JSON.stringify({
         message,

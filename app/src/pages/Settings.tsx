@@ -2,6 +2,8 @@ import { useState, type ReactNode } from "react";
 import { Icon } from "../components/Icon";
 import { Nav, type NavPage } from "../components/Nav";
 import { useAuth } from "../context/AuthContext";
+import { useTerm } from "../context/TermContext";
+import { formatShort, parseDate } from "../domain/dates";
 
 interface SettingsProps {
   onNavigate: (page: NavPage) => void;
@@ -28,19 +30,55 @@ export function Settings({ onNavigate }: SettingsProps) {
 }
 
 function TermSection() {
-  // No term loaded yet in slice 1. We'll wire this up in slice 2 once we
-  // can read config/term.json from the data repo.
+  const { state } = useTerm();
+
+  let body: ReactNode;
+  if (state.status === "ready") {
+    const { term, students, teachers } = state.data;
+    const first = parseDate(term.firstDay);
+    const last = parseDate(term.lastDay);
+    body = (
+      <>
+        <p style={{ fontSize: 14, fontWeight: 500 }}>{term.label}</p>
+        <p style={{ marginTop: 4, fontSize: 12, color: "var(--color-text-secondary)" }}>
+          {first ? formatShort(first) : term.firstDay} – {last ? formatShort(last) : term.lastDay} ·{" "}
+          {students.length} student{students.length === 1 ? "" : "s"} · {teachers.length} teacher
+          {teachers.length === 1 ? "" : "s"}
+        </p>
+      </>
+    );
+  } else if (state.status === "loading") {
+    body = <p style={{ fontSize: 14, color: "var(--color-text-secondary)" }}>Loading…</p>;
+  } else if (state.status === "error") {
+    body = (
+      <>
+        <p style={{ fontSize: 14 }}>Couldn't load your term</p>
+        <p style={{ marginTop: 4, fontSize: 12, color: "var(--color-text-secondary)" }}>
+          {state.message}
+        </p>
+      </>
+    );
+  } else {
+    body = (
+      <>
+        <p style={{ fontSize: 14 }}>No term loaded yet</p>
+        <p style={{ marginTop: 4, fontSize: 12, color: "var(--color-text-secondary)" }}>
+          Set up your first school year or summer term to start adding students.
+        </p>
+      </>
+    );
+  }
+
   return (
     <div className="card" style={{ marginBottom: "1rem" }}>
       <h3 className="card__title">Term</h3>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14 }}>
-        <div style={{ flex: 1 }}>
-          <p style={{ fontSize: 14 }}>No term loaded yet</p>
-          <p style={{ marginTop: 4, fontSize: 12, color: "var(--color-text-secondary)" }}>
-            Set up your first school year or summer term to start adding students.
-          </p>
-        </div>
-        <button className="button button--small" disabled>
+        <div style={{ flex: 1 }}>{body}</div>
+        <button
+          className="button button--small"
+          disabled
+          title="The setup wizard arrives in a later slice"
+        >
           <Icon name="plus" size={14} />
           Prepare new term
         </button>
