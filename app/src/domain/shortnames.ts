@@ -1,4 +1,4 @@
-import { callAnthropic } from "../clients/anthropic";
+import { callAnthropic, DEFAULT_MODEL } from "../clients/anthropic";
 
 export interface SuggestShortnamesInput {
   longTermGoal: string;
@@ -57,7 +57,7 @@ export async function suggestShortnames(
     .join("\n\n");
 
   const res = await callAnthropic(apiKey, {
-    model: "claude-sonnet-4-6",
+    model: DEFAULT_MODEL,
     max_tokens: 600,
     system: SYSTEM,
     messages: [{ role: "user", content: prompt }],

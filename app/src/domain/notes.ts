@@ -1,9 +1,6 @@
-import { callAnthropic, AnthropicError } from "../clients/anthropic";
+import { callAnthropic, AnthropicError, DEFAULT_MODEL } from "../clients/anthropic";
 import type { GitHubClient } from "../clients/github";
 import type { Mode } from "./teacher";
-
-// Default draft model; review/streamline may be swapped to Haiku to cut cost.
-export const DEFAULT_MODEL = "claude-sonnet-4-6";
 
 // Token ceilings ported from her existing TSX files (bump if she sees truncation).
 export const MAX_TOKENS_BY_MODE: Record<Mode, number> = {
