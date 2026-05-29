@@ -52,6 +52,10 @@
         "name": "Circle time",
         "hasSegmentName": false,
         "freeText": true
+      },
+      {
+        "id": "36c2b738-4faf-415b-8339-eb96eae93e79",
+        "name": "Foo bar"
       }
     ],
     "roles": [],
