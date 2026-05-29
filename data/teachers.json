@@ -3,14 +3,39 @@
     "id": "t_alfredo",
     "name": "Alfredo",
     "color": "purple",
-    "modes": ["regular", "filming-day"],
+    "modes": [
+      "regular",
+      "filming-day"
+    ],
     "activities": [
-      { "id": "a_news", "name": "Dragon News broadcast", "hasSegmentName": true },
-      { "id": "a_read", "name": "Shared reading" }
+      {
+        "id": "a_news",
+        "name": "Dragon News broadcast",
+        "hasSegmentName": true
+      },
+      {
+        "id": "a_read",
+        "name": "Shared reading"
+      }
     ],
     "roles": [
-      { "id": "r_anchor", "name": "Anchor", "phrase": "the anchor", "fields": ["visualCues", "facialExpressions"] },
-      { "id": "r_reporter", "name": "Reporter", "phrase": "a field reporter", "fields": ["pragmatic"] }
+      {
+        "id": "r_anchor",
+        "name": "Anchor",
+        "phrase": "the anchor",
+        "fields": [
+          "visualCues",
+          "facialExpressions"
+        ]
+      },
+      {
+        "id": "r_reporter",
+        "name": "Reporter",
+        "phrase": "a field reporter",
+        "fields": [
+          "pragmatic"
+        ]
+      }
     ],
     "perStudentFields": []
   },
@@ -18,17 +43,33 @@
     "id": "t_joanne",
     "name": "Joanne",
     "color": "blue",
-    "modes": ["regular"],
-    "activities": [{ "id": "a_circle", "name": "Circle time" }],
+    "modes": [
+      "regular"
+    ],
+    "activities": [
+      {
+        "id": "a_circle",
+        "name": "Circle time",
+        "hasSegmentName": false,
+        "freeText": true
+      }
+    ],
     "roles": [],
-    "perStudentFields": [{ "key": "needsBengali", "label": "Needs Bengali support", "type": "bool" }]
+    "perStudentFields": []
   },
   {
     "id": "t_jose",
     "name": "José",
     "color": "green",
-    "modes": ["regular"],
-    "activities": [{ "id": "a_cook", "name": "Cooking group" }],
+    "modes": [
+      "regular"
+    ],
+    "activities": [
+      {
+        "id": "a_cook",
+        "name": "Cooking group"
+      }
+    ],
     "roles": [],
     "perStudentFields": []
   },
@@ -36,17 +77,41 @@
     "id": "t_lefkie",
     "name": "Lefkie",
     "color": "pink",
-    "modes": ["regular", "filming-day"],
-    "activities": [{ "id": "a_story", "name": "Story retell" }],
-    "roles": [{ "id": "r_weather", "name": "Weather", "phrase": "the weather reporter", "fields": ["visualCues"] }],
+    "modes": [
+      "regular",
+      "filming-day"
+    ],
+    "activities": [
+      {
+        "id": "a_story",
+        "name": "Story retell"
+      }
+    ],
+    "roles": [
+      {
+        "id": "r_weather",
+        "name": "Weather",
+        "phrase": "the weather reporter",
+        "fields": [
+          "visualCues"
+        ]
+      }
+    ],
     "perStudentFields": []
   },
   {
     "id": "t_nina",
     "name": "Nina",
     "color": "amber",
-    "modes": ["regular"],
-    "activities": [{ "id": "a_play", "name": "Play skills group" }],
+    "modes": [
+      "regular"
+    ],
+    "activities": [
+      {
+        "id": "a_play",
+        "name": "Play skills group"
+      }
+    ],
     "roles": [],
     "perStudentFields": []
   }
