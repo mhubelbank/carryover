@@ -59,13 +59,7 @@
       }
     ],
     "roles": [],
-    "perStudentFields": [
-      {
-        "key": "foo",
-        "label": "foo",
-        "type": "bool"
-      }
-    ]
+    "perStudentFields": []
   },
   {
     "id": "t_jose",
