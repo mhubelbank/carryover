@@ -61,3 +61,12 @@ function parseRows(text: string): string[][] {
   }
   return rows;
 }
+
+// Serialize records back to CSV. Quotes any cell containing a comma, quote, or
+// newline (doubling embedded quotes) so it round-trips through parseCsv.
+export function serializeCsv(headers: string[], rows: string[][]): string {
+  const esc = (v: string) => (/[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+  const lines = [headers.map(esc).join(",")];
+  for (const row of rows) lines.push(row.map(esc).join(","));
+  return lines.join("\n") + "\n";
+}

@@ -132,9 +132,10 @@ See `app/README.md` for the app's source layout.
 
 ## Slices
 
-- **Slice 1 (current)**: Welcome + Settings + key validation
+- **Slice 1**: Welcome + Settings + key validation
 - **Slice 2**: Read-only data screens (Students, Goals, Schedule, Today)
-- **Slice 3**: Edit affordances + bulk goal paste
-- **Slice 4**: Export
+- **Slice 3**: Edit affordances (inline edit, add/remove, validation)
+- **Slice 4**: Goal-writing workflow (bulk paste + AI shortname suggestion)
 - **Slice 5**: Note generation (three-pass pipeline)
 - **Slice 6**: Year setup wizard, IEP review, regenerate with feedback
+- **Slice 7**: Export

@@ -134,21 +134,40 @@ export class GitHubClient {
 
   // Write or overwrite a single file. If `sha` is omitted, this creates a new
   // file. Pass the sha from a prior readFile to update an existing file safely.
+  // Returns the new blob sha, needed for the next safe overwrite of this file.
   async writeFile(
     path: string,
     content: string,
     message: string,
     sha?: string,
-  ): Promise<void> {
+  ): Promise<string> {
     const b64 = btoa(unescape(encodeURIComponent(content)));
-    await this.request(`/repos/${this.owner}/${this.repo}/contents/${encodePath(path)}`, {
-      method: "PUT",
-      body: JSON.stringify({
-        message,
-        content: b64,
-        ...(sha ? { sha } : {}),
-      }),
-    });
+    const res = await this.request<{ content: { sha: string } }>(
+      `/repos/${this.owner}/${this.repo}/contents/${encodePath(path)}`,
+      {
+        method: "PUT",
+        body: JSON.stringify({
+          message,
+          content: b64,
+          ...(sha ? { sha } : {}),
+        }),
+      },
+    );
+    return res.content.sha;
+  }
+
+  // Delete a file. Requires the current blob sha. A missing file (404) is
+  // treated as already-deleted rather than an error.
+  async deleteFile(path: string, message: string, sha: string): Promise<void> {
+    try {
+      await this.request(`/repos/${this.owner}/${this.repo}/contents/${encodePath(path)}`, {
+        method: "DELETE",
+        body: JSON.stringify({ message, sha }),
+      });
+    } catch (err) {
+      if (err instanceof GitHubError && err.status === 404) return;
+      throw err;
+    }
   }
 }
 

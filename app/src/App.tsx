@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { TermProvider, useTerm } from "./context/TermContext";
 import { Banner } from "./components/Banner";
@@ -26,7 +26,22 @@ function Router() {
 // Goals are reached per-student from within Students, not as a top-level tab.
 function Pages() {
   const [page, setPage] = useState<NavPage>("today");
+  const [studentTarget, setStudentTarget] = useState<
+    { id: string; view: "detail" | "goals" } | null
+  >(null);
+  const [openTeacherId, setOpenTeacherId] = useState<string | null>(null);
   const { state } = useTerm();
+
+  const clearStudentTarget = useCallback(() => setStudentTarget(null), []);
+  const openStudent = useCallback((id: string, view: "detail" | "goals" = "detail") => {
+    setStudentTarget({ id, view });
+    setPage("students");
+  }, []);
+  const clearOpenTeacher = useCallback(() => setOpenTeacherId(null), []);
+  const openTeacher = useCallback((id: string) => {
+    setOpenTeacherId(id);
+    setPage("teachers");
+  }, []);
 
   // Settings is reachable regardless of how data loading went.
   if (page === "settings") return <Settings onNavigate={setPage} />;
@@ -48,15 +63,30 @@ function Pages() {
 
   switch (page) {
     case "students":
-      return <Students onNavigate={setPage} />;
+      return (
+        <Students
+          onNavigate={setPage}
+          target={studentTarget}
+          onTargetConsumed={clearStudentTarget}
+        />
+      );
     case "teachers":
-      return <Teachers onNavigate={setPage} />;
+      return (
+        <Teachers
+          onNavigate={setPage}
+          openTeacherId={openTeacherId}
+          onOpenConsumed={clearOpenTeacher}
+          onOpenStudent={openStudent}
+        />
+      );
     case "schedule":
       return <Schedule onNavigate={setPage} />;
     case "generate":
       return <GeneratePlaceholder onNavigate={setPage} />;
     default:
-      return <Today onNavigate={setPage} />;
+      return (
+        <Today onNavigate={setPage} onOpenStudent={openStudent} onOpenTeacher={openTeacher} />
+      );
   }
 }
 

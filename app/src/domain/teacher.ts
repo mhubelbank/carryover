@@ -8,11 +8,9 @@ export type ColorKey =
   | "amber"
   | "coral"
   | "pink"
-  | "red"
   | "purple-deep"
   | "teal-deep"
-  | "amber-deep"
-  | "gray";
+  | "amber-deep";
 
 export interface TeacherColor {
   label: string;
@@ -29,16 +27,17 @@ export const TEACHER_COLORS: Record<ColorKey, TeacherColor> = {
   amber: { label: "Amber", bg: "#FAC775", text: "#412402" },
   coral: { label: "Coral", bg: "#F5C4B3", text: "#5A2310" },
   pink: { label: "Pink", bg: "#F4C0D1", text: "#4B1528" },
-  red: { label: "Red", bg: "#F7C1C1", text: "#791F1F" },
   "purple-deep": { label: "Purple deep", bg: "#AFA9EC", text: "#26215C" },
   "teal-deep": { label: "Teal deep", bg: "#5DCAA5", text: "#0F5641" },
   "amber-deep": { label: "Amber deep", bg: "#EF9F27", text: "#412402" },
-  gray: { label: "Gray", bg: "#D3D1C7", text: "#3A3A35" },
 };
+
+// Palette order for the color picker (10 options).
+export const COLOR_KEYS = Object.keys(TEACHER_COLORS) as ColorKey[];
 
 export function teacherColor(key: string | undefined): TeacherColor {
   if (key && key in TEACHER_COLORS) return TEACHER_COLORS[key as ColorKey];
-  return TEACHER_COLORS.gray;
+  return TEACHER_COLORS.blue;
 }
 
 export interface Activity {

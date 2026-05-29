@@ -55,3 +55,36 @@ export function daysBetween(from: Date, to: Date): number {
 export function addDays(date: Date, n: number): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate() + n);
 }
+
+export function isWeekend(date: Date): boolean {
+  const day = date.getDay(); // 0 = Sunday, 6 = Saturday
+  return day === 0 || day === 6;
+}
+
+// Snap to the next weekday (Mon–Fri); unchanged if already a weekday. The
+// schedule only has Mon–Fri, so the Today view never dwells on a weekend.
+export function toWeekday(date: Date): Date {
+  let d = date;
+  while (isWeekend(d)) d = addDays(d, 1);
+  return d;
+}
+
+// Step ±1 day, skipping weekends (Fri → Mon and back).
+export function stepWeekday(date: Date, dir: 1 | -1): Date {
+  let d = addDays(date, dir);
+  while (isWeekend(d)) d = addDays(d, dir);
+  return d;
+}
+
+// The Monday of the week containing `date`. Used as the stable key for a week's
+// schedule file (toISODate(mondayOf(date))).
+export function mondayOf(date: Date): Date {
+  const day = date.getDay(); // 0 = Sun, 1 = Mon, … 6 = Sat
+  const back = day === 0 ? 6 : day - 1; // Sunday belongs to the prior week
+  return addDays(startOfDay(date), -back);
+}
+
+// "May 25 – 29" for a week starting at `monday`. Spans Mon–Fri (the school week).
+export function formatWeekRange(monday: Date): string {
+  return `${formatShort(monday)} – ${formatShort(addDays(monday, 4))}`;
+}
