@@ -37,7 +37,7 @@ Chosen over GitHub Pages (private Pages requires Enterprise plan; Pro only hides
 - **`data/prompts/*.md`** — six templates: `{regular,filming}-{draft,review,streamline}.md`, plus shared partials
 - **`data/feedback-rules.md`** — appended to every draft prompt; populated by user opt-in from regenerate dialog
 - **`data/iep-history/{studentId}.jsonl`** — append-only log of IEP reviews per student
-- **`sessions/YYYY-MM-DD-teacher.json`** — metadata only, no note narrative: per student, the `studentId`, `goalIds[]` targeted, and `mode`. Powers "used in N sessions" counts and a skeletal session history. Generated note *text* is deliberately not persisted to the repo (see Note retention below).
+- **`sessions/YYYY-MM-DD-teacher.json`** — metadata only, no note narrative: per student, the `studentId`, `goalIds[]` targeted, and `mode`. Powers "used in N sessions" counts and a skeletal session history. Generated note *text* is deliberately not persisted to the repo (see Note retention below). When Trials is enabled for a student, the file also gains an optional `trials` field per student capturing the raw inputs (what's being counted, total, support rows, failed) — note text is still not stored.
 
 **Entities are referenced by stable id, never by name.** Students and teachers each have an `id` independent of their display name; all cross-references (students→teacher, schedule→teacher/student, goals→student) use ids. Names are display labels only. This means a rename never cascades, and two entities can share a name without corrupting data — name collisions become a UX concern (see below), not a data-integrity one.
 
@@ -98,6 +98,25 @@ Top controls: date, teacher, mode. Auto-saves to IndexedDB every 5s. "Clear form
 **Filming day mode**: no activities — per-student role picker; role-conditional fields render based on selection. Goals, rehearsal-to-broadcast, and additional-notes always present.
 
 Generation pipeline is unchanged from current: three sequential Claude API calls per student (draft → review → streamline).
+
+### Trials mode (per student per activity)
+A checkbox on each per-student card titled "Trials" toggles a structured data-capture panel. Off by default — most sessions don't need it. When on:
+
+- **What's being counted** — free-text input (e.g. "wh questions answered correctly", "times she initiated conversation", "picture cards sequenced"). Required; the unit varies too much across activities for a dropdown. Per-student per-activity last-used value pre-fills.
+- **Total trials** — number.
+- **Support rows** — one or more rows of (support level, support types, count). Support level is a dropdown: no support, minimal, moderate, maximum. Support types is a multi-select within the row: verbal, visual, tactile, gestural, modeled. Count is a number. "+ Add row" expands a new row. Initial state: one row pre-filled to match the qualitative prompting selections from the rest of the form, if any.
+- **Failed attempts** — number. Auto-calculated as total − sum(support rows) and shown as "Failed: N (auto-calculated)" until she explicitly types over it. If totals don't add up (rows sum exceeds total, or no failed-attempts and the math has a remainder she didn't intend), show a small inline validation error.
+- **Live preview** — as she fills in, render the generated sentence below the panel in real time. This is the contract — what she sees is what the note will say.
+
+**Output sentence template** (used by the LLM prompt when Trials is on for this student):
+```
+{Student} correctly {what's being counted} {count}/{total} given {support phrase},
+{count}/{total} given {support phrase}, ...
+{Pronoun} did not {verb} {failed}/{total} {what's being counted}.
+```
+Where `{support phrase}` is formatted as `{level} {type1}[ and additional {type2}] prompting`, matching her established phrasing ("minimal verbal prompting", "moderate verbal prompting and an additional visual prompt").
+
+When Trials is on for a student, the qualitative prompting-level and prompting-type checkboxes for that student collapse (data is now derived from the trial rows, no double-entry). Redirection and response checkboxes stay — those are independent of trial counting.
 
 ### Generated notes (result page)
 Top: an "All notes" textarea formatted for SESIS paste with "Copy all" inside the block:
@@ -196,6 +215,7 @@ The generated all-notes block uses the disambiguated display name, so whatever d
 - Estimated cost: ~$0.04 per note at Sonnet rates, ~$50–120/year for her volume
 - Spend cap set in her Anthropic dashboard
 - Failures retried with backoff; persistent failure shows an error on the per-student card with regenerate option
+- When trial data is present for a student (Trials mode), the draft prompt receives it as structured input and is instructed to incorporate the trial sentence(s) verbatim in the format above. The review/streamline passes are constrained to preserve those exact numbers.
 
 ## Quirks preserved from current app
 
@@ -229,8 +249,11 @@ Each slice is shippable on its own; validate with Emily before moving to the nex
 5. **Year setup wizard, IEP review, regenerate-with-feedback** — refinements.
    - TODO (PAT rotation): at the start of summer-term setup, proactively prompt the user to regenerate and re-enter their GitHub PAT. The token is created with a ~1-year expiry, so renewal naturally coincides with term rollover — surfacing it here heads off a surprise mid-year 401.
 6. **Export** — all four export formats.
+7. **Trials data capture (optional per-student per-activity)** — quantitative trial-count entry that produces precise sentences like "answered 6/10 wh questions given minimal verbal prompting." Off by default; toggled on per student per activity when she wants to formally record data for that session.
 
 ## Questions to ask Emily at the first demo
+
+See **`demo.md`** for the full, slice-grouped checklist of open questions to walk through with Emily; the items below are the original first-demo set.
 
 - **Note archive.** Do you want SESIS Notes to keep a searchable copy of every note you generate, or is SESIS itself enough once you've pasted? (Currently we store only session metadata, not note text — flipping to full narrative retention is a deliberate privacy tradeoff we'd make only if she wants it.)
 - **Sheet reference frequency.** How often do you look at the roster/goals during the year vs. only at term rollover? (Informs the quality bar for the Today/Students screens.)
