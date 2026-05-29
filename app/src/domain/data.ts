@@ -57,9 +57,6 @@ const STUDENT_STANDARD_COLUMNS = [
 // Loads the full term bundle. Returns null when there's no term.json yet —
 // the signal for the first-run / empty state.
 export async function loadTermData(client: GitHubClient): Promise<LoadedTerm | null> {
-  // Make sure the data branch exists (migrating any data on the default branch)
-  // before we read, so first-run reads don't 404 on a not-yet-created branch.
-  await client.ensureBranch();
   const termFile = await client.readFile(PATHS.term);
   if (!termFile) return null;
   const term = JSON.parse(termFile.text) as Term;
