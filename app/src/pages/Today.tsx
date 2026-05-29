@@ -13,6 +13,7 @@ interface Props {
   onNavigate: (page: NavPage) => void;
   onOpenStudent: (studentId: string, view?: "detail" | "goals") => void;
   onOpenTeacher: (teacherId: string) => void;
+  onGenerate: (date: string, teacherId: string, studentIds: string[]) => void;
 }
 
 interface Session {
@@ -30,7 +31,7 @@ const emptyBoxStyle: CSSProperties = {
   fontSize: 14,
 };
 
-export function Today({ onNavigate, onOpenStudent, onOpenTeacher }: Props) {
+export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate }: Props) {
   const { state, client, teacherById, studentById, saveTerm } = useTerm();
   const [selected, setSelected] = useState<Date>(() => toWeekday(startOfDay(new Date())));
   const [busy, setBusy] = useState(false);
@@ -260,9 +261,10 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher }: Props) {
                     </button>
                   </div>
                   <button
-                    className="button button--small"
-                    disabled
-                    title="Note generation arrives in a later slice"
+                    className={blocked ? "button button--small" : "button button--small button--primary"}
+                    disabled={blocked}
+                    onClick={() => onGenerate(selectedIso, session.teacherId, session.studentIds)}
+                    title={blocked ? "Resolve the overdue IEP first" : undefined}
                   >
                     {blocked
                       ? "Blocked — review goals"

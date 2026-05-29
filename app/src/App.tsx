@@ -9,6 +9,7 @@ import { Today } from "./pages/Today";
 import { Students } from "./pages/Students";
 import { Teachers } from "./pages/Teachers";
 import { Schedule } from "./pages/Schedule";
+import { Generate } from "./pages/Generate";
 import { FirstTermSetup } from "./pages/FirstTermSetup";
 
 function Router() {
@@ -30,6 +31,9 @@ function Pages() {
     { id: string; view: "detail" | "goals" } | null
   >(null);
   const [openTeacherId, setOpenTeacherId] = useState<string | null>(null);
+  const [generateTarget, setGenerateTarget] = useState<
+    { date: string; teacherId: string; studentIds: string[] } | null
+  >(null);
   const { state } = useTerm();
 
   const clearStudentTarget = useCallback(() => setStudentTarget(null), []);
@@ -42,6 +46,14 @@ function Pages() {
     setOpenTeacherId(id);
     setPage("teachers");
   }, []);
+  const clearGenerateTarget = useCallback(() => setGenerateTarget(null), []);
+  const openGenerate = useCallback(
+    (date: string, teacherId: string, studentIds: string[]) => {
+      setGenerateTarget({ date, teacherId, studentIds });
+      setPage("generate");
+    },
+    [],
+  );
 
   // Settings is reachable regardless of how data loading went.
   if (page === "settings") return <Settings onNavigate={setPage} />;
@@ -82,10 +94,21 @@ function Pages() {
     case "schedule":
       return <Schedule onNavigate={setPage} />;
     case "generate":
-      return <GeneratePlaceholder onNavigate={setPage} />;
+      return (
+        <Generate
+          onNavigate={setPage}
+          target={generateTarget}
+          onTargetConsumed={clearGenerateTarget}
+        />
+      );
     default:
       return (
-        <Today onNavigate={setPage} onOpenStudent={openStudent} onOpenTeacher={openTeacher} />
+        <Today
+          onNavigate={setPage}
+          onOpenStudent={openStudent}
+          onOpenTeacher={openTeacher}
+          onGenerate={openGenerate}
+        />
       );
   }
 }
@@ -105,19 +128,6 @@ function StatusScreen({
     <div className="shell">
       <Nav current={page} onNavigate={onNavigate} />
       <Banner variant={variant}>{message}</Banner>
-    </div>
-  );
-}
-
-function GeneratePlaceholder({ onNavigate }: { onNavigate: (page: NavPage) => void }) {
-  return (
-    <div className="shell">
-      <Nav current="generate" onNavigate={onNavigate} />
-      <h1 style={{ fontSize: 22, fontWeight: 500, marginBottom: 4 }}>Generate notes</h1>
-      <p style={{ color: "var(--color-text-secondary)", fontSize: 14, marginBottom: "1.5rem" }}>
-        Create SESIS notes for a session.
-      </p>
-      <Banner variant="info">Note generation arrives in a later slice.</Banner>
     </div>
   );
 }

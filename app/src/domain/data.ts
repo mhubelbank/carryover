@@ -248,6 +248,45 @@ export async function loadSessions(client: GitHubClient): Promise<SessionMetadat
   return sessions;
 }
 
+export function sessionPath(date: string, teacherId: string): string {
+  return `${SESSIONS_DIR}/${date}-${teacherId}.json`;
+}
+
+export interface LoadedSession {
+  metadata: SessionMetadata;
+  sha: string;
+}
+
+// One session's metadata (for prefilling the Generate form / safe overwrite).
+export async function loadSession(
+  client: GitHubClient,
+  date: string,
+  teacherId: string,
+): Promise<LoadedSession | null> {
+  const file = await client.readFile(sessionPath(date, teacherId));
+  if (!file) return null;
+  try {
+    return { metadata: JSON.parse(file.text) as SessionMetadata, sha: file.sha };
+  } catch {
+    return null;
+  }
+}
+
+// Persists session metadata (date, teacher, per-student goals + mode) — never
+// the note narrative. Returns the new blob sha.
+export function writeSessionMetadata(
+  client: GitHubClient,
+  metadata: SessionMetadata,
+  sha: string | undefined,
+): Promise<string> {
+  return client.writeFile(
+    sessionPath(metadata.date, metadata.teacherId),
+    `${JSON.stringify(metadata, null, 2)}\n`,
+    `data: session ${metadata.date} ${metadata.teacherId}`,
+    sha,
+  );
+}
+
 // Per-student append-only IEP review log. Most recent first. [] when absent.
 export async function loadIepHistory(
   client: GitHubClient,
