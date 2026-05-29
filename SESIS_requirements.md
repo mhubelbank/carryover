@@ -19,7 +19,7 @@ This project replaces those files with a single configurable web app that:
 - Direct browser→Anthropic calls using header `anthropic-dangerous-direct-browser-access: true`
 - GitHub PAT reads/writes data files in the private repo `emily-sesis/sesis-data`
 - IndexedDB for in-progress drafts, last-session defaults, and feedback rules
-- Cloudflare Pages auto-deploys on push to main
+- Cloudflare Pages auto-deploys on push to `main` (code only). App data is committed to a separate `data` branch (auto-created from `main` on first use; commit messages prefixed `data:`), so saves never trigger a production rebuild.
 
 **Privacy.** Student data is FERPA-protected. The app URL is gated by Cloudflare Access — only Emily's email gets through. The repo is private; the Anthropic API key has a monthly spend cap. Both keys live only in Emily's browser.
 
@@ -241,3 +241,4 @@ Each slice is shippable on its own; validate with Emily before moving to the nex
 
 - **Cloudflare not set up yet.** Stand up the Cloudflare Pages project + Cloudflare Access application per the root README ("First-time setup (developer)"). Until then there is no gated public URL — local dev only.
 - **Whitelist the developer** in the Access policy alongside Emily, so the deployed build can be troubleshot: add `mhubelbank@gmail.com` as an allowed email (its own Allow policy, or added to Emily's Include rule).
+- **Set the Pages production branch to `main` and limit builds to it.** The app commits data to the `data` branch; ensure Pages does not build/preview-deploy that branch (configure "Production branch = main" and turn off preview deployments, or exclude `data` in the branch-control settings) so data saves don't redeploy the site.

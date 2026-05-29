@@ -57,6 +57,9 @@ const STUDENT_STANDARD_COLUMNS = [
 // Loads the full term bundle. Returns null when there's no term.json yet —
 // the signal for the first-run / empty state.
 export async function loadTermData(client: GitHubClient): Promise<LoadedTerm | null> {
+  // Make sure the data branch exists (migrating any data on the default branch)
+  // before we read, so first-run reads don't 404 on a not-yet-created branch.
+  await client.ensureBranch();
   const termFile = await client.readFile(PATHS.term);
   if (!termFile) return null;
   const term = JSON.parse(termFile.text) as Term;
@@ -113,7 +116,7 @@ export function writeStudents(
   students: Student[],
   sha: string | undefined,
 ): Promise<string> {
-  return client.writeFile(PATHS.students, studentsToCsv(students), "Update students", sha);
+  return client.writeFile(PATHS.students, studentsToCsv(students), "data: update students", sha);
 }
 
 const GOAL_COLUMNS = ["id", "studentId", "longTermGoal", "shortName", "archived"];
@@ -135,7 +138,7 @@ export function writeGoals(
   goals: Goal[],
   sha: string | undefined,
 ): Promise<string> {
-  return client.writeFile(PATHS.goals, goalsToCsv(goals), "Update goals", sha);
+  return client.writeFile(PATHS.goals, goalsToCsv(goals), "data: update goals", sha);
 }
 
 // Writes term.json; returns the new blob sha for the next safe overwrite.
@@ -144,7 +147,7 @@ export function writeTerm(
   term: Term,
   sha: string | undefined,
 ): Promise<string> {
-  return client.writeFile(PATHS.term, `${JSON.stringify(term, null, 2)}\n`, "Update term", sha);
+  return client.writeFile(PATHS.term, `${JSON.stringify(term, null, 2)}\n`, "data: update term", sha);
 }
 
 // Writes teachers.json; returns the new blob sha for the next safe overwrite.
@@ -156,7 +159,7 @@ export function writeTeachers(
   return client.writeFile(
     PATHS.teachers,
     `${JSON.stringify(teachers, null, 2)}\n`,
-    "Update teachers",
+    "data: update teachers",
     sha,
   );
 }
@@ -174,7 +177,7 @@ export function writeSchedule(
   entries: ScheduleEntry[],
   sha: string | undefined,
 ): Promise<string> {
-  return client.writeFile(PATHS.schedule, scheduleToCsv(entries), "Update schedule", sha);
+  return client.writeFile(PATHS.schedule, scheduleToCsv(entries), "data: update schedule", sha);
 }
 
 // Per-week deviation files live under data/schedule/<week-monday>.csv. They only
@@ -209,7 +212,7 @@ export function writeWeekSchedule(
   return client.writeFile(
     weekSchedulePath(weekKey),
     scheduleToCsv(entries),
-    `Update schedule for week of ${weekKey}`,
+    `data: update schedule for week of ${weekKey}`,
     sha,
   );
 }
@@ -222,7 +225,7 @@ export function deleteWeekSchedule(
 ): Promise<void> {
   return client.deleteFile(
     weekSchedulePath(weekKey),
-    `Reset week of ${weekKey} to usual schedule`,
+    `data: reset week of ${weekKey} to usual schedule`,
     sha,
   );
 }

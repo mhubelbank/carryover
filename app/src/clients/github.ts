@@ -43,17 +43,56 @@ interface GitHubClientOptions {
   token: string;
   owner: string;
   repo: string;
+  // Branch to read/write. Omit to use the repo's default branch.
+  branch?: string;
 }
 
 export class GitHubClient {
   private readonly token: string;
   private readonly owner: string;
   private readonly repo: string;
+  private readonly branch?: string;
+  // Memoized "branch exists (creating it if needed)" check, run once per client.
+  private branchReady: Promise<void> | null = null;
 
-  constructor({ token, owner, repo }: GitHubClientOptions) {
+  constructor({ token, owner, repo, branch }: GitHubClientOptions) {
     this.token = token;
     this.owner = owner;
     this.repo = repo;
+    this.branch = branch;
+  }
+
+  // The ?ref= suffix that pins reads to our branch (empty for the default).
+  private refQuery(): string {
+    return this.branch ? `?ref=${encodeURIComponent(this.branch)}` : "";
+  }
+
+  // Ensure the data branch exists, creating it from the default branch's head if
+  // absent (so data already committed to the default branch carries over). No-op
+  // when using the default branch. Memoized so it runs once per client. Called
+  // before the first read and the first write.
+  ensureBranch(): Promise<void> {
+    if (!this.branch) return Promise.resolve();
+    if (!this.branchReady) this.branchReady = this.createBranchIfMissing();
+    return this.branchReady;
+  }
+
+  private async createBranchIfMissing(): Promise<void> {
+    const branch = encodeURIComponent(this.branch!);
+    try {
+      await this.request(`/repos/${this.owner}/${this.repo}/git/ref/heads/${branch}`);
+      return;
+    } catch (err) {
+      if (!(err instanceof GitHubError && err.status === 404)) throw err;
+    }
+    const repoInfo = await this.getRepo();
+    const base = await this.request<{ object: { sha: string } }>(
+      `/repos/${this.owner}/${this.repo}/git/ref/heads/${encodeURIComponent(repoInfo.defaultBranch)}`,
+    );
+    await this.request(`/repos/${this.owner}/${this.repo}/git/refs`, {
+      method: "POST",
+      body: JSON.stringify({ ref: `refs/heads/${this.branch}`, sha: base.object.sha }),
+    });
   }
 
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -98,7 +137,7 @@ export class GitHubClient {
   async readFile(path: string): Promise<FileContent | null> {
     try {
       const data = await this.request<{ content: string; sha: string; encoding: string }>(
-        `/repos/${this.owner}/${this.repo}/contents/${encodePath(path)}`,
+        `/repos/${this.owner}/${this.repo}/contents/${encodePath(path)}${this.refQuery()}`,
       );
       const text =
         data.encoding === "base64"
@@ -118,7 +157,7 @@ export class GitHubClient {
   async listDir(path: string): Promise<DirEntry[]> {
     try {
       const data = await this.request<Array<{ name: string; path: string; type: string }>>(
-        `/repos/${this.owner}/${this.repo}/contents/${encodePath(path)}`,
+        `/repos/${this.owner}/${this.repo}/contents/${encodePath(path)}${this.refQuery()}`,
       );
       if (!Array.isArray(data)) return [];
       return data.map((entry) => ({
@@ -141,6 +180,7 @@ export class GitHubClient {
     message: string,
     sha?: string,
   ): Promise<string> {
+    await this.ensureBranch();
     const b64 = btoa(unescape(encodeURIComponent(content)));
     const res = await this.request<{ content: { sha: string } }>(
       `/repos/${this.owner}/${this.repo}/contents/${encodePath(path)}`,
@@ -150,6 +190,7 @@ export class GitHubClient {
           message,
           content: b64,
           ...(sha ? { sha } : {}),
+          ...(this.branch ? { branch: this.branch } : {}),
         }),
       },
     );
@@ -159,10 +200,15 @@ export class GitHubClient {
   // Delete a file. Requires the current blob sha. A missing file (404) is
   // treated as already-deleted rather than an error.
   async deleteFile(path: string, message: string, sha: string): Promise<void> {
+    await this.ensureBranch();
     try {
       await this.request(`/repos/${this.owner}/${this.repo}/contents/${encodePath(path)}`, {
         method: "DELETE",
-        body: JSON.stringify({ message, sha }),
+        body: JSON.stringify({
+          message,
+          sha,
+          ...(this.branch ? { branch: this.branch } : {}),
+        }),
       });
     } catch (err) {
       if (err instanceof GitHubError && err.status === 404) return;
