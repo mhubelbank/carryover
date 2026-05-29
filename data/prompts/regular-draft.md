@@ -14,7 +14,7 @@ Activity {{@index_plus_one}}: {{this.description}}{{#if this.segmentName}}
 
 Write a professional clinical narrative.
 
-The note must include exactly one sentence describing the clinical significance of the *activity* — what the activity involves and why it is therapeutically meaningful as a structure. Infer about the activity, not about the student. Example: "This activity provided a naturalistic context for practicing conversational initiation, question formulation, and peer relationship-building." Do not extend, infer, or elaborate anything about the student beyond what the session data states.
+The note must include exactly one **standalone sentence** describing the clinical significance of the *activity* — what the activity involves and why it is therapeutically meaningful as a structure. This must be its own period-delimited sentence, NOT joined to the student-action sentence via a "which" clause, an appositive, a "making it…" continuation, or any other relative-clause connector. Infer about the activity, not about the student. Example: "This activity provided a naturalistic context for practicing conversational initiation, question formulation, and peer relationship-building." Do not extend, infer, or elaborate anything about the student beyond what the session data states.
 
 Structure:
 - Begin directly with {{student.name}}. No "Note:" or any label.
@@ -35,7 +35,8 @@ Do NOT:
 - Invent details not in the data — no specific questions asked, no percentages, no observations, no fabricated behaviors. If the data says "getting-to-know-you questions," do not write "questions about their interests and background."
 - Use placeholder phrases like "increased other" or "demonstrated skills."
 - Substitute different goals or describe activities in place of goals.
-- Transcribe additional notes verbatim. Transform them into clinical prose without changing meaning.{{#if student.individualSession}}
+- Transcribe additional notes verbatim. Transform them into clinical prose without changing meaning.
+- Chain multiple ideas into one run-on sentence. Each major idea — student action, clinical significance, student response, language domains/goals — gets its own period-delimited sentence. No "which," "making it," or relative-clause fusion across these.{{#if student.individualSession}}
 - Reference peers or other staff. This was an individual session.{{/if}}{{#if teacher.draftAppend}}
 
 {{teacher.draftAppend}}{{/if}}

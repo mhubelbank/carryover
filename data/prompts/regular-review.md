@@ -18,6 +18,7 @@ Fix any of the following if present:
 - "Redirection" alone — fix to "redirection to task."
 - A segment name appearing more than once, or appearing alongside a generic reference like "an upcoming news segment." Keep the named reference, remove the generic one.
 - Missing or duplicated clinical-significance sentence about the activity. There must be exactly one.
+- Clinical-significance sentence fused into the student-action sentence as a "which" clause, appositive, or "making it…" continuation — split it into its own standalone, period-delimited sentence. Each major idea (action, clinical significance, response, domains/goals) is its own sentence.
 - Mention of a session category (prompting / redirection / response / etc.) that was empty in the data — remove.{{#if student.individualSession}}
 - Any reference to peers or other staff — this was an individual session, remove.{{/if}}{{#if teacher.reviewAppend}}
 
