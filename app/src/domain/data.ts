@@ -1,5 +1,5 @@
 import type { GitHubClient } from "../clients/github";
-import { parseCsv } from "./csv";
+import { parseCsv, serializeCsv } from "./csv";
 import type { Goal } from "./goal";
 import type { IepReview } from "./iep";
 import type { ScheduleEntry, Weekday } from "./schedule";
@@ -16,6 +16,20 @@ export interface TermData {
   schedule: ScheduleEntry[];
 }
 
+// Blob shas of each loaded file, needed to safely overwrite on save.
+export interface FileShas {
+  term?: string;
+  teachers?: string;
+  students?: string;
+  goals?: string;
+  schedule?: string;
+}
+
+export interface LoadedTerm {
+  data: TermData;
+  shas: FileShas;
+}
+
 const PATHS = {
   term: "data/term.json",
   teachers: "data/teachers.json",
@@ -26,9 +40,23 @@ const PATHS = {
 
 const SESSIONS_DIR = "sessions";
 
+// students.csv standard columns, in order. Teacher-specific quirk columns are
+// appended after these (the union of all students' `fields` keys).
+const STUDENT_STANDARD_COLUMNS = [
+  "id",
+  "name",
+  "pronouns",
+  "teacherId",
+  "age",
+  "aacDevice",
+  "nextIepReview",
+  "nextTriennial",
+  "mandate",
+];
+
 // Loads the full term bundle. Returns null when there's no term.json yet —
 // the signal for the first-run / empty state.
-export async function loadTermData(client: GitHubClient): Promise<TermData | null> {
+export async function loadTermData(client: GitHubClient): Promise<LoadedTerm | null> {
   const termFile = await client.readFile(PATHS.term);
   if (!termFile) return null;
   const term = JSON.parse(termFile.text) as Term;
@@ -41,12 +69,162 @@ export async function loadTermData(client: GitHubClient): Promise<TermData | nul
   ]);
 
   return {
-    term,
-    teachers: teachersFile ? (JSON.parse(teachersFile.text) as Teacher[]) : [],
-    students: studentsFile ? parseCsv(studentsFile.text).map(toStudent) : [],
-    goals: goalsFile ? parseCsv(goalsFile.text).map(toGoal) : [],
-    schedule: scheduleFile ? parseCsv(scheduleFile.text).map(toScheduleEntry) : [],
+    data: {
+      term,
+      teachers: teachersFile ? (JSON.parse(teachersFile.text) as Teacher[]) : [],
+      students: studentsFile ? parseCsv(studentsFile.text).map(toStudent) : [],
+      goals: goalsFile ? parseCsv(goalsFile.text).map(toGoal) : [],
+      schedule: scheduleFile ? parseCsv(scheduleFile.text).map(toScheduleEntry) : [],
+    },
+    shas: {
+      term: termFile.sha,
+      teachers: teachersFile?.sha,
+      students: studentsFile?.sha,
+      goals: goalsFile?.sha,
+      schedule: scheduleFile?.sha,
+    },
   };
+}
+
+// Serialize the roster back to students.csv, preserving teacher-specific quirk
+// columns (the union of all students' field keys, appended after the standard
+// columns).
+export function studentsToCsv(students: Student[]): string {
+  const fieldKeys = [...new Set(students.flatMap((s) => Object.keys(s.fields)))].sort();
+  const headers = [...STUDENT_STANDARD_COLUMNS, ...fieldKeys];
+  const rows = students.map((s) => [
+    s.id,
+    s.name,
+    s.pronouns,
+    s.teacherId,
+    s.age == null ? "" : String(s.age),
+    s.aacDevice ?? "",
+    s.nextIepReview ?? "",
+    s.nextTriennial ?? "",
+    s.mandate ?? "",
+    ...fieldKeys.map((k) => s.fields[k] ?? ""),
+  ]);
+  return serializeCsv(headers, rows);
+}
+
+// Writes students.csv; returns the new blob sha for the next safe overwrite.
+export function writeStudents(
+  client: GitHubClient,
+  students: Student[],
+  sha: string | undefined,
+): Promise<string> {
+  return client.writeFile(PATHS.students, studentsToCsv(students), "Update students", sha);
+}
+
+const GOAL_COLUMNS = ["id", "studentId", "longTermGoal", "shortName", "archived"];
+
+export function goalsToCsv(goals: Goal[]): string {
+  const rows = goals.map((g) => [
+    g.id,
+    g.studentId,
+    g.longTermGoal,
+    g.shortName,
+    g.archived ? "true" : "false",
+  ]);
+  return serializeCsv(GOAL_COLUMNS, rows);
+}
+
+// Writes goals.csv; returns the new blob sha for the next safe overwrite.
+export function writeGoals(
+  client: GitHubClient,
+  goals: Goal[],
+  sha: string | undefined,
+): Promise<string> {
+  return client.writeFile(PATHS.goals, goalsToCsv(goals), "Update goals", sha);
+}
+
+// Writes term.json; returns the new blob sha for the next safe overwrite.
+export function writeTerm(
+  client: GitHubClient,
+  term: Term,
+  sha: string | undefined,
+): Promise<string> {
+  return client.writeFile(PATHS.term, `${JSON.stringify(term, null, 2)}\n`, "Update term", sha);
+}
+
+// Writes teachers.json; returns the new blob sha for the next safe overwrite.
+export function writeTeachers(
+  client: GitHubClient,
+  teachers: Teacher[],
+  sha: string | undefined,
+): Promise<string> {
+  return client.writeFile(
+    PATHS.teachers,
+    `${JSON.stringify(teachers, null, 2)}\n`,
+    "Update teachers",
+    sha,
+  );
+}
+
+const SCHEDULE_COLUMNS = ["teacherId", "dayOfWeek", "timeSlot", "studentId"];
+
+export function scheduleToCsv(entries: ScheduleEntry[]): string {
+  const rows = entries.map((e) => [e.teacherId, e.dayOfWeek, e.timeSlot, e.studentId]);
+  return serializeCsv(SCHEDULE_COLUMNS, rows);
+}
+
+// Writes schedule.csv (the usual/template schedule); returns the new blob sha.
+export function writeSchedule(
+  client: GitHubClient,
+  entries: ScheduleEntry[],
+  sha: string | undefined,
+): Promise<string> {
+  return client.writeFile(PATHS.schedule, scheduleToCsv(entries), "Update schedule", sha);
+}
+
+// Per-week deviation files live under data/schedule/<week-monday>.csv. They only
+// exist for weeks that diverge from the usual template (written lazily on edit).
+export function weekSchedulePath(weekKey: string): string {
+  return `data/schedule/${weekKey}.csv`;
+}
+
+export interface LoadedWeekSchedule {
+  entries: ScheduleEntry[];
+  sha: string;
+}
+
+// Reads a week's deviation file. Returns null when the week hasn't diverged —
+// the caller then falls back to the usual template.
+export async function loadWeekSchedule(
+  client: GitHubClient,
+  weekKey: string,
+): Promise<LoadedWeekSchedule | null> {
+  const file = await client.readFile(weekSchedulePath(weekKey));
+  if (!file) return null;
+  return { entries: parseCsv(file.text).map(toScheduleEntry), sha: file.sha };
+}
+
+// Writes a week's full-snapshot deviation file; returns the new blob sha.
+export function writeWeekSchedule(
+  client: GitHubClient,
+  weekKey: string,
+  entries: ScheduleEntry[],
+  sha: string | undefined,
+): Promise<string> {
+  return client.writeFile(
+    weekSchedulePath(weekKey),
+    scheduleToCsv(entries),
+    `Update schedule for week of ${weekKey}`,
+    sha,
+  );
+}
+
+// Removes a week's deviation file, reverting that week to the usual template.
+export function deleteWeekSchedule(
+  client: GitHubClient,
+  weekKey: string,
+  sha: string,
+): Promise<void> {
+  return client.deleteFile(
+    weekSchedulePath(weekKey),
+    `Reset week of ${weekKey} to usual schedule`,
+    sha,
+  );
 }
 
 // Loads every session-metadata file. Safe when sessions/ is missing (-> []).
@@ -87,17 +265,7 @@ export async function loadIepHistory(
   return reviews.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 }
 
-const STUDENT_COLUMNS = new Set([
-  "id",
-  "name",
-  "pronouns",
-  "teacherId",
-  "age",
-  "aacDevice",
-  "nextIepReview",
-  "nextTriennial",
-  "mandate",
-]);
+const STUDENT_COLUMNS = new Set(STUDENT_STANDARD_COLUMNS);
 
 function toStudent(row: Record<string, string>): Student {
   const fields: Record<string, string> = {};

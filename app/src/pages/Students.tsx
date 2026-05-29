@@ -3,32 +3,69 @@ import { Icon } from "../components/Icon";
 import { Nav, type NavPage } from "../components/Nav";
 import { useTerm } from "../context/TermContext";
 import { loadIepHistory } from "../domain/data";
-import { daysBetween, formatShort, parseDate, startOfDay } from "../domain/dates";
+import { formatShort, parseDate } from "../domain/dates";
 import type { Goal } from "../domain/goal";
 import type { IepReview } from "../domain/iep";
-import { ageFlag } from "../domain/student";
+import { ageFlag, type Student } from "../domain/student";
 import { StudentGoals } from "./Goals";
 
 interface Props {
   onNavigate: (page: NavPage) => void;
+  // A student to open directly (deep-link from Today) and which view to land on.
+  // Consumed once on arrival.
+  target: { id: string; view: "detail" | "goals" } | null;
+  onTargetConsumed: () => void;
 }
 
-type View = { kind: "list" } | { kind: "detail"; id: string } | { kind: "goals"; id: string };
+type View =
+  | { kind: "list" }
+  | { kind: "detail"; id: string }
+  | { kind: "goals"; id: string }
+  | { kind: "create"; student: Student };
 
-export function Students({ onNavigate }: Props) {
+export function Students({ onNavigate, target, onTargetConsumed }: Props) {
   const { state } = useTerm();
   const [view, setView] = useState<View>({ kind: "list" });
+  useEffect(() => {
+    if (target) {
+      setView(
+        target.view === "goals"
+          ? { kind: "goals", id: target.id }
+          : { kind: "detail", id: target.id },
+      );
+      onTargetConsumed();
+    }
+  }, [target, onTargetConsumed]);
   if (state.status !== "ready") return null;
+  const students = state.data.students;
 
-  if (view.kind === "detail") {
+  if (view.kind === "create") {
     return (
       <StudentDetail
-        studentId={view.id}
+        key="new"
+        student={view.student}
+        isNew
         onBack={() => setView({ kind: "list" })}
-        onViewGoals={() => setView({ kind: "goals", id: view.id })}
+        onViewGoals={() => {}}
         onNavigate={onNavigate}
       />
     );
+  }
+  if (view.kind === "detail") {
+    const student = students.find((s) => s.id === view.id);
+    if (student) {
+      return (
+        <StudentDetail
+          key={student.id}
+          student={student}
+          isNew={false}
+          onBack={() => setView({ kind: "list" })}
+          onViewGoals={() => setView({ kind: "goals", id: student.id })}
+          onNavigate={onNavigate}
+        />
+      );
+    }
+    // Student was removed — fall through to the list.
   }
   if (view.kind === "goals") {
     return (
@@ -39,15 +76,23 @@ export function Students({ onNavigate }: Props) {
       />
     );
   }
-  return <StudentsList onNavigate={onNavigate} onOpen={(id) => setView({ kind: "detail", id })} />;
+  return (
+    <StudentsList
+      onNavigate={onNavigate}
+      onOpen={(id) => setView({ kind: "detail", id })}
+      onAdd={() => setView({ kind: "create", student: blankStudent() })}
+    />
+  );
 }
 
 function StudentsList({
   onNavigate,
   onOpen,
+  onAdd,
 }: {
   onNavigate: (page: NavPage) => void;
   onOpen: (id: string) => void;
+  onAdd: () => void;
 }) {
   const { state, teacherById } = useTerm();
   const [query, setQuery] = useState("");
@@ -60,7 +105,6 @@ function StudentsList({
   );
   if (!data) return null;
 
-  const now = startOfDay(new Date());
   const q = query.trim().toLowerCase();
   const filtered = data.students
     .filter((s) => (teacherFilter === "all" ? true : s.teacherId === teacherFilter))
@@ -71,12 +115,26 @@ function StudentsList({
     <div className="shell">
       <Nav current="students" onNavigate={onNavigate} />
 
-      <div style={{ marginBottom: "1.25rem" }}>
-        <h1 style={{ fontSize: 22, fontWeight: 500, margin: 0 }}>Students</h1>
-        <p style={{ margin: "4px 0 0 0", color: "var(--color-text-secondary)", fontSize: 14 }}>
-          {data.students.length} student{data.students.length === 1 ? "" : "s"} across{" "}
-          {data.teachers.length} teacher{data.teachers.length === 1 ? "" : "s"}
-        </p>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "baseline",
+          justifyContent: "space-between",
+          gap: 12,
+          marginBottom: "1.25rem",
+        }}
+      >
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 500, margin: 0 }}>Students</h1>
+          <p style={{ margin: "4px 0 0 0", color: "var(--color-text-secondary)", fontSize: 14 }}>
+            {data.students.length} student{data.students.length === 1 ? "" : "s"} across{" "}
+            {data.teachers.length} teacher{data.teachers.length === 1 ? "" : "s"}
+          </p>
+        </div>
+        <button className="button button--small" onClick={onAdd}>
+          <Icon name="plus" size={14} />
+          Add student
+        </button>
       </div>
 
       <div style={{ display: "flex", gap: 8, marginBottom: "1rem" }}>
@@ -138,15 +196,6 @@ function StudentsList({
           <tbody>
             {filtered.map((s) => {
               const iep = parseDate(s.nextIepReview);
-              const delta = iep ? daysBetween(now, iep) : null;
-              const iepColor =
-                delta == null
-                  ? "var(--color-text-secondary)"
-                  : delta < 0
-                    ? "var(--color-text-danger)"
-                    : delta <= 14
-                      ? "var(--color-text-warning)"
-                      : "var(--color-text-secondary)";
               const count = goalCount.get(s.id) ?? 0;
               return (
                 <tr
@@ -170,7 +219,7 @@ function StudentsList({
                   >
                     {count}
                   </td>
-                  <td style={{ ...td(iepColor), fontSize: 13, fontWeight: delta != null && delta <= 14 ? 500 : 400 }}>
+                  <td style={{ ...td("var(--color-text-secondary)"), fontSize: 13 }}>
                     {iep ? formatShort(iep) : "—"}
                   </td>
                   <td style={{ padding: "10px 14px", textAlign: "right" }}>
@@ -202,24 +251,34 @@ function StudentsList({
 }
 
 function StudentDetail({
-  studentId,
+  student,
+  isNew,
   onBack,
   onViewGoals,
   onNavigate,
 }: {
-  studentId: string;
+  student: Student;
+  isNew: boolean;
   onBack: () => void;
   onViewGoals: () => void;
   onNavigate: (page: NavPage) => void;
 }) {
-  const { state, teacherById, studentById, client } = useTerm();
+  const { state, teacherById, client, saveStudents } = useTerm();
+  const [draft, setDraft] = useState<Student>(() => cloneStudent(student));
+  const [baseline, setBaseline] = useState<Student>(() => cloneStudent(student));
   const [history, setHistory] = useState<IepReview[] | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [confirmingRemove, setConfirmingRemove] = useState(false);
 
   useEffect(() => {
-    if (!client) return;
+    if (isNew || !client) {
+      setHistory([]);
+      return;
+    }
     let cancelled = false;
     setHistory(null);
-    loadIepHistory(client, studentId)
+    loadIepHistory(client, student.id)
       .then((h) => {
         if (!cancelled) setHistory(h);
       })
@@ -229,21 +288,76 @@ function StudentDetail({
     return () => {
       cancelled = true;
     };
-  }, [client, studentId]);
+  }, [client, student.id, isNew]);
 
   const data = state.status === "ready" ? state.data : null;
-  const student = studentById.get(studentId);
-  if (!data || !student) return null;
+  if (!data) return null;
 
-  const teacher = teacherById.get(student.teacherId);
-  const goalCount = data.goals.filter((g) => g.studentId === student.id && !g.archived).length;
-  const flag = ageFlag(student.age);
+  const teacher = teacherById.get(draft.teacherId);
+  const dirty = isNew || JSON.stringify(draft) !== JSON.stringify(baseline);
+  const flag = ageFlag(draft.age);
   const ageColor =
     flag === "alert"
       ? "var(--color-text-danger)"
       : flag === "warn"
         ? "var(--color-text-warning)"
         : undefined;
+  const goalCount = data.goals.filter((g) => g.studentId === draft.id && !g.archived).length;
+
+  const trimmedName = draft.name.trim().toLowerCase();
+  const sameTeacherDupe =
+    trimmedName !== "" &&
+    data.students.some(
+      (s) =>
+        s.id !== draft.id &&
+        s.teacherId === draft.teacherId &&
+        s.name.trim().toLowerCase() === trimmedName,
+    );
+  const crossTeacherDupe = data.students.find(
+    (s) =>
+      s.id !== draft.id &&
+      s.teacherId !== draft.teacherId &&
+      s.name.trim() !== "" &&
+      s.name.trim().toLowerCase() === trimmedName,
+  );
+
+  const set = (patch: Partial<Student>) => setDraft((d) => ({ ...d, ...patch }));
+  const setBoolField = (key: string, on: boolean) =>
+    setDraft((d) => ({ ...d, fields: { ...d.fields, [key]: on ? "true" : "false" } }));
+
+  async function handleSave() {
+    const problem = validateStudentName(data!.students, draft);
+    if (problem) {
+      setError(problem);
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    const next = isNew
+      ? [...data!.students, draft]
+      : data!.students.map((s) => (s.id === draft.id ? draft : s));
+    try {
+      await saveStudents(next);
+      setBaseline(cloneStudent(draft));
+      if (isNew) onBack();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleRemove() {
+    setSaving(true);
+    setError(null);
+    try {
+      await saveStudents(data!.students.filter((s) => s.id !== draft.id));
+      onBack();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Remove failed");
+      setSaving(false);
+    }
+  }
 
   return (
     <div className="shell">
@@ -283,42 +397,124 @@ function StudentDetail({
               fontSize: 15,
             }}
           >
-            {student.name.charAt(0).toUpperCase() || "?"}
+            {draft.name.trim().charAt(0).toUpperCase() || "?"}
           </div>
           <div>
-            <h1 style={{ fontSize: 22, fontWeight: 500, margin: 0 }}>{student.name}</h1>
+            <h1 style={{ fontSize: 22, fontWeight: 500, margin: 0 }}>
+              {draft.name.trim() || "New student"}
+            </h1>
             <p style={{ margin: "4px 0 0 0", color: "var(--color-text-secondary)", fontSize: 14 }}>
               {teacher ? `${teacher.name}'s caseload` : "No teacher"} · {goalCount} goal
               {goalCount === 1 ? "" : "s"}
             </p>
           </div>
         </div>
-        <button className="button button--small" onClick={onViewGoals}>
-          View goals
-          <Icon name="chevron-right" size={14} />
-        </button>
+        {!isNew && (
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="button button--small" onClick={onViewGoals}>
+              View goals
+              <Icon name="chevron-right" size={14} />
+            </button>
+            {confirmingRemove ? (
+              <>
+                <button
+                  className="button button--small"
+                  onClick={() => setConfirmingRemove(false)}
+                  disabled={saving}
+                >
+                  Cancel
+                </button>
+                <button className="button button--small button--danger-text" onClick={handleRemove} disabled={saving}>
+                  Confirm remove
+                </button>
+              </>
+            ) : (
+              <button
+                className="button button--small button--danger-text"
+                onClick={() => setConfirmingRemove(true)}
+              >
+                Remove
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="card" style={{ marginBottom: "1rem" }}>
         <h3 className="card__title">Profile</h3>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "14px 20px" }}>
-          <Field label="Name">{student.name}</Field>
-          <Field label="Pronouns">{student.pronouns || "—"}</Field>
-          <Field label="Age">
-            <span style={{ color: ageColor }}>{student.age ?? "—"}</span>
-          </Field>
-          <Field label="Teacher">{teacher?.name ?? "—"}</Field>
+          <EditField label="Name">
+            <input className="input" value={draft.name} onChange={(e) => set({ name: e.target.value })} />
+          </EditField>
+          <EditField label="Pronouns">
+            <input
+              className="input"
+              value={draft.pronouns}
+              placeholder="he/him"
+              onChange={(e) => set({ pronouns: e.target.value })}
+            />
+          </EditField>
+          <EditField label="Age">
+            <input
+              className="input"
+              type="number"
+              value={draft.age ?? ""}
+              style={ageColor ? { color: ageColor } : undefined}
+              onChange={(e) => set({ age: e.target.value === "" ? null : Number(e.target.value) })}
+            />
+          </EditField>
+          <EditField label="Teacher">
+            <select
+              className="select"
+              value={draft.teacherId}
+              onChange={(e) => set({ teacherId: e.target.value })}
+            >
+              <option value="">— Unassigned —</option>
+              {data.teachers.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          </EditField>
           <div style={{ gridColumn: "span 2" }}>
-            <Field label="AAC device">{student.aacDevice ?? "—"}</Field>
+            <EditField label="AAC device">
+              <input
+                className="input"
+                value={draft.aacDevice ?? ""}
+                onChange={(e) => set({ aacDevice: e.target.value === "" ? null : e.target.value })}
+              />
+            </EditField>
           </div>
         </div>
 
         <Divider />
         <h3 style={{ fontSize: 14, fontWeight: 500, margin: "0 0 12px 0" }}>IEP dates</h3>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "14px 20px" }}>
-          <Field label="Next IEP review">{formatDateField(student.nextIepReview)}</Field>
-          <Field label="Next triennial">{formatDateField(student.nextTriennial)}</Field>
-          <Field label="Mandate">{student.mandate ?? "—"}</Field>
+          <EditField label="Next IEP review">
+            <input
+              className="input"
+              type="date"
+              value={draft.nextIepReview ?? ""}
+              onChange={(e) => set({ nextIepReview: e.target.value || null })}
+            />
+          </EditField>
+          <EditField label="Next triennial">
+            <input
+              className="input"
+              type="date"
+              value={draft.nextTriennial ?? ""}
+              onChange={(e) => set({ nextTriennial: e.target.value || null })}
+            />
+          </EditField>
+          <EditField label="Mandate">
+            <input
+              className="input"
+              value={draft.mandate ?? ""}
+              placeholder="1:30:1"
+              onChange={(e) => set({ mandate: e.target.value === "" ? null : e.target.value })}
+            />
+          </EditField>
         </div>
 
         {teacher && teacher.perStudentFields.length > 0 && (
@@ -330,49 +526,113 @@ function StudentDetail({
                 (from {teacher.name}'s setup)
               </span>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "14px 20px" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {teacher.perStudentFields.map((field) => (
-                <Field key={field.key} label={field.label}>
-                  {isTruthy(student.fields[field.key]) ? "Yes" : "No"}
-                </Field>
+                <label
+                  key={field.key}
+                  style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isTruthy(draft.fields[field.key])}
+                    onChange={(e) => setBoolField(field.key, e.target.checked)}
+                  />
+                  {field.label}
+                </label>
               ))}
             </div>
           </>
         )}
       </div>
 
-      <div className="card">
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: 12,
-          }}
-        >
-          <h3 className="card__title" style={{ margin: 0 }}>
-            IEP history
-          </h3>
-          {history && history.length > 0 && (
-            <span style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>
-              {history.length} review{history.length === 1 ? "" : "s"}
-            </span>
+      {!isNew && (
+        <div className="card">
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: 12,
+            }}
+          >
+            <h3 className="card__title" style={{ margin: 0 }}>
+              IEP history
+            </h3>
+            {history && history.length > 0 && (
+              <span style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>
+                {history.length} review{history.length === 1 ? "" : "s"}
+              </span>
+            )}
+          </div>
+          {history === null ? (
+            <p style={{ fontSize: 13, color: "var(--color-text-tertiary)" }}>Loading…</p>
+          ) : history.length === 0 ? (
+            <p style={{ fontSize: 13, color: "var(--color-text-tertiary)" }}>
+              No IEP reviews recorded yet.
+            </p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              {history.map((review, i) => (
+                <ReviewRow key={`${review.date}-${i}`} review={review} />
+              ))}
+            </div>
           )}
         </div>
-        {history === null ? (
-          <p style={{ fontSize: 13, color: "var(--color-text-tertiary)" }}>Loading…</p>
-        ) : history.length === 0 ? (
-          <p style={{ fontSize: 13, color: "var(--color-text-tertiary)" }}>
-            No IEP reviews recorded yet.
+      )}
+
+      {sameTeacherDupe ? (
+        <p role="alert" style={{ marginTop: 14, fontSize: 13, color: "var(--color-text-danger)" }}>
+          Another student named "{draft.name.trim()}" is already on this teacher's caseload. Add a
+          distinguisher (e.g. "{draft.name.trim()} R.") so notes don't get mixed up.
+        </p>
+      ) : crossTeacherDupe ? (
+        <p style={{ marginTop: 14, fontSize: 12, color: "var(--color-text-warning)" }}>
+          Another student named "{draft.name.trim()}" is on{" "}
+          {teacherById.get(crossTeacherDupe.teacherId)?.name ?? "another"}'s caseload. They never share a
+          session, but you may want to distinguish them.
+        </p>
+      ) : null}
+
+      {error && (
+        <p role="alert" style={{ marginTop: 14, fontSize: 13, color: "var(--color-text-danger)" }}>
+          {error}
+        </p>
+      )}
+
+      {(dirty || isNew) && (
+        <div
+          style={{
+            marginTop: "1.25rem",
+            padding: "12px 16px",
+            background: "var(--color-background-secondary)",
+            borderRadius: "var(--border-radius-md)",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 12,
+          }}
+        >
+          <p style={{ margin: 0, fontSize: 13, color: "var(--color-text-secondary)" }}>
+            {isNew ? "New student — not saved yet" : "Unsaved changes"}
           </p>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column" }}>
-            {history.map((review, i) => (
-              <ReviewRow key={`${review.date}-${i}`} review={review} />
-            ))}
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              className="button button--small"
+              onClick={isNew ? onBack : () => setDraft(cloneStudent(baseline))}
+              disabled={saving}
+            >
+              {isNew ? "Cancel" : "Discard"}
+            </button>
+            <button
+              className="button button--small button--primary"
+              onClick={handleSave}
+              disabled={saving || sameTeacherDupe}
+            >
+              {saving ? "Saving…" : isNew ? "Create student" : "Save"}
+            </button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -446,29 +706,19 @@ function Badge({ bg, color, children }: { bg: string; color: string; children: R
   );
 }
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
+function EditField({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div>
-      <p style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 2 }}>{label}</p>
-      <p style={{ fontSize: 14, margin: 0 }}>{children}</p>
+      <label className="label">{label}</label>
+      {children}
     </div>
   );
 }
 
 function Divider() {
   return (
-    <div
-      style={{
-        margin: "1.25rem 0",
-        borderTop: "0.5px solid var(--color-border-tertiary)",
-      }}
-    />
+    <div style={{ margin: "1.25rem 0", borderTop: "0.5px solid var(--color-border-tertiary)" }} />
   );
-}
-
-function formatDateField(iso: string | null): string {
-  const date = parseDate(iso);
-  return date ? formatShort(date) : "—";
 }
 
 function isTruthy(value: string | undefined): boolean {
@@ -483,6 +733,43 @@ function countActiveGoals(goals: Goal[]): Map<string, number> {
     counts.set(goal.studentId, (counts.get(goal.studentId) ?? 0) + 1);
   }
   return counts;
+}
+
+function cloneStudent(s: Student): Student {
+  return { ...s, fields: { ...s.fields } };
+}
+
+function blankStudent(): Student {
+  return {
+    id: `s_${crypto.randomUUID()}`,
+    name: "",
+    pronouns: "",
+    teacherId: "",
+    age: null,
+    aacDevice: null,
+    nextIepReview: null,
+    nextTriennial: null,
+    mandate: null,
+    fields: {},
+  };
+}
+
+// Same-teacher duplicate names produce two identical blocks in the all-notes
+// paste target, risking a wrong note in a legally-binding record — so block
+// and require a distinguisher. Cross-teacher dupes are only soft-warned (above).
+function validateStudentName(students: Student[], candidate: Student): string | null {
+  const name = candidate.name.trim();
+  if (name === "") return "Name can't be empty.";
+  const dupeSameTeacher = students.some(
+    (s) =>
+      s.id !== candidate.id &&
+      s.teacherId === candidate.teacherId &&
+      s.name.trim().toLowerCase() === name.toLowerCase(),
+  );
+  if (dupeSameTeacher) {
+    return `Another student named "${name}" is on this teacher's caseload. Add a distinguisher (e.g. "${name} R.") so notes don't get mixed up.`;
+  }
+  return null;
 }
 
 function th(widthPct: number) {

@@ -15,12 +15,44 @@ export interface ScheduleEntry {
   studentId: string;
 }
 
-// Start time of a slot label like "8:44 – 9:14" as minutes since midnight, for
+// Convert a bare clock time to minutes since midnight, treating 1–7 o'clock as
+// PM. The school day runs from ~8am into the early afternoon, so "1:10" means
+// 13:10, not 1:10am — without this, afternoon blocks sort/position before 8am.
+function clockToMinutes(h: number, m: number): number {
+  const hour = h >= 1 && h <= 7 ? h + 12 : h;
+  return hour * 60 + m;
+}
+
+// Start time of a slot label like "8:44-9:14" as minutes since midnight, for
 // chronological sorting (lexical sort mis-orders "10:.." before "8:..").
 export function slotStartMinutes(slot: string): number {
   const m = /(\d{1,2}):(\d{2})/.exec(slot);
   if (!m) return 0;
-  return Number(m[1]) * 60 + Number(m[2]);
+  return clockToMinutes(Number(m[1]), Number(m[2]));
+}
+
+// End time of a slot label (the last clock time in it). Falls back to the start
+// when the label has only one time.
+export function slotEndMinutes(slot: string): number {
+  const matches = [...slot.matchAll(/(\d{1,2}):(\d{2})/g)];
+  const last = matches[matches.length - 1];
+  if (!last) return slotStartMinutes(slot);
+  return clockToMinutes(Number(last[1]), Number(last[2]));
+}
+
+// Parse a free-typed time ("9", "12", "2", "9:15") into canonical minutes plus a
+// normalized "H:MM" label, using the school 12-hour clock (1–7 read as PM).
+// Returns null when it isn't a valid H or H:MM (hour 1–12, minute 0–59).
+export function parseTimeInput(raw: string): { minutes: number; label: string } | null {
+  const m = /^(\d{1,2})(?::(\d{2}))?$/.exec(raw.trim());
+  if (!m) return null;
+  const hour = Number(m[1]);
+  const minute = m[2] === undefined ? 0 : Number(m[2]);
+  if (hour < 1 || hour > 12 || minute > 59) return null;
+  return {
+    minutes: clockToMinutes(hour, minute),
+    label: `${hour}:${String(minute).padStart(2, "0")}`,
+  };
 }
 
 export function sortedTimeSlots(entries: ScheduleEntry[]): string[] {

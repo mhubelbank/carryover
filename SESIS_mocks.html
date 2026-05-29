@@ -250,21 +250,22 @@ body { padding: 0; }
     <li><a href="#generate_regular"><span class="num">12.</span>Generate notes — Regular mode</a></li>
     <li><a href="#generate_filming"><span class="num">13.</span>Generate notes — Filming day mode</a></li>
     <li><a href="#generated_result"><span class="num">14.</span>Generated notes (result)</a></li>
-    <li><a href="#regen_feedback"><span class="num">15.</span>Regenerate with feedback (modal)</a></li>
+    <li><a href="#regen_feedback"><span class="num">15.</span>Regenerate note with feedback (modal)</a></li>
     <li><a href="#goals_view"><span class="num">16.</span>Goals view</a></li>
-    <li><a href="#paste_goals"><span class="num">17.</span>Paste raw goals</a></li>
-    <li><a href="#iep_review"><span class="num">18.</span>IEP review</a></li>
-    <li><a href="#schedule_grid"><span class="num">19.</span>Schedule grid</a></li>
-    <li><a href="#teacher_edit"><span class="num">20.</span>Teacher edit</a></li>
-    <li><a href="#color_picker"><span class="num">21.</span>Color picker (modal)</a></li>
-    <li><a href="#role_edit"><span class="num">22.</span>Role edit (modal)</a></li>
+    <li><a href="#paste_goals"><span class="num">17.</span>Add goals for a student</a></li>
+    <li><a href="#shortname_regen"><span class="num">18.</span>Re-suggest shortname with feedback (modal)</a></li>
+    <li><a href="#iep_review"><span class="num">19.</span>IEP review</a></li>
+    <li><a href="#schedule_grid"><span class="num">20.</span>Schedule grid</a></li>
+    <li><a href="#teacher_edit"><span class="num">21.</span>Teacher edit</a></li>
+    <li><a href="#color_picker"><span class="num">22.</span>Color picker (modal)</a></li>
+    <li><a href="#role_edit"><span class="num">23.</span>Role edit (modal)</a></li>
   </ol>
 </div>
 
 <section class="mock-section" id="welcome">
   <div class="mock-meta">
     <a href="#top" class="back-to-top">↑ Back to top</a>
-    <span class="mock-num">01 of 22</span>
+    <span class="mock-num">01 of 23</span>
     <h2>Welcome (first run)</h2>
     <p>Two keys, repo path hardcoded.</p>
   </div>
@@ -316,7 +317,7 @@ body { padding: 0; }
 <section class="mock-section" id="settings">
   <div class="mock-meta">
     <a href="#top" class="back-to-top">↑ Back to top</a>
-    <span class="mock-num">02 of 22</span>
+    <span class="mock-num">02 of 23</span>
     <h2>Settings</h2>
     <p>Manage keys, export, start a new term, and reset (incl. test-as-new-user mode).</p>
   </div>
@@ -424,7 +425,7 @@ body { padding: 0; }
 <section class="mock-section" id="today">
   <div class="mock-meta">
     <a href="#top" class="back-to-top">↑ Back to top</a>
-    <span class="mock-num">03 of 22</span>
+    <span class="mock-num">03 of 23</span>
     <h2>Today</h2>
     <p>Daily landing page. Surfaces term-ending (~14 days out), IEP-overdue (red, blocks notes), and IEP-tomorrow (blue) banners.</p>
   </div>
@@ -525,7 +526,7 @@ body { padding: 0; }
 <section class="mock-section" id="students_list">
   <div class="mock-meta">
     <a href="#top" class="back-to-top">↑ Back to top</a>
-    <span class="mock-num">04 of 22</span>
+    <span class="mock-num">04 of 23</span>
     <h2>Students list</h2>
     <p>Roster with teacher filter and inline rows.</p>
   </div>
@@ -652,7 +653,7 @@ body { padding: 0; }
 <section class="mock-section" id="student_detail">
   <div class="mock-meta">
     <a href="#top" class="back-to-top">↑ Back to top</a>
-    <span class="mock-num">05 of 22</span>
+    <span class="mock-num">05 of 23</span>
     <h2>Student detail</h2>
     <p>Edit profile, IEP dates, teacher-specific fields.</p>
   </div>
@@ -815,7 +816,7 @@ body { padding: 0; }
 <section class="mock-section" id="year_setup_year">
   <div class="mock-meta">
     <a href="#top" class="back-to-top">↑ Back to top</a>
-    <span class="mock-num">06 of 22</span>
+    <span class="mock-num">06 of 23</span>
     <h2>New term setup — Year</h2>
     <p>Step 1: term type (school year vs summer) + dates. Auto-labels the term.</p>
   </div>
@@ -875,7 +876,7 @@ body { padding: 0; }
 <section class="mock-section" id="year_setup_teachers">
   <div class="mock-meta">
     <a href="#top" class="back-to-top">↑ Back to top</a>
-    <span class="mock-num">07 of 22</span>
+    <span class="mock-num">07 of 23</span>
     <h2>New term setup — Teachers</h2>
     <p>Step 2: carried forward by default.</p>
   </div>
@@ -959,7 +960,7 @@ body { padding: 0; }
 <section class="mock-section" id="year_setup_continuing">
   <div class="mock-meta">
     <a href="#top" class="back-to-top">↑ Back to top</a>
-    <span class="mock-num">08 of 22</span>
+    <span class="mock-num">08 of 23</span>
     <h2>New term setup — Continuing students</h2>
     <p>Step 3a: flat inline-editable table (no per-teacher grouping, since students move). Removed students grey out with an Undo affordance. IEP date column editable here. Stale-ages reminder banner.</p>
   </div>
@@ -1137,7 +1138,7 @@ body { padding: 0; }
 <section class="mock-section" id="year_setup_new_students">
   <div class="mock-meta">
     <a href="#top" class="back-to-top">↑ Back to top</a>
-    <span class="mock-num">09 of 22</span>
+    <span class="mock-num">09 of 23</span>
     <h2>New term setup — New students</h2>
     <p>Step 3b: bulk-entry grid with paste support and AAC dropdown.</p>
   </div>
@@ -1237,7 +1238,7 @@ body { padding: 0; }
 <section class="mock-section" id="year_setup_schedule">
   <div class="mock-meta">
     <a href="#top" class="back-to-top">↑ Back to top</a>
-    <span class="mock-num">10 of 22</span>
+    <span class="mock-num">10 of 23</span>
     <h2>New term setup — Schedule</h2>
     <p>Step 4: always starts empty; no carry-forward.</p>
   </div>
@@ -1309,7 +1310,7 @@ body { padding: 0; }
 <section class="mock-section" id="year_setup_goals">
   <div class="mock-meta">
     <a href="#top" class="back-to-top">↑ Back to top</a>
-    <span class="mock-num">11 of 22</span>
+    <span class="mock-num">11 of 23</span>
     <h2>New term setup — Goals</h2>
     <p>Step 5: flags students with zero short-term goals; routes to bulk paste tool.</p>
   </div>
@@ -1376,7 +1377,7 @@ body { padding: 0; }
 <section class="mock-section" id="generate_regular">
   <div class="mock-meta">
     <a href="#top" class="back-to-top">↑ Back to top</a>
-    <span class="mock-num">12 of 22</span>
+    <span class="mock-num">12 of 23</span>
     <h2>Generate notes — Regular mode</h2>
     <p>Daily driver form. Plain checkboxes, all options visible. Absent collapses fields. Clear form top-right; per-student clear icon.</p>
   </div>
@@ -1570,7 +1571,7 @@ body { padding: 0; }
 <section class="mock-section" id="generate_filming">
   <div class="mock-meta">
     <a href="#top" class="back-to-top">↑ Back to top</a>
-    <span class="mock-num">13 of 22</span>
+    <span class="mock-num">13 of 23</span>
     <h2>Generate notes — Filming day mode</h2>
     <p>Role-based session. Role selector replaces activities; role-conditional fields shown for each student.</p>
   </div>
@@ -1699,7 +1700,7 @@ body { padding: 0; }
 <section class="mock-section" id="generated_result">
   <div class="mock-meta">
     <a href="#top" class="back-to-top">↑ Back to top</a>
-    <span class="mock-num">14 of 22</span>
+    <span class="mock-num">14 of 23</span>
     <h2>Generated notes (result)</h2>
     <p>After generation. Top textarea is the single paste target; each per-student note also has its own copy/regenerate/show-drafts controls.</p>
   </div>
@@ -1798,9 +1799,9 @@ Justin was absent.</textarea>
 <section class="mock-section" id="regen_feedback">
   <div class="mock-meta">
     <a href="#top" class="back-to-top">↑ Back to top</a>
-    <span class="mock-num">15 of 22</span>
-    <h2>Regenerate with feedback (modal)</h2>
-    <p>Free-text feedback + quick-fix chips + optional 'save as a rule for future notes'.</p>
+    <span class="mock-num">15 of 23</span>
+    <h2>Regenerate note with feedback (modal)</h2>
+    <p>Triggered from per-note Regenerate. Free-text feedback + quick-fix chips + optional 'save as a rule for future notes'.</p>
   </div>
   <div class="mock-frame">
     <div style="min-height: 600px; background: rgba(0, 0, 0, 0.35); display: flex; align-items: center; justify-content: center; padding: 2rem; border-radius: var(--border-radius-lg);">
@@ -1859,7 +1860,7 @@ Justin was absent.</textarea>
 <section class="mock-section" id="goals_view">
   <div class="mock-meta">
     <a href="#top" class="back-to-top">↑ Back to top</a>
-    <span class="mock-num">16 of 22</span>
+    <span class="mock-num">16 of 23</span>
     <h2>Goals view</h2>
     <p>Per-student goal list grouped by long-term goal. Each short-term shows usage count for the current term ('Used in 14 sessions').</p>
   </div>
@@ -1882,8 +1883,7 @@ Justin was absent.</textarea>
       <p style="margin: 4px 0 0 0; color: var(--color-text-secondary); font-size: 14px;">9 short-term goals across 3 long-term areas · Alfredo</p>
     </div>
     <div style="display: flex; gap: 8px;">
-      <button style="font-size: 13px; padding: 6px 12px;"><i class="ti ti-clipboard" style="font-size: 14px; vertical-align: -2px; margin-right: 4px;"></i>Paste raw goals</button>
-      <button style="font-size: 13px; padding: 6px 12px;"><i class="ti ti-plus" style="font-size: 14px; vertical-align: -2px; margin-right: 4px;"></i>Add goal</button>
+      <button style="font-size: 13px; padding: 6px 12px;"><i class="ti ti-plus" style="font-size: 14px; vertical-align: -2px; margin-right: 4px;"></i>Add goals</button>
     </div>
   </div>
 
@@ -1956,9 +1956,9 @@ Justin was absent.</textarea>
 <section class="mock-section" id="paste_goals">
   <div class="mock-meta">
     <a href="#top" class="back-to-top">↑ Back to top</a>
-    <span class="mock-num">17 of 22</span>
-    <h2>Paste raw goals</h2>
-    <p>Paste raw long-term goal text; AI suggests shortnames; review and add.</p>
+    <span class="mock-num">17 of 23</span>
+    <h2>Add goals for a student</h2>
+    <p>Structured form: one LTG textarea + one ST textarea per cluster, '+Add another' to expand. Suggest shortnames runs one Claude call across the whole set, with the current roster's shortnames as in-context examples for vocabulary consistency. Review panel below shows per-ST editable shortname inputs with per-row regenerate.</p>
   </div>
   <div class="mock-frame">
     <div style="padding: 1.5rem 0;">
@@ -1974,40 +1974,205 @@ Justin was absent.</textarea>
 
 
   <div style="margin-bottom: 1.25rem;">
-    <a href="#" style="font-size: 13px; color: var(--color-text-secondary); text-decoration: none;">← Joel's goals</a>
+    <a href="#" style="font-size: 13px; color: var(--color-text-secondary); text-decoration: none;">← Aaron's goals</a>
   </div>
 
-  <h1 style="margin: 0 0 4px 0; font-size: 22px; font-weight: 500;">Paste raw goals for Joel</h1>
-  <p style="margin: 0 0 1.5rem 0; color: var(--color-text-secondary); font-size: 14px;">Paste the full long-term goal text. We'll suggest shortnames for each short-term objective.</p>
+  <h1 style="margin: 0 0 4px 0; font-size: 22px; font-weight: 500;">Add goals for Aaron</h1>
+  <p style="margin: 0 0 1.5rem 0; color: var(--color-text-secondary); font-size: 14px;">For each long-term goal, paste the LTG text and then paste all of its short-term goals below it (one per line). Then click Suggest shortnames.</p>
 
-  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+  <!-- Section 1: input -->
 
-    <div>
-      <p style="margin: 0 0 8px 0; font-size: 12px; color: var(--color-text-secondary); font-weight: 500;">Paste from IEP document</p>
-      <textarea rows="14" style="width: 100%; box-sizing: border-box; font-size: 13px; line-height: 1.6;">Joel will use a picture, word bank, and/or sentence starter(s) to write 5 sentences related to a topic with no more than one verbal prompt.
+  <div style="display: flex; flex-direction: column; gap: 14px; margin-bottom: 1.5rem;">
 
-a. Write a sentence with picture support
-b. Write a sentence using a word bank
-c. Write a sentence with a sentence starter
-d. Write 3 sentences on a topic
-e. Write 5 sentences on a topic</textarea>
-      <button style="margin-top: 10px; font-size: 13px; padding: 8px 14px; background: var(--color-background-info); color: var(--color-text-info); border-color: var(--color-border-info);"><i class="ti ti-sparkles" style="font-size: 14px; vertical-align: -2px; margin-right: 4px;"></i>Suggest shortnames</button>
+    <div style="background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-md); padding: 16px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+        <p style="margin: 0; font-size: 13px; font-weight: 500; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: 0.04em;">Long-term goal #1</p>
+        <button style="font-size: 12px; padding: 4px 8px; color: var(--color-text-tertiary); border: none; background: none;"><i class="ti ti-x" style="font-size: 14px;"></i></button>
+      </div>
+
+      <label style="display: block; font-size: 12px; color: var(--color-text-secondary); margin-bottom: 4px;">Long-term goal text</label>
+      <textarea rows="2" style="width: 100%; box-sizing: border-box; font-size: 13px; line-height: 1.5; margin-bottom: 12px;">Aaron will improve his functional reading comprehension by identifying and understanding key details in real-world texts (e.g., schedules, job postings, flyers, coupons, advertisements, invitations, labels) by accurately responding to fill-in-the-blank questions related to the content.</textarea>
+
+      <label style="display: block; font-size: 12px; color: var(--color-text-secondary); margin-bottom: 4px;">Short-term goals <span style="color: var(--color-text-tertiary);">— one per line</span></label>
+      <textarea rows="5" style="width: 100%; box-sizing: border-box; font-size: 13px; line-height: 1.5;">Aaron will identify the type of functional text (e.g., flyer, coupon, advertisement, invitation, label) when presented with a variety of real-world reading materials.
+Aaron will explain the purpose of a functional text, such as recognizing that a coupon provides a discount or that an invitation gives event details.
+Aaron will determine what information to look for in a functional text based on a given question (e.g., locating a venue name when asked about an event location).
+Aaron will identify key details in functional texts by correctly answering multiple-choice questions related to the information presented.</textarea>
+      <p style="margin: 6px 0 0 0; font-size: 12px; color: var(--color-text-success);"><i class="ti ti-check" style="font-size: 13px; vertical-align: -2px; margin-right: 2px;"></i>4 short-term goals detected</p>
     </div>
 
-    <div>
-      <p style="margin: 0 0 8px 0; font-size: 12px; color: var(--color-text-secondary); font-weight: 500;">Suggested shortnames <span style="color: var(--color-text-tertiary); font-weight: 400; margin-left: 4px;">(edit before saving)</span></p>
-      <div style="background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-md); padding: 12px;">
-        <div style="display: flex; flex-direction: column; gap: 8px;">
-          <input type="text" value="write sentence with picture" style="font-size: 13px;">
-          <input type="text" value="write sentence with word bank" style="font-size: 13px;">
-          <input type="text" value="write sentence with starter" style="font-size: 13px;">
-          <input type="text" value="write 3 sentences on topic" style="font-size: 13px;">
-          <input type="text" value="write 5 sentences on topic" style="font-size: 13px;">
-        </div>
+    <div style="background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-md); padding: 16px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+        <p style="margin: 0; font-size: 13px; font-weight: 500; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: 0.04em;">Long-term goal #2</p>
+        <button style="font-size: 12px; padding: 4px 8px; color: var(--color-text-tertiary); border: none; background: none;"><i class="ti ti-x" style="font-size: 14px;"></i></button>
       </div>
-      <div style="display: flex; gap: 8px; margin-top: 10px; justify-content: flex-end;">
-        <button style="font-size: 13px; padding: 8px 14px;">Discard</button>
-        <button style="font-size: 13px; padding: 8px 14px; background: var(--color-background-success); color: var(--color-text-success); border-color: var(--color-border-success);"><i class="ti ti-check" style="font-size: 14px; vertical-align: -2px; margin-right: 4px;"></i>Add 5 goals to Joel</button>
+
+      <label style="display: block; font-size: 12px; color: var(--color-text-secondary); margin-bottom: 4px;">Long-term goal text</label>
+      <textarea rows="2" style="width: 100%; box-sizing: border-box; font-size: 13px; line-height: 1.5; margin-bottom: 12px;">Through role-play and given scenarios, Aaron will demonstrate increased flexibility during unexpected school day transitions and changes in routine.</textarea>
+
+      <label style="display: block; font-size: 12px; color: var(--color-text-secondary); margin-bottom: 4px;">Short-term goals <span style="color: var(--color-text-tertiary);">— one per line</span></label>
+      <textarea rows="4" style="width: 100%; box-sizing: border-box; font-size: 13px; line-height: 1.5;">Aaron will accurately identify and verbally communicate his initial feeling (e.g., "I feel frustrated," "This is unexpected") to a trusted adult
+Aaron will independently or with a single prompt, utilize a pre-taught calming strategy (e.g., deep breaths, counting to five, taking a quick break) during the transition
+Aaron will successfully adapt to at least 4 out of 5 minor, unplanned adjustments (e.g., a teacher briefly pauses a lesson, a classmate asks to switch seats, a material isn't immediately available) without verbal protest or significant physical signs of distress, and resume the task or activity within one minute.</textarea>
+      <p style="margin: 6px 0 0 0; font-size: 12px; color: var(--color-text-success);"><i class="ti ti-check" style="font-size: 13px; vertical-align: -2px; margin-right: 2px;"></i>3 short-term goals detected</p>
+    </div>
+
+    <button style="background: transparent; border: 1px dashed var(--color-border-secondary); border-radius: var(--border-radius-md); padding: 14px; color: var(--color-text-secondary); font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 6px;"><i class="ti ti-plus" style="font-size: 14px;"></i>Add another long-term goal</button>
+
+  </div>
+
+  <div style="text-align: center; margin: 1.5rem 0;">
+    <button style="font-size: 14px; padding: 10px 20px; background: var(--color-background-info); color: var(--color-text-info); border: 0.5px solid var(--color-border-info); border-radius: var(--border-radius-md);"><i class="ti ti-sparkles" style="font-size: 14px; vertical-align: -2px; margin-right: 4px;"></i>Suggest shortnames</button>
+  </div>
+
+  <!-- Section 2: review and confirm. Appears below after the button is clicked. -->
+
+  <div style="border-top: 0.5px solid var(--color-border-tertiary); padding-top: 1.5rem;">
+    <h2 style="margin: 0 0 4px 0; font-size: 17px; font-weight: 500;">Review and confirm</h2>
+    <p style="margin: 0 0 1.25rem 0; color: var(--color-text-secondary); font-size: 13px;">Edit any shortname directly, or click <i class="ti ti-refresh" style="font-size: 13px; vertical-align: -2px;"></i> to ask the AI to try again with feedback.</p>
+
+    <!-- Cluster 1 -->
+    <div style="background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-md); padding: 14px 16px; margin-bottom: 12px;">
+      <p style="margin: 0 0 4px 0; font-size: 11px; color: var(--color-text-tertiary); text-transform: uppercase; letter-spacing: 0.04em;">Long-term goal #1</p>
+      <p style="margin: 0 0 14px 0; font-size: 13px; color: var(--color-text-secondary); line-height: 1.5;">Aaron will improve his functional reading comprehension by identifying and understanding key details in real-world texts...</p>
+
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+
+        <div style="display: grid; grid-template-columns: 1fr 220px auto; gap: 12px; align-items: center;">
+          <div>
+            <p style="margin: 0; font-size: 12px; color: var(--color-text-tertiary); margin-bottom: 2px;">ST 1</p>
+            <p style="margin: 0; font-size: 13px; color: var(--color-text-secondary); line-height: 1.5;">Aaron will identify the type of functional text (e.g., flyer, coupon, advertisement...)</p>
+          </div>
+          <input type="text" value="identify text type" style="font-size: 13px;">
+          <button style="font-size: 12px; padding: 6px; color: var(--color-text-tertiary); border: 0.5px solid var(--color-border-tertiary); background: transparent; border-radius: var(--border-radius-md);" title="Regenerate with feedback"><i class="ti ti-refresh" style="font-size: 14px;"></i></button>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 220px auto; gap: 12px; align-items: center;">
+          <div>
+            <p style="margin: 0; font-size: 12px; color: var(--color-text-tertiary); margin-bottom: 2px;">ST 2</p>
+            <p style="margin: 0; font-size: 13px; color: var(--color-text-secondary); line-height: 1.5;">Aaron will explain the purpose of a functional text...</p>
+          </div>
+          <input type="text" value="explain text purpose" style="font-size: 13px;">
+          <button style="font-size: 12px; padding: 6px; color: var(--color-text-tertiary); border: 0.5px solid var(--color-border-tertiary); background: transparent; border-radius: var(--border-radius-md);"><i class="ti ti-refresh" style="font-size: 14px;"></i></button>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 220px auto; gap: 12px; align-items: center;">
+          <div>
+            <p style="margin: 0; font-size: 12px; color: var(--color-text-tertiary); margin-bottom: 2px;">ST 3</p>
+            <p style="margin: 0; font-size: 13px; color: var(--color-text-secondary); line-height: 1.5;">Aaron will determine what information to look for in a functional text...</p>
+          </div>
+          <input type="text" value="determine search target" style="font-size: 13px;">
+          <button style="font-size: 12px; padding: 6px; color: var(--color-text-tertiary); border: 0.5px solid var(--color-border-tertiary); background: transparent; border-radius: var(--border-radius-md);"><i class="ti ti-refresh" style="font-size: 14px;"></i></button>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 220px auto; gap: 12px; align-items: center;">
+          <div>
+            <p style="margin: 0; font-size: 12px; color: var(--color-text-tertiary); margin-bottom: 2px;">ST 4</p>
+            <p style="margin: 0; font-size: 13px; color: var(--color-text-secondary); line-height: 1.5;">Aaron will identify key details in functional texts by correctly answering multiple-choice questions...</p>
+          </div>
+          <input type="text" value="answer multiple choice questions" style="font-size: 13px;">
+          <button style="font-size: 12px; padding: 6px; color: var(--color-text-tertiary); border: 0.5px solid var(--color-border-tertiary); background: transparent; border-radius: var(--border-radius-md);"><i class="ti ti-refresh" style="font-size: 14px;"></i></button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Cluster 2 -->
+    <div style="background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-md); padding: 14px 16px; margin-bottom: 12px;">
+      <p style="margin: 0 0 4px 0; font-size: 11px; color: var(--color-text-tertiary); text-transform: uppercase; letter-spacing: 0.04em;">Long-term goal #2</p>
+      <p style="margin: 0 0 14px 0; font-size: 13px; color: var(--color-text-secondary); line-height: 1.5;">Through role-play and given scenarios, Aaron will demonstrate increased flexibility...</p>
+
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+
+        <div style="display: grid; grid-template-columns: 1fr 220px auto; gap: 12px; align-items: center;">
+          <div>
+            <p style="margin: 0; font-size: 12px; color: var(--color-text-tertiary); margin-bottom: 2px;">ST 1</p>
+            <p style="margin: 0; font-size: 13px; color: var(--color-text-secondary); line-height: 1.5;">Aaron will accurately identify and verbally communicate his initial feeling...</p>
+          </div>
+          <input type="text" value="identify feelings" style="font-size: 13px;">
+          <button style="font-size: 12px; padding: 6px; color: var(--color-text-tertiary); border: 0.5px solid var(--color-border-tertiary); background: transparent; border-radius: var(--border-radius-md);"><i class="ti ti-refresh" style="font-size: 14px;"></i></button>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 220px auto; gap: 12px; align-items: center;">
+          <div>
+            <p style="margin: 0; font-size: 12px; color: var(--color-text-tertiary); margin-bottom: 2px;">ST 2</p>
+            <p style="margin: 0; font-size: 13px; color: var(--color-text-secondary); line-height: 1.5;">Aaron will independently or with a single prompt, utilize a pre-taught calming strategy...</p>
+          </div>
+          <input type="text" value="use calming strategy" style="font-size: 13px;">
+          <button style="font-size: 12px; padding: 6px; color: var(--color-text-tertiary); border: 0.5px solid var(--color-border-tertiary); background: transparent; border-radius: var(--border-radius-md);"><i class="ti ti-refresh" style="font-size: 14px;"></i></button>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 220px auto; gap: 12px; align-items: center;">
+          <div>
+            <p style="margin: 0; font-size: 12px; color: var(--color-text-tertiary); margin-bottom: 2px;">ST 3</p>
+            <p style="margin: 0; font-size: 13px; color: var(--color-text-secondary); line-height: 1.5;">Aaron will successfully adapt to at least 4 out of 5 minor, unplanned adjustments...</p>
+          </div>
+          <input type="text" value="adapt to unplanned changes" style="font-size: 13px;">
+          <button style="font-size: 12px; padding: 6px; color: var(--color-text-tertiary); border: 0.5px solid var(--color-border-tertiary); background: transparent; border-radius: var(--border-radius-md);"><i class="ti ti-refresh" style="font-size: 14px;"></i></button>
+        </div>
+
+      </div>
+    </div>
+
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem;">
+      <div style="display: flex; gap: 6px; align-items: center;">
+        <button style="font-size: 13px; padding: 6px 12px; color: var(--color-text-secondary);"><i class="ti ti-sparkles" style="font-size: 13px; vertical-align: -2px; margin-right: 4px;"></i>Re-suggest all</button>
+      </div>
+      <div style="display: flex; gap: 8px;">
+        <button style="font-size: 14px;">Discard</button>
+        <button style="font-size: 14px; background: var(--color-background-success); color: var(--color-text-success); border-color: var(--color-border-success);"><i class="ti ti-check" style="font-size: 14px; vertical-align: -2px; margin-right: 4px;"></i>Save 7 goals to Aaron</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+  </div>
+</section>
+
+<section class="mock-section" id="shortname_regen">
+  <div class="mock-meta">
+    <a href="#top" class="back-to-top">↑ Back to top</a>
+    <span class="mock-num">18 of 23</span>
+    <h2>Re-suggest shortname with feedback (modal)</h2>
+    <p>Triggered from any per-row regenerate icon on the Add goals review panel. Same pattern as note regenerate, smaller payload, quick-fix chips tuned to shortnames (Too long / Too vague / Too specific / Wrong words). No 'save as a rule' opt-in — shortname corrections are one-offs.</p>
+  </div>
+  <div class="mock-frame">
+    <div style="min-height: 480px; background: rgba(0, 0, 0, 0.35); display: flex; align-items: center; justify-content: center; padding: 2rem; border-radius: var(--border-radius-lg);">
+  <div style="background: var(--color-background-primary); border-radius: var(--border-radius-lg); border: 0.5px solid var(--color-border-tertiary); padding: 1.5rem; width: 540px; max-width: 100%;">
+
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+      <h2 style="margin: 0; font-size: 18px; font-weight: 500;">Re-suggest this shortname</h2>
+      <button style="font-size: 13px; padding: 4px 8px; color: var(--color-text-tertiary); border: none; background: none;"><i class="ti ti-x" style="font-size: 18px;"></i></button>
+    </div>
+    <p style="margin: 0 0 16px 0; font-size: 13px; color: var(--color-text-secondary);">Tell the AI what's off and we'll suggest a different shortname.</p>
+
+    <div style="background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 12px 14px; margin-bottom: 16px;">
+      <p style="margin: 0 0 4px 0; font-size: 11px; color: var(--color-text-tertiary); text-transform: uppercase; letter-spacing: 0.04em;">Short-term goal</p>
+      <p style="margin: 0 0 10px 0; font-size: 13px; line-height: 1.6; color: var(--color-text-secondary);">Aaron will identify key details in functional texts by correctly answering multiple-choice questions related to the information presented.</p>
+      <p style="margin: 0 0 4px 0; font-size: 11px; color: var(--color-text-tertiary); text-transform: uppercase; letter-spacing: 0.04em;">Current suggestion</p>
+      <p style="margin: 0; font-size: 13px; font-weight: 500; color: var(--color-text-primary);">answer multiple choice questions</p>
+    </div>
+
+    <div style="margin-bottom: 14px;">
+      <label style="display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px;">What's wrong with this shortname?</label>
+      <textarea rows="2" style="width: 100%; box-sizing: border-box; font-size: 13px;" placeholder="e.g., 'too generic — should mention functional text' or 'I usually call this WH questions'"></textarea>
+    </div>
+
+    <div style="margin-bottom: 20px;">
+      <p style="margin: 0 0 8px 0; font-size: 12px; color: var(--color-text-secondary); font-weight: 500;">Quick fixes</p>
+      <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+        <button style="font-size: 12px; padding: 5px 10px;">Too long</button>
+        <button style="font-size: 12px; padding: 5px 10px;">Too vague</button>
+        <button style="font-size: 12px; padding: 5px 10px;">Too specific</button>
+        <button style="font-size: 12px; padding: 5px 10px;">Wrong words</button>
+      </div>
+    </div>
+
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+      <button style="font-size: 13px; padding: 6px 12px; color: var(--color-text-secondary);">Just re-suggest without feedback</button>
+      <div style="display: flex; gap: 8px;">
+        <button style="font-size: 14px;">Cancel</button>
+        <button style="font-size: 14px; background: var(--color-background-info); color: var(--color-text-info); border-color: var(--color-border-info);"><i class="ti ti-sparkles" style="font-size: 14px; vertical-align: -2px; margin-right: 4px;"></i>Re-suggest with feedback</button>
       </div>
     </div>
 
@@ -2019,7 +2184,7 @@ e. Write 5 sentences on a topic</textarea>
 <section class="mock-section" id="iep_review">
   <div class="mock-meta">
     <a href="#top" class="back-to-top">↑ Back to top</a>
-    <span class="mock-num">18 of 22</span>
+    <span class="mock-num">19 of 23</span>
     <h2>IEP review</h2>
     <p>Triggered when IEP date passes. 'Nothing changed' affirmation unblocks; usage counts inform retire/keep decisions. Next IEP date can be left blank.</p>
   </div>
@@ -2110,7 +2275,7 @@ e. Write 5 sentences on a topic</textarea>
   <div style="background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-md); padding: 14px 16px; margin-bottom: 1.5rem;">
     <div style="display: flex; align-items: center; justify-content: space-between;">
       <p style="margin: 0; font-size: 14px; font-weight: 500;">Add goals from updated IEP</p>
-      <button style="font-size: 13px; padding: 6px 12px;"><i class="ti ti-sparkles" style="font-size: 14px; vertical-align: -2px; margin-right: 4px;"></i>Paste raw goals</button>
+      <button style="font-size: 13px; padding: 6px 12px;"><i class="ti ti-plus" style="font-size: 14px; vertical-align: -2px; margin-right: 4px;"></i>Add goals</button>
     </div>
   </div>
 
@@ -2133,7 +2298,7 @@ e. Write 5 sentences on a topic</textarea>
 <section class="mock-section" id="schedule_grid">
   <div class="mock-meta">
     <a href="#top" class="back-to-top">↑ Back to top</a>
-    <span class="mock-num">19 of 22</span>
+    <span class="mock-num">20 of 23</span>
     <h2>Schedule grid</h2>
     <p>Populated calendar grid. Student pills color-coded by teacher.</p>
   </div>
@@ -2195,7 +2360,7 @@ e. Write 5 sentences on a topic</textarea>
 <section class="mock-section" id="teacher_edit">
   <div class="mock-meta">
     <a href="#top" class="back-to-top">↑ Back to top</a>
-    <span class="mock-num">20 of 22</span>
+    <span class="mock-num">21 of 23</span>
     <h2>Teacher edit</h2>
     <p>Per-teacher config: basics, activities, roles, per-student fields, prompt overrides.</p>
   </div>
@@ -2343,7 +2508,7 @@ e. Write 5 sentences on a topic</textarea>
 <section class="mock-section" id="color_picker">
   <div class="mock-meta">
     <a href="#top" class="back-to-top">↑ Back to top</a>
-    <span class="mock-num">21 of 22</span>
+    <span class="mock-num">22 of 23</span>
     <h2>Color picker (modal)</h2>
     <p>12-color palette for teacher color in schedule.</p>
   </div>
@@ -2413,7 +2578,7 @@ e. Write 5 sentences on a topic</textarea>
 <section class="mock-section" id="role_edit">
   <div class="mock-meta">
     <a href="#top" class="back-to-top">↑ Back to top</a>
-    <span class="mock-num">22 of 22</span>
+    <span class="mock-num">23 of 23</span>
     <h2>Role edit (modal)</h2>
     <p>Edit a filming-day role: name, phrase, which conditional fields are shown.</p>
   </div>

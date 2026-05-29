@@ -1,14 +1,18 @@
-import { useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { Banner } from "../components/Banner";
 import { Icon } from "../components/Icon";
 import { Nav, type NavPage } from "../components/Nav";
 import { useTerm } from "../context/TermContext";
-import { addDays, daysBetween, formatLong, formatShort, parseDate, startOfDay, weekdayName } from "../domain/dates";
-import { slotStartMinutes } from "../domain/schedule";
+import { daysBetween, formatLong, formatShort, mondayOf, parseDate, startOfDay, stepWeekday, toISODate, toWeekday, weekdayName } from "../domain/dates";
+import { loadWeekSchedule } from "../domain/data";
+import { slotStartMinutes, type ScheduleEntry } from "../domain/schedule";
+import { teacherColor } from "../domain/teacher";
 import type { Student } from "../domain/student";
 
 interface Props {
   onNavigate: (page: NavPage) => void;
+  onOpenStudent: (studentId: string, view?: "detail" | "goals") => void;
+  onOpenTeacher: (teacherId: string) => void;
 }
 
 interface Session {
@@ -17,11 +21,44 @@ interface Session {
   studentIds: string[];
 }
 
-export function Today({ onNavigate }: Props) {
-  const { state, teacherById, studentById } = useTerm();
-  const [selected, setSelected] = useState<Date>(() => startOfDay(new Date()));
+const emptyBoxStyle: CSSProperties = {
+  border: "0.5px dashed var(--color-border-tertiary)",
+  borderRadius: "var(--border-radius-md)",
+  padding: "1.5rem",
+  textAlign: "center",
+  color: "var(--color-text-tertiary)",
+  fontSize: 14,
+};
+
+export function Today({ onNavigate, onOpenStudent, onOpenTeacher }: Props) {
+  const { state, client, teacherById, studentById, saveTerm } = useTerm();
+  const [selected, setSelected] = useState<Date>(() => toWeekday(startOfDay(new Date())));
+  const [busy, setBusy] = useState(false);
+  // The deviation file for the selected date's week, if one exists; otherwise we
+  // fall back to the usual template. Keyed by the week's Monday so it only
+  // reloads when the date crosses into a different week.
+  const [weekSchedule, setWeekSchedule] = useState<ScheduleEntry[] | null>(null);
+  const weekKey = toISODate(mondayOf(selected));
+  useEffect(() => {
+    // Fall back to the template while the new week loads, so a previous week's
+    // customizations never linger on screen.
+    setWeekSchedule(null);
+    if (!client) return;
+    let cancelled = false;
+    loadWeekSchedule(client, weekKey)
+      .then((res) => {
+        if (!cancelled) setWeekSchedule(res ? res.entries : null);
+      })
+      .catch(() => {
+        if (!cancelled) setWeekSchedule(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client, weekKey]);
   if (state.status !== "ready") return null;
   const { term, schedule, students } = state.data;
+  const effectiveSchedule = weekSchedule ?? schedule;
 
   const now = startOfDay(new Date());
 
@@ -45,8 +82,29 @@ export function Today({ onNavigate }: Props) {
   const daysToEnd = lastDay ? daysBetween(now, lastDay) : null;
   const termEnding = daysToEnd != null && daysToEnd >= 0 && daysToEnd <= 14;
 
-  const sessions = buildSessions(schedule, weekdayName(selected));
+  const sessions = buildSessions(effectiveSchedule, weekdayName(selected));
   const studentCount = new Set(sessions.flatMap((s) => s.studentIds)).size;
+
+  const firstDay = parseDate(term.firstDay);
+  const selectedTime = selected.getTime();
+  const inTerm =
+    (!firstDay || selectedTime >= firstDay.getTime()) &&
+    (!lastDay || selectedTime <= lastDay.getTime());
+  const selectedIso = toISODate(selected);
+  const isClosed = (term.closures ?? []).includes(selectedIso);
+
+  async function setClosure(closed: boolean) {
+    setBusy(true);
+    try {
+      const current = term.closures ?? [];
+      const closures = closed
+        ? [...current, selectedIso].filter((d, i, a) => a.indexOf(d) === i)
+        : current.filter((d) => d !== selectedIso);
+      await saveTerm({ ...term, closures });
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <div className="shell">
@@ -66,16 +124,19 @@ export function Today({ onNavigate }: Props) {
           <p style={{ margin: "4px 0 0 0", color: "var(--color-text-secondary)", fontSize: 14 }}>
             {sessions.length} session{sessions.length === 1 ? "" : "s"} · {studentCount} student
             {studentCount === 1 ? "" : "s"}
+            {weekSchedule !== null && (
+              <span style={{ color: "var(--color-text-warning)" }}> · customized this week</span>
+            )}
           </p>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button className="button button--small" onClick={() => setSelected((d) => addDays(d, -1))}>
+          <button className="button button--small" onClick={() => setSelected((d) => stepWeekday(d, -1))}>
             <Icon name="chevron-left" size={14} />
           </button>
-          <button className="button button--small" onClick={() => setSelected(now)}>
+          <button className="button button--small" onClick={() => setSelected(toWeekday(now))}>
             Today
           </button>
-          <button className="button button--small" onClick={() => setSelected((d) => addDays(d, 1))}>
+          <button className="button button--small" onClick={() => setSelected((d) => stepWeekday(d, 1))}>
             <Icon name="chevron-right" size={14} />
           </button>
         </div>
@@ -100,7 +161,10 @@ export function Today({ onNavigate }: Props) {
             key={student.id}
             variant="danger"
             action={
-              <button className="button button--small" onClick={() => onNavigate("students")}>
+              <button
+                className="button button--small"
+                onClick={() => onOpenStudent(student.id, "goals")}
+              >
                 Review goals →
               </button>
             }
@@ -116,29 +180,48 @@ export function Today({ onNavigate }: Props) {
         ))}
       </div>
 
-      {sessions.length === 0 ? (
-        <div
-          style={{
-            border: "0.5px dashed var(--color-border-tertiary)",
-            borderRadius: "var(--border-radius-md)",
-            padding: "1.5rem",
-            textAlign: "center",
-            color: "var(--color-text-tertiary)",
-            fontSize: 14,
-          }}
-        >
-          No sessions scheduled for {weekdayName(selected)}.
+      {!inTerm ? (
+        <div style={emptyBoxStyle}>
+          {formatLong(selected)} is outside the {term.label}
+          {firstDay && lastDay ? ` (${formatShort(firstDay)} – ${formatShort(lastDay)})` : ""}.
         </div>
+      ) : isClosed ? (
+        <div style={emptyBoxStyle}>
+          <p style={{ margin: 0 }}>No school on {formatLong(selected)}.</p>
+          <button
+            className="button button--small"
+            style={{ marginTop: 12 }}
+            onClick={() => setClosure(false)}
+            disabled={busy}
+          >
+            Mark as a school day
+          </button>
+        </div>
+      ) : sessions.length === 0 ? (
+        <div style={emptyBoxStyle}>No sessions scheduled for {weekdayName(selected)}.</div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <>
+          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
+            <button
+              className="button button--small"
+              onClick={() => setClosure(true)}
+              disabled={busy}
+            >
+              <Icon name="x" size={13} />
+              No school today
+            </button>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {sessions.map((session) => {
             const blocked = session.studentIds.some((id) => overdue.has(id));
             const teacher = teacherById.get(session.teacherId);
+            const color = teacherColor(teacher?.color);
             return (
               <div
                 key={`${session.timeSlot}|${session.teacherId}`}
                 style={{
                   border: "0.5px solid var(--color-border-tertiary)",
+                  borderTop: `4px solid ${color.bg}`,
                   borderRadius: "var(--border-radius-md)",
                   padding: "14px 16px",
                   background: blocked ? "var(--color-background-secondary)" : undefined,
@@ -159,7 +242,22 @@ export function Today({ onNavigate }: Props) {
                       {session.timeSlot}
                     </span>
                     <span style={{ color: "var(--color-text-tertiary)" }}>·</span>
-                    <span style={{ fontSize: 14, fontWeight: 500 }}>{teacher?.name ?? "Unknown"}</span>
+                    <button
+                      onClick={() => onOpenTeacher(session.teacherId)}
+                      title={`Open ${teacher?.name ?? "teacher"}`}
+                      style={{
+                        fontSize: 14,
+                        fontWeight: 500,
+                        fontFamily: "inherit",
+                        background: "none",
+                        border: "none",
+                        padding: 0,
+                        cursor: "pointer",
+                        color: "var(--color-text-primary)",
+                      }}
+                    >
+                      {teacher?.name ?? "Unknown"}
+                    </button>
                   </div>
                   <button
                     className="button button--small"
@@ -176,31 +274,39 @@ export function Today({ onNavigate }: Props) {
                     const student = studentById.get(id);
                     const isOverdue = overdue.has(id);
                     return (
-                      <span
+                      <button
                         key={`${id}-${i}`}
+                        onClick={() => onOpenStudent(id)}
+                        title={`Open ${student?.name ?? "student"}`}
                         style={{
                           fontSize: 13,
+                          fontFamily: "inherit",
                           padding: "4px 10px",
                           borderRadius: "var(--border-radius-md)",
+                          border: "none",
+                          cursor: "pointer",
                           display: "inline-flex",
                           alignItems: "center",
                           gap: 4,
                           background: isOverdue
                             ? "var(--color-background-danger)"
                             : "var(--color-background-secondary)",
-                          color: isOverdue ? "var(--color-text-danger)" : undefined,
+                          color: isOverdue
+                            ? "var(--color-text-danger)"
+                            : "var(--color-text-primary)",
                         }}
                       >
                         {isOverdue && <Icon name="alert-circle" size={13} />}
                         {student?.name ?? "Unknown"}
-                      </span>
+                      </button>
                     );
                   })}
                 </div>
               </div>
             );
           })}
-        </div>
+          </div>
+        </>
       )}
     </div>
   );

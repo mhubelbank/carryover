@@ -122,7 +122,20 @@ Triggered from per-note Regenerate button. Free-text feedback + quick-fix chips 
 ### Goals (per student)
 Long-term goals as cards; each short-term goal shows **usage count for the current term** ("Used in 14 sessions" or "Not used yet"), drawn from the session log. Drag-orderable. Archived goals are hidden from generation but remain referenceable.
 
-**Paste raw goals** workflow: textarea on left for raw long-term goal text; AI-suggested shortnames on right (one Claude call); review and commit.
+**Add goals for {student}** workflow (replaces the original "paste raw goals" idea after analysis of her real spreadsheet paste shape and existing data):
+
+Single page with two stacked sections:
+
+1. **Input.** A repeated pair of textareas per long-term goal she's adding: a small 2–3 row textarea for the LTG text (per the mock), and a taller multi-line textarea below it for that LTG's short-term goals (one per line — newline-pasted from a spreadsheet column lands correctly). Live count under the ST textarea ("↑ 4 short-term goals detected") updates as she types/pastes. "+ Add another long-term goal" expands a new pair. Parsing is purely `text.split('\n').filter(nonempty)` — no LLM call, no auto-detection of tab structure.
+2. **Review and confirm.** Below the input, on click of "Suggest shortnames", a list appears grouped by LTG, with one row per short-term: the original ST text, an editable shortname field (LLM-suggested), and a per-row regenerate button. The per-row regenerate and the "Re-suggest all" button both open the **Re-suggest shortname modal** — same pattern as the note regenerate modal but with shortname-specific quick-fix chips (Too long / Too vague / Too specific / Wrong words) and no "save as a rule" opt-in (shortname corrections are one-offs, not durable preferences). She can also type her own shortname directly in the input without using the modal. The "Save N goals to {student}" button commits everything visible.
+
+**One ST always maps to exactly one shortname.** If she wants two shortnames from what's currently one ST line, she splits the line in the input textarea and re-suggests. Keeps the data model clean (one goals.csv row per goal, one shortname, one ST text).
+
+Only short-term goals get shortnames; the LTG text is captured for context but not separately tracked or checkbox-rendered during note generation. The LTG is included in the shortname-suggestion LLM prompt so the model has skill context.
+
+Inputs are editable after suggestion — if she fixes a typo in an ST, re-running suggestion reflects it. The button label switches from "Suggest shortnames" to "Re-suggest" after first run.
+
+**Design rationale (goals).** From analysis of her existing data (107 unique shortnames across 5 teachers' files): shortname reuse is deliberate (~13% — `WH questions` under six students, `Sequencing` and `Story retell` under four each), so vocabulary consistency is treated as a feature and the UI enforces no uniqueness. Her shortnames run terse — median 3 words, p90 5 — far shorter than generic LLM summarization, which is why the suggestion prompt anchors on ~6 curated examples from her real data rather than free-form summarizing; hardcoded anchors are simpler than assembling live roster context, ship-ready on day one, and curated to avoid stylistic outliers. The 1:1 ST→shortname rule fits her data too: only 2 of 127 long-term-goal instances had multiple shortnames, and both were LTG-level decompositions the spreadsheet structure already handles.
 
 **IEP review screen** (auto-routed when next-IEP date passes):
 - "Nothing changed — confirm and unblock" affordance at the top (auditable affirmation)
@@ -132,7 +145,9 @@ Long-term goals as cards; each short-term goal shows **usage count for the curre
 - Completing the review (any path) unblocks note generation for that student
 
 ### Schedule
-Calendar grid: days × time slots, student pills color-coded by teacher. Click cells to add/remove students. Always starts empty for a new term — no carry-forward.
+One column per weekday; each day has its **own** chronological list of time blocks. Times stagger — they line up across days early in the morning but drift apart as the day goes on (different mandates/session lengths), so there is no shared time axis. Each block shows student pills color-coded by teacher; click a block to add/remove students from a searchable roster. Add a block per day via separate start/end fields (joined with a hyphen). Always starts empty for a new term — no carry-forward.
+
+Out of scope for now: non-student activity blocks the source sheet encodes (PREP periods, "News", Breakfast/Lunch coverage, the "Available" column).
 
 ### Teachers
 List of all teachers; per-teacher edit view with:
@@ -151,7 +166,7 @@ Reachable from Today's term-ending banner (auto-prompts ~14 days before lastDay)
 3. **Students** — two tabs:
    - *Continuing*: flat inline-editable table (name, pronouns, age, teacher, AAC, next IEP). Age 21 cells highlighted yellow, age 22+ red. Stale-ages info banner. Click × greys row out with Undo button. No per-teacher grouping (students change teachers).
    - *New*: bulk-entry grid (name, pronouns, age, teacher, AAC, next IEP). Tab/Enter to add rows. Paste-from-clipboard supported.
-4. **Schedule** — starts empty; build by adding time slots and clicking cells.
+4. **Schedule** — starts empty; build per-day by adding time blocks (start/end) and clicking them to add students.
 5. **Goals** — summary listing students with zero short-term goals; "Add goals →" routes each to the paste tool.
 
 **Cross-step data flow**: teacher added in step 2 immediately appears in step 3 dropdowns. Students whose teacher was removed in step 2 get an empty teacher field flagged for assignment.
@@ -167,7 +182,8 @@ Because data is keyed by id, collisions never corrupt data — they're handled p
 - **Student names — same teacher's caseload (highest risk).** Two students named "Aiden" under the same teacher would produce two `Aiden:` blocks in the all-notes paste target, risking a wrong note landing in a legally-binding record. Don't block — *disambiguate*. On add/edit, detect the match and require a distinguisher before saving (e.g. "Aiden R." / "Aiden M."). The duplicate is allowed; the silent ambiguity is not.
 - **Student names — across the roster (different teachers).** Never co-occur in a session, so lower risk, but still surfaced: soft inline warning on add/edit ("Another Aiden is on Nina's caseload") with a suggestion to distinguish. She can dismiss it.
 - **Teacher names.** Enforce uniqueness on the display name. Teachers are entered rarely and a duplicate teacher label is almost always a mistake. (Two teachers with the same name remain technically representable via distinct ids, but the UI nudges hard against it.)
-- **Goal shortnames within a student, activity names within a teacher, role names within a teacher.** Soft warn within their scope — allow, but show a subtle "already used" hint so it isn't accidental. These only cause duplicate-looking dropdown/checklist entries, not record errors.
+- **Goal shortnames.** Shortnames are skill labels, not unique identifiers — her existing data shows ~13% are deliberately reused across students (e.g. `WH questions` under six students, `Sequencing` under four). We don't enforce uniqueness or surface match warnings in the UI; the only collision worth catching is two identical shortnames under the same long-term goal in the same paste — almost certainly a paste duplicate, hard warn or block.
+- **Activity names within a teacher, role names within a teacher.** Soft warn within their scope — allow, but show a subtle "already used" hint so it isn't accidental. These only cause duplicate-looking dropdown entries, not record errors.
 
 The generated all-notes block uses the disambiguated display name, so whatever distinguisher she sets is exactly what appears before the colon when she pastes into SESIS.
 
@@ -175,7 +191,7 @@ The generated all-notes block uses the disambiguated display name, so whatever d
 
 - Direct browser calls to `https://api.anthropic.com/v1/messages` with `anthropic-dangerous-direct-browser-access: true`
 - Three-pass pipeline per student (draft → review → streamline), sequential
-- One-shot goal categorization for the paste-raw-goals workflow
+- Shortname suggestion (Add-goals workflow): one Claude call per paste, given the LTG and its STs. The prompt includes ~6 hardcoded anchor examples drawn from her real existing data (identify main topic, answer WH questions, sequence picture cards, MLU 1-3 words, etc.) that define the style baseline — terse, 2–5 word action labels matching her established voice. No live roster context in v1; if suggestions drift from her vocabulary as it evolves, revisit then. Single call returns shortnames for all STs in the paste.
 - Model: Claude Sonnet 4.6 default (`claude-sonnet-4-6`); optionally Haiku 4.5 for review/streamline passes to reduce cost
 - Estimated cost: ~$0.04 per note at Sonnet rates, ~$50–120/year for her volume
 - Spend cap set in her Anthropic dashboard
@@ -209,10 +225,10 @@ Each slice is shippable on its own; validate with Emily before moving to the nex
 1. **Read-only sheet replacement** — data model, GitHub persistence, read-only views (Students, Goals, Schedule, Today). She uses it as reference for a week.
 2. **Edit affordances** — inline edit on data screens, validation, add/remove rows.
 3. **Goal-writing workflow** — bulk paste + AI shortname suggestion.
-4. **Export** — all four export formats. Safety net before AI generation.
-5. **Note generation** — three-pass pipeline on new data model, both modes.
-6. **Year setup wizard, IEP review, regenerate-with-feedback** — refinements.
+4. **Note generation** — three-pass pipeline on new data model, both modes.
+5. **Year setup wizard, IEP review, regenerate-with-feedback** — refinements.
    - TODO (PAT rotation): at the start of summer-term setup, proactively prompt the user to regenerate and re-enter their GitHub PAT. The token is created with a ~1-year expiry, so renewal naturally coincides with term rollover — surfacing it here heads off a surprise mid-year 401.
+6. **Export** — all four export formats.
 
 ## Questions to ask Emily at the first demo
 
