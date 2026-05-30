@@ -1,35 +1,51 @@
 [
   {
-    "id": "a_news",
-    "name": "Dragon News broadcast",
+    "id": "watch_news_wh",
+    "name": "Watched the 811X Dragon news and answered WH questions about it"
+  },
+  {
+    "id": "watch_news_worksheet",
+    "name": "Watched the 811X Dragon news and completed a corresponding, provider created, differentiated worksheet"
+  },
+  {
+    "id": "write_script_next_week",
+    "name": "Wrote the script for next week's news"
+  },
+  {
+    "id": "research_visuals",
+    "name": "Researched/created visuals for upcoming news segments",
     "requiresSegmentName": true
   },
   {
-    "id": "a_read",
-    "name": "Shared reading"
+    "id": "class_choose_segment",
+    "name": "Worked together as a class to choose the next news segment they plan to create",
+    "requiresSegmentName": true
   },
   {
-    "id": "a_circle",
-    "name": "Circle time",
-    "freeText": true
+    "id": "filmed_gave_directions",
+    "name": "Filmed for a news segment: gave directions (i.e., quiet on set, roll tape, action, cut)",
+    "requiresSegmentName": true
   },
   {
-    "id": "a_cook",
-    "name": "Cooking group"
+    "id": "filmed_responded_directions",
+    "name": "Filmed for a news segment: responded to directions given by staff and peers (i.e., quiet on set, roll tape, action, cut)",
+    "requiresSegmentName": true
   },
   {
-    "id": "a_story",
-    "name": "Story retell"
+    "id": "write_script_upcoming",
+    "name": "Wrote the script for an upcoming segment",
+    "requiresSegmentName": true
   },
   {
-    "id": "a_play",
-    "name": "Play skills group"
-  },
-  {
-    "id": "a_journal",
+    "id": "journal_entry",
     "name": "Completed a journal entry",
     "descriptionTemplate": "Completed a journal entry during a lesson led by the collaborative teacher, with SLP support. Glued in a picture illustrating today's National Day and {student.journalMethod | join: \", \"} a comment about it.",
     "requiresAttribute": "journalMethod"
+  },
+  {
+    "id": "pragmatic_skills",
+    "name": "Displayed appropriate pragmatic language skills",
+    "freeText": true
   },
   {
     "id": "other",

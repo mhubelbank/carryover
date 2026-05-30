@@ -8,12 +8,25 @@
       "filming-day"
     ],
     "activityIds": [
-      "a_news",
-      "a_read"
+      "watch_news_wh",
+      "watch_news_worksheet",
+      "write_script_next_week",
+      "research_visuals",
+      "class_choose_segment",
+      "filmed_gave_directions",
+      "filmed_responded_directions",
+      "write_script_upcoming",
+      "journal_entry",
+      "other"
     ],
     "filmingRoleIds": [
       "r_anchor",
-      "r_reporter"
+      "r_lunch_anchor",
+      "r_reporter",
+      "r_sports",
+      "r_weather",
+      "r_studio_audience",
+      "r_other"
     ],
     "sessionCaptures": [],
     "archived": false
@@ -26,7 +39,17 @@
       "regular"
     ],
     "activityIds": [
-      "a_circle"
+      "watch_news_wh",
+      "watch_news_worksheet",
+      "write_script_next_week",
+      "research_visuals",
+      "class_choose_segment",
+      "filmed_gave_directions",
+      "filmed_responded_directions",
+      "write_script_upcoming",
+      "journal_entry",
+      "pragmatic_skills",
+      "other"
     ],
     "filmingRoleIds": [],
     "sessionCaptures": [
@@ -63,7 +86,17 @@
       "regular"
     ],
     "activityIds": [
-      "a_cook"
+      "watch_news_wh",
+      "watch_news_worksheet",
+      "write_script_next_week",
+      "research_visuals",
+      "class_choose_segment",
+      "filmed_gave_directions",
+      "filmed_responded_directions",
+      "write_script_upcoming",
+      "journal_entry",
+      "pragmatic_skills",
+      "other"
     ],
     "filmingRoleIds": [],
     "sessionCaptures": [],
@@ -78,10 +111,25 @@
       "filming-day"
     ],
     "activityIds": [
-      "a_story"
+      "watch_news_wh",
+      "watch_news_worksheet",
+      "write_script_next_week",
+      "research_visuals",
+      "class_choose_segment",
+      "filmed_gave_directions",
+      "filmed_responded_directions",
+      "write_script_upcoming",
+      "journal_entry",
+      "pragmatic_skills",
+      "other"
     ],
     "filmingRoleIds": [
-      "r_weather"
+      "r_anchor",
+      "r_lunch_anchor",
+      "r_sports",
+      "r_weather",
+      "r_studio_audience",
+      "r_other"
     ],
     "sessionCaptures": [],
     "archived": false
@@ -94,8 +142,17 @@
       "regular"
     ],
     "activityIds": [
-      "a_play",
-      "a_journal"
+      "watch_news_wh",
+      "watch_news_worksheet",
+      "write_script_next_week",
+      "research_visuals",
+      "class_choose_segment",
+      "filmed_gave_directions",
+      "filmed_responded_directions",
+      "write_script_upcoming",
+      "journal_entry",
+      "pragmatic_skills",
+      "other"
     ],
     "filmingRoleIds": [],
     "sessionCaptures": [

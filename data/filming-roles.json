@@ -2,26 +2,54 @@
   {
     "id": "r_anchor",
     "name": "Anchor",
-    "phrase": "the anchor",
+    "phrase": "an anchor",
     "fields": [
       "visualCues",
-      "facialExpressions"
+      "facialExpressions",
+      "decodingCarryover"
+    ]
+  },
+  {
+    "id": "r_lunch_anchor",
+    "name": "Lunch Anchor",
+    "phrase": "the lunch anchor",
+    "fields": [
+      "visualCues",
+      "facialExpressions",
+      "decodingCarryover"
     ]
   },
   {
     "id": "r_reporter",
     "name": "Reporter",
-    "phrase": "a field reporter",
-    "fields": [
-      "pragmatic"
-    ]
+    "phrase": "a reporter",
+    "fields": []
+  },
+  {
+    "id": "r_sports",
+    "name": "Sports",
+    "phrase": "the sports reporter",
+    "fields": []
   },
   {
     "id": "r_weather",
     "name": "Weather",
     "phrase": "the weather reporter",
+    "fields": []
+  },
+  {
+    "id": "r_studio_audience",
+    "name": "Studio Audience",
+    "phrase": "a member of the studio audience",
     "fields": [
-      "visualCues"
+      "pragmatic",
+      "compliments"
     ]
+  },
+  {
+    "id": "r_other",
+    "name": "Other",
+    "phrase": "",
+    "fields": []
   }
 ]
