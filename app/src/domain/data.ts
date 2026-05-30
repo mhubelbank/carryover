@@ -329,6 +329,7 @@ function toTeacher(raw: unknown): Teacher {
     activities: t.activities ?? [],
     roles: t.roles ?? [],
     sessionCaptures: t.sessionCaptures ?? [],
+    archived: t.archived === true,
     promptOverrides: t.promptOverrides,
   } as Teacher;
 }

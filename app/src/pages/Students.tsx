@@ -249,7 +249,7 @@ function StudentsList({
           onChange={(e) => setTeacherFilter(e.target.value)}
         >
           <option value="all">All teachers</option>
-          {data.teachers.map((t) => (
+          {data.teachers.filter((t) => !t.archived).map((t) => (
             <option key={t.id} value={t.id}>
               {t.name}
             </option>
@@ -379,7 +379,6 @@ function StudentDetail({
   const [history, setHistory] = useState<IepReview[] | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [confirmingRemove, setConfirmingRemove] = useState(false);
 
   useEffect(() => {
     if (isNew || !client) {
@@ -467,18 +466,6 @@ function StudentDetail({
     } catch (e) {
       setError(e instanceof Error ? e.message : "Archive failed");
     } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleRemove() {
-    setSaving(true);
-    setError(null);
-    try {
-      await saveStudents(data!.students.filter((s) => s.id !== draft.id));
-      onBack();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Remove failed");
       setSaving(false);
     }
   }
@@ -590,31 +577,6 @@ function StudentDetail({
             >
               {draft.archived ? "Unarchive" : "Archive"}
             </button>
-            {confirmingRemove ? (
-              <>
-                <button
-                  className="button button--small"
-                  onClick={() => setConfirmingRemove(false)}
-                  disabled={saving}
-                >
-                  Cancel
-                </button>
-                <button
-                  className="button button--small button--danger-text"
-                  onClick={handleRemove}
-                  disabled={saving}
-                >
-                  Confirm remove
-                </button>
-              </>
-            ) : (
-              <button
-                className="button button--small button--danger-text"
-                onClick={() => setConfirmingRemove(true)}
-              >
-                Remove
-              </button>
-            )}
           </div>
         )}
       </div>
@@ -683,11 +645,14 @@ function StudentDetail({
               onChange={(e) => set({ teacherId: e.target.value })}
             >
               <option value="">— Unassigned —</option>
-              {data.teachers.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
+              {data.teachers
+                .filter((t) => !t.archived || t.id === draft.teacherId)
+                .map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                    {t.archived ? " (archived)" : ""}
+                  </option>
+                ))}
             </select>
           </EditField>
           <div style={{ gridColumn: "span 2" }}>

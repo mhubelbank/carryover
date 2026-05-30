@@ -130,7 +130,10 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
 
   // All hooks must run unconditionally (no early returns above), so derive
   // teacher/caseload via useMemo and guard inside effects.
-  const teachers = state.status === "ready" ? state.data.teachers : [];
+  // Generate only operates on active teachers; archived ones don't appear in
+  // the picker and the default-teacher seeding skips them.
+  const teachers =
+    state.status === "ready" ? state.data.teachers.filter((t) => !t.archived) : [];
   const teacher = useMemo(() => teachers.find((t) => t.id === teacherId), [teachers, teacherId]);
   const caseload = useMemo(
     () =>
@@ -146,9 +149,9 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
   useEffect(() => {
     if (state.status !== "ready") return;
     if (target) return;
-    if (!teacherId && state.data.teachers.length > 0) {
-      setTeacherId(state.data.teachers[0]!.id);
-    }
+    if (teacherId) return;
+    const firstActive = state.data.teachers.find((t) => !t.archived);
+    if (firstActive) setTeacherId(firstActive.id);
   }, [state, teacherId, target]);
 
   // Snap mode to one the teacher supports when teacher changes.
