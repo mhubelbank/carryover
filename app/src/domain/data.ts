@@ -5,7 +5,8 @@ import type { IepReview } from "./iep";
 import type { ScheduleEntry, Weekday } from "./schedule";
 import type { SessionMetadata } from "./session";
 import type { Student } from "./student";
-import type { Activity, Teacher } from "./teacher";
+import type { StudentField } from "./studentField";
+import type { Activity, Role, Teacher } from "./teacher";
 import type { Term } from "./term";
 
 export interface TermData {
@@ -16,6 +17,10 @@ export interface TermData {
   schedule: ScheduleEntry[];
   // Shared activity catalog (data/activities.json), referenced by teachers.
   activities: Activity[];
+  // Shared filming-role catalog (data/filming-roles.json).
+  filmingRoles: Role[];
+  // Configurable student-field catalog (data/student-fields.json).
+  studentFields: StudentField[];
 }
 
 // Blob shas of each loaded file, needed to safely overwrite on save.
@@ -26,6 +31,8 @@ export interface FileShas {
   goals?: string;
   schedule?: string;
   activities?: string;
+  filmingRoles?: string;
+  studentFields?: string;
 }
 
 export interface LoadedTerm {
@@ -40,13 +47,17 @@ const PATHS = {
   goals: "data/goals.csv",
   schedule: "data/schedule.csv",
   activities: "data/activities.json",
+  filmingRoles: "data/filming-roles.json",
+  studentFields: "data/student-fields.json",
 } as const;
 
 const SESSIONS_DIR = "data/sessions";
 
-// students.csv columns, in order. Legacy `name` and old per-teacher quirk
-// columns are read at load (see toStudent) but no longer written.
-const STUDENT_COLUMNS = [
+// Fixed students.csv columns, in order. Configurable student-field values are
+// written as additional columns (one per field key) after these. Legacy `name`
+// and former quirk columns (aacDevice, needsSpanish, …) are read at load — quirk
+// columns now resolve as field values; orphan columns are preserved on write.
+const BASE_STUDENT_COLUMNS = [
   "id",
   "firstName",
   "middle",
@@ -55,17 +66,17 @@ const STUDENT_COLUMNS = [
   "teacherId",
   "birthday",
   "age",
-  "aacDevice",
   "nextIepReview",
   "nextTriennial",
   "mandate",
   "firstDay",
   "lastDay",
   "archived",
-  "needsSpanish",
-  "needsBengali",
-  "journalMethod",
 ];
+
+// Separator for a multi-select field's values inside one CSV cell. A pipe avoids
+// CSV comma-quoting and won't appear in clinical option values.
+const FIELD_VALUE_SEP = "|";
 
 // Loads the full term bundle. Returns null when there's no term.json yet —
 // the signal for the first-run / empty state.
@@ -74,24 +85,45 @@ export async function loadTermData(client: GitHubClient): Promise<LoadedTerm | n
   if (!termFile) return null;
   const term = JSON.parse(termFile.text) as Term;
 
-  const [teachersFile, studentsFile, goalsFile, scheduleFile, activitiesFile] = await Promise.all([
+  const [
+    teachersFile,
+    studentsFile,
+    goalsFile,
+    scheduleFile,
+    activitiesFile,
+    filmingRolesFile,
+    studentFieldsFile,
+  ] = await Promise.all([
     client.readFile(PATHS.teachers),
     client.readFile(PATHS.students),
     client.readFile(PATHS.goals),
     client.readFile(PATHS.schedule),
     client.readFile(PATHS.activities),
+    client.readFile(PATHS.filmingRoles),
+    client.readFile(PATHS.studentFields),
   ]);
+
+  // Parse the field catalog first — students are parsed against it.
+  const studentFields = studentFieldsFile
+    ? (JSON.parse(studentFieldsFile.text) as unknown[]).map(toStudentField)
+    : [];
 
   return {
     data: {
       term,
       teachers: teachersFile ? (JSON.parse(teachersFile.text) as unknown[]).map(toTeacher) : [],
-      students: studentsFile ? parseCsv(studentsFile.text).map(toStudent) : [],
+      students: studentsFile
+        ? parseCsv(studentsFile.text).map((r) => toStudent(r, studentFields))
+        : [],
       goals: goalsFile ? parseCsv(goalsFile.text).map(toGoal) : [],
       schedule: scheduleFile ? parseCsv(scheduleFile.text).map(toScheduleEntry) : [],
       activities: activitiesFile
         ? (JSON.parse(activitiesFile.text) as unknown[]).map(toActivity)
         : [],
+      filmingRoles: filmingRolesFile
+        ? (JSON.parse(filmingRolesFile.text) as unknown[]).map(toRole)
+        : [],
+      studentFields,
     },
     shas: {
       term: termFile.sha,
@@ -100,11 +132,38 @@ export async function loadTermData(client: GitHubClient): Promise<LoadedTerm | n
       goals: goalsFile?.sha,
       schedule: scheduleFile?.sha,
       activities: activitiesFile?.sha,
+      filmingRoles: filmingRolesFile?.sha,
+      studentFields: studentFieldsFile?.sha,
     },
   };
 }
 
-export function studentsToCsv(students: Student[]): string {
+// Serialize a single student-field value to one CSV cell.
+function encodeFieldValue(v: string | boolean | string[] | undefined): string {
+  if (v == null) return "";
+  if (typeof v === "boolean") return v ? "true" : "false";
+  if (Array.isArray(v)) return v.join(FIELD_VALUE_SEP);
+  return v;
+}
+
+export function studentsToCsv(students: Student[], fieldDefs: StudentField[]): string {
+  const fieldKeys = fieldDefs.map((f) => f.key);
+  const fieldKeySet = new Set(fieldKeys);
+  // Preserve columns for any field value present in the data that isn't a
+  // current field def (e.g. a deleted field, or the language-collapse orphans)
+  // so deleting/renaming a field never destroys stored values.
+  const orphanKeys: string[] = [];
+  const seen = new Set<string>();
+  for (const s of students) {
+    for (const k of Object.keys(s.fields)) {
+      if (!fieldKeySet.has(k) && !seen.has(k)) {
+        seen.add(k);
+        orphanKeys.push(k);
+      }
+    }
+  }
+  const allFieldKeys = [...fieldKeys, ...orphanKeys];
+  const header = [...BASE_STUDENT_COLUMNS, ...allFieldKeys];
   const rows = students.map((s) => [
     s.id,
     s.firstName,
@@ -114,27 +173,30 @@ export function studentsToCsv(students: Student[]): string {
     s.teacherId,
     s.birthday ?? "",
     s.age == null ? "" : String(s.age),
-    s.aacDevice ?? "",
     s.nextIepReview ?? "",
     s.nextTriennial ?? "",
     s.mandate ?? "",
     s.firstDay ?? "",
     s.lastDay ?? "",
     s.archived ? "true" : "false",
-    s.needsSpanish ? "true" : "false",
-    s.needsBengali ? "true" : "false",
-    s.journalMethod,
+    ...allFieldKeys.map((k) => encodeFieldValue(s.fields[k])),
   ]);
-  return serializeCsv(STUDENT_COLUMNS, rows);
+  return serializeCsv(header, rows);
 }
 
 // Writes students.csv; returns the new blob sha for the next safe overwrite.
 export function writeStudents(
   client: GitHubClient,
   students: Student[],
+  fieldDefs: StudentField[],
   sha: string | undefined,
 ): Promise<string> {
-  return client.writeFile(PATHS.students, studentsToCsv(students), "data: update students", sha);
+  return client.writeFile(
+    PATHS.students,
+    studentsToCsv(students, fieldDefs),
+    "data: update students",
+    sha,
+  );
 }
 
 const GOAL_COLUMNS = ["id", "studentId", "longTermGoal", "shortName", "archived"];
@@ -192,6 +254,34 @@ export function writeActivities(
     PATHS.activities,
     `${JSON.stringify(activities, null, 2)}\n`,
     "data: update activities",
+    sha,
+  );
+}
+
+// Writes filming-roles.json (the shared catalog); returns the new blob sha.
+export function writeFilmingRoles(
+  client: GitHubClient,
+  roles: Role[],
+  sha: string | undefined,
+): Promise<string> {
+  return client.writeFile(
+    PATHS.filmingRoles,
+    `${JSON.stringify(roles, null, 2)}\n`,
+    "data: update filming roles",
+    sha,
+  );
+}
+
+// Writes student-fields.json (the configurable field catalog); returns the sha.
+export function writeStudentFields(
+  client: GitHubClient,
+  fields: StudentField[],
+  sha: string | undefined,
+): Promise<string> {
+  return client.writeFile(
+    PATHS.studentFields,
+    `${JSON.stringify(fields, null, 2)}\n`,
+    "data: update student fields",
     sha,
   );
 }
@@ -349,10 +439,10 @@ function toTeacher(raw: unknown): Teacher {
     name: t.name ?? "",
     color: t.color ?? "blue",
     modes: t.modes ?? ["regular"],
-    // Activities are now ids into the shared catalog. Records lacking the field
-    // (pre-migration) load with an empty menu rather than crashing.
+    // Activities and filming roles are now ids into shared catalogs. Records
+    // lacking the fields (pre-migration) load empty rather than crashing.
     activityIds: t.activityIds ?? [],
-    roles: t.roles ?? [],
+    filmingRoleIds: t.filmingRoleIds ?? [],
     sessionCaptures: t.sessionCaptures ?? [],
     archived: t.archived === true,
     promptOverrides: t.promptOverrides,
@@ -374,7 +464,18 @@ function toActivity(raw: unknown): Activity {
   };
 }
 
-function toStudent(row: Record<string, string>): Student {
+// Normalizes a raw entry from filming-roles.json.
+function toRole(raw: unknown): Role {
+  const r = (raw ?? {}) as Partial<Role>;
+  return {
+    id: r.id ?? "",
+    name: r.name ?? "",
+    phrase: r.phrase ?? "",
+    fields: Array.isArray(r.fields) ? r.fields : [],
+  };
+}
+
+function toStudent(row: Record<string, string>, fieldDefs: StudentField[]): Student {
   // Migrate legacy single-`name` column into firstName/lastName on the fly.
   // The new schema's columns take precedence when present.
   let firstName = (row.firstName ?? "").trim();
@@ -384,10 +485,6 @@ function toStudent(row: Record<string, string>): Student {
     firstName = parts[0] ?? "";
     lastName = parts.length > 1 ? parts.slice(1).join(" ") : "";
   }
-  // Legacy per-student quirk fields lived as their own CSV columns (the
-  // teacher-declared `fields` keys). Prefer first-class column when present;
-  // otherwise fall back to any legacy column of the same name.
-  const journalRaw = (row.journalMethod ?? "").trim();
   return {
     id: row.id ?? "",
     firstName,
@@ -397,16 +494,50 @@ function toStudent(row: Record<string, string>): Student {
     teacherId: row.teacherId ?? "",
     birthday: blankToNull(row.birthday),
     age: numberOrNull(row.age),
-    aacDevice: blankToNull(row.aacDevice),
     nextIepReview: blankToNull(row.nextIepReview),
     nextTriennial: blankToNull(row.nextTriennial),
     mandate: blankToNull(row.mandate),
     firstDay: blankToNull(row.firstDay),
     lastDay: blankToNull(row.lastDay),
     archived: isTrue(row.archived),
-    needsSpanish: isTrue(row.needsSpanish),
-    needsBengali: isTrue(row.needsBengali),
-    journalMethod: journalRaw === "traced" || journalRaw === "wrote" ? journalRaw : "",
+    fields: parseStudentFields(row, fieldDefs),
+  };
+}
+
+const BASE_COLUMN_SET = new Set([...BASE_STUDENT_COLUMNS, "name"]);
+
+// Build the per-student field-value map. Known field defs are typed (toggle →
+// boolean via isTrue, select → string[] via the pipe separator). Any remaining
+// non-base column is retained as a raw string so orphan/legacy columns (e.g.
+// the collapsed needsSpanish/needsBengali) survive a save round-trip.
+function parseStudentFields(
+  row: Record<string, string>,
+  fieldDefs: StudentField[],
+): Record<string, string | boolean | string[]> {
+  const fields: Record<string, string | boolean | string[]> = {};
+  for (const [col, val] of Object.entries(row)) {
+    if (!BASE_COLUMN_SET.has(col)) fields[col] = val;
+  }
+  for (const f of fieldDefs) {
+    fields[f.key] =
+      f.type === "toggle"
+        ? isTrue(row[f.key])
+        : (row[f.key] ?? "")
+            .split(FIELD_VALUE_SEP)
+            .map((s) => s.trim())
+            .filter(Boolean);
+  }
+  return fields;
+}
+
+function toStudentField(raw: unknown): StudentField {
+  const f = (raw ?? {}) as Partial<StudentField>;
+  const type = f.type === "select" ? "select" : "toggle";
+  return {
+    key: f.key ?? "",
+    label: f.label ?? "",
+    type,
+    ...(type === "select" ? { options: Array.isArray(f.options) ? f.options : [] } : {}),
   };
 }
 

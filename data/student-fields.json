@@ -1,0 +1,20 @@
+[
+  {
+    "key": "language",
+    "label": "Language support",
+    "type": "select",
+    "options": ["Spanish", "Bengali"]
+  },
+  {
+    "key": "journalMethod",
+    "label": "Journal method",
+    "type": "select",
+    "options": ["traced", "wrote", "pasted in"]
+  },
+  {
+    "key": "aacDevice",
+    "label": "AAC device",
+    "type": "select",
+    "options": ["Dynamic display speech generating device (SGD)", "SGD"]
+  }
+]

@@ -70,15 +70,22 @@ pieces aren't:
 
 ## Repo / deployment cleanup (deferred — user explicitly said "fix later")
 
-- **Sync the activity-catalog migration to the `data` branch.** The code now reads
-  a shared catalog (`data/activities.json`) and teachers reference `activityIds`
-  (was an embedded `activities` array). The canonical migrated files are in the
-  working tree (`data/activities.json` + the rewritten `data/teachers.json`, with
-  Nina's journal `sessionCapture` folded onto the `a_journal` catalog entry). Sync
-  both to the **`data` branch** via the worktree flow **with/after** the new code
-  deploys — until then the running app (old code reading `teacher.activities`)
-  shows empty activity menus. `toTeacher` defaults `activityIds` to `[]`, so the
-  pre-sync window is degraded, not crashing.
+- **Sync the catalog migration to the `data` branch.** The code now reads three
+  shared catalogs — `data/activities.json`, `data/filming-roles.json`, and
+  `data/student-fields.json` — and teachers reference `activityIds` +
+  `filmingRoleIds` (was embedded `activities`/`roles`); student "quirk" values now
+  live in students.csv columns by field key. Canonical migrated files are in the
+  working tree (the three catalog JSONs + rewritten `data/teachers.json` +
+  `data/students.csv` with a `language` column folded from `needsSpanish`/
+  `needsBengali`). Sync all of them to the **`data` branch** via the worktree flow
+  **with/after** the new code deploys — until then the running app (old code)
+  shows empty menus / missing fields. Loaders default to empty, so the pre-sync
+  window is degraded, not crashing.
+  - **Real-data step for the data branch:** when applying to the live students.csv,
+    compute `language` = "Spanish"/"Bengali" from the old `needsSpanish`/
+    `needsBengali` columns, and seed `aacDevice` options in `student-fields.json`
+    from the distinct device values actually present (here: the full SGD string +
+    "SGD"). Capture expressions already retargeted to `student.language includes "…"`.
 - **Relocate live session files on the `data` branch.** The code now reads/writes
   `data/sessions/` (was `sessions/`; `SESSIONS_DIR` in `app/src/domain/data.ts`).
   The `main`-side move (constant + tracked files + docs) is done, but the live

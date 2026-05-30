@@ -12,8 +12,10 @@ import { GitHubClient } from "../clients/github";
 import {
   loadTermData,
   writeActivities,
+  writeFilmingRoles,
   writeGoals,
   writeSchedule,
+  writeStudentFields,
   writeStudents,
   writeTeachers,
   writeTerm,
@@ -23,7 +25,8 @@ import {
 import type { Goal } from "../domain/goal";
 import type { ScheduleEntry } from "../domain/schedule";
 import type { Student } from "../domain/student";
-import type { Activity, Teacher } from "../domain/teacher";
+import type { StudentField } from "../domain/studentField";
+import type { Activity, Role, Teacher } from "../domain/teacher";
 import type { Term } from "../domain/term";
 import { REPO_CONFIG, useAuth } from "./AuthContext";
 
@@ -54,6 +57,10 @@ interface TermContextValue {
   saveSchedule: (schedule: ScheduleEntry[]) => Promise<void>;
   // Persist the shared activity catalog: writes activities.json.
   saveActivities: (activities: Activity[]) => Promise<void>;
+  // Persist the shared filming-role catalog: writes filming-roles.json.
+  saveFilmingRoles: (roles: Role[]) => Promise<void>;
+  // Persist the configurable student-field catalog: writes student-fields.json.
+  saveStudentFields: (fields: StudentField[]) => Promise<void>;
 }
 
 const TermContext = createContext<TermContextValue | null>(null);
@@ -63,6 +70,9 @@ export function TermProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<TermState>({ status: "loading" });
   const [reloadKey, setReloadKey] = useState(0);
   const shasRef = useRef<FileShas>({});
+  // The current field catalog, mirrored in a ref so saveStudents (a [client]-dep
+  // callback) can read it without a stale closure when writing dynamic columns.
+  const studentFieldsRef = useRef<StudentField[]>([]);
 
   const client = useMemo(
     () => (keys ? new GitHubClient({ token: keys.githubToken, ...REPO_CONFIG }) : null),
@@ -86,9 +96,11 @@ export function TermProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
         if (loaded) {
           shasRef.current = loaded.shas;
+          studentFieldsRef.current = loaded.data.studentFields;
           setState({ status: "ready", data: loaded.data });
         } else {
           shasRef.current = {};
+          studentFieldsRef.current = [];
           setState({ status: "empty" });
         }
       })
@@ -107,7 +119,12 @@ export function TermProvider({ children }: { children: ReactNode }) {
   const saveStudents = useCallback(
     async (students: Student[]) => {
       if (!client) throw new Error("Not connected to the data repo");
-      const newSha = await writeStudents(client, students, shasRef.current.students);
+      const newSha = await writeStudents(
+        client,
+        students,
+        studentFieldsRef.current,
+        shasRef.current.students,
+      );
       shasRef.current = { ...shasRef.current, students: newSha };
       setState((prev) =>
         prev.status === "ready" ? { ...prev, data: { ...prev.data, students } } : prev,
@@ -176,6 +193,31 @@ export function TermProvider({ children }: { children: ReactNode }) {
     [client],
   );
 
+  const saveFilmingRoles = useCallback(
+    async (filmingRoles: Role[]) => {
+      if (!client) throw new Error("Not connected to the data repo");
+      const newSha = await writeFilmingRoles(client, filmingRoles, shasRef.current.filmingRoles);
+      shasRef.current = { ...shasRef.current, filmingRoles: newSha };
+      setState((prev) =>
+        prev.status === "ready" ? { ...prev, data: { ...prev.data, filmingRoles } } : prev,
+      );
+    },
+    [client],
+  );
+
+  const saveStudentFields = useCallback(
+    async (studentFields: StudentField[]) => {
+      if (!client) throw new Error("Not connected to the data repo");
+      const newSha = await writeStudentFields(client, studentFields, shasRef.current.studentFields);
+      shasRef.current = { ...shasRef.current, studentFields: newSha };
+      studentFieldsRef.current = studentFields;
+      setState((prev) =>
+        prev.status === "ready" ? { ...prev, data: { ...prev.data, studentFields } } : prev,
+      );
+    },
+    [client],
+  );
+
   const { teacherById, studentById } = useMemo(() => {
     if (state.status !== "ready") {
       return {
@@ -202,6 +244,8 @@ export function TermProvider({ children }: { children: ReactNode }) {
       saveTeachers,
       saveSchedule,
       saveActivities,
+      saveFilmingRoles,
+      saveStudentFields,
     }),
     [
       state,
@@ -215,6 +259,8 @@ export function TermProvider({ children }: { children: ReactNode }) {
       saveTeachers,
       saveSchedule,
       saveActivities,
+      saveFilmingRoles,
+      saveStudentFields,
     ],
   );
 

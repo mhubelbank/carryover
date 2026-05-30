@@ -14,6 +14,7 @@ import {
   isDeparted,
   type Student,
 } from "../domain/student";
+import type { StudentField } from "../domain/studentField";
 import { StudentGoals } from "./Goals";
 
 interface Props {
@@ -273,7 +274,6 @@ function StudentsList({
               <th style={th(14)}>Teacher</th>
               <th style={th(8)}>Age</th>
               <th style={th(10)}>Pronouns</th>
-              <th style={th(22)}>AAC device</th>
               <th style={th(7)}>Goals</th>
               <th style={th(12)}>Next IEP</th>
               <th style={{ width: "5%" }} />
@@ -314,9 +314,6 @@ function StudentsList({
                   </td>
                   <td style={td(ageColorOf(age))}>{age ?? "—"}</td>
                   <td style={td("var(--color-text-secondary)")}>{s.pronouns || "—"}</td>
-                  <td style={{ ...td("var(--color-text-secondary)"), fontSize: 13 }}>
-                    {s.aacDevice ?? "—"}
-                  </td>
                   <td
                     style={{
                       ...td(
@@ -429,6 +426,8 @@ function StudentDetail({
   );
 
   const set = (patch: Partial<Student>) => setDraft((d) => ({ ...d, ...patch }));
+  const setField = (key: string, value: string | boolean | string[]) =>
+    setDraft((d) => ({ ...d, fields: { ...d.fields, [key]: value } }));
 
   async function handleSave() {
     const problem = validateStudent(data!.students, draft);
@@ -655,17 +654,6 @@ function StudentDetail({
                 ))}
             </select>
           </EditField>
-          <div style={{ gridColumn: "span 2" }}>
-            <EditField label="AAC device">
-              <input
-                className="input"
-                value={draft.aacDevice ?? ""}
-                onChange={(e) =>
-                  set({ aacDevice: e.target.value === "" ? null : e.target.value })
-                }
-              />
-            </EditField>
-          </div>
         </div>
 
         <Divider />
@@ -721,40 +709,23 @@ function StudentDetail({
         </div>
 
         <Divider />
-        <h3 style={{ fontSize: 14, fontWeight: 500, margin: "0 0 12px 0" }}>
-          Language / session supports
-        </h3>
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}>
-            <input
-              type="checkbox"
-              checked={draft.needsSpanish}
-              onChange={(e) => set({ needsSpanish: e.target.checked })}
-            />
-            Needs Spanish translation support
-          </label>
-          <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}>
-            <input
-              type="checkbox"
-              checked={draft.needsBengali}
-              onChange={(e) => set({ needsBengali: e.target.checked })}
-            />
-            Needs Bengali translation support
-          </label>
-          <EditField label="Journal method">
-            <select
-              className="select"
-              value={draft.journalMethod}
-              onChange={(e) =>
-                set({ journalMethod: e.target.value as Student["journalMethod"] })
-              }
-            >
-              <option value="">— Not applicable —</option>
-              <option value="traced">traced</option>
-              <option value="wrote">wrote</option>
-            </select>
-          </EditField>
-        </div>
+        <h3 style={{ fontSize: 14, fontWeight: 500, margin: "0 0 12px 0" }}>Supports</h3>
+        {data.studentFields.length === 0 ? (
+          <p style={{ fontSize: 13, color: "var(--color-text-tertiary)" }}>
+            No student fields defined. Add some in the Activities tab.
+          </p>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {data.studentFields.map((f) => (
+              <StudentFieldInput
+                key={f.key}
+                field={f}
+                value={draft.fields[f.key]}
+                onChange={(v) => setField(f.key, v)}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {!isNew && (
@@ -944,8 +915,63 @@ function countActiveGoals(goals: Goal[]): Map<string, number> {
   return counts;
 }
 
+// Renders one configurable student field: a toggle as a checkbox, a select as a
+// multi-select checkbox group. A stored value not in the current options is
+// still shown (marked) so it isn't silently dropped on the next save.
+function StudentFieldInput({
+  field,
+  value,
+  onChange,
+}: {
+  field: StudentField;
+  value: string | boolean | string[] | undefined;
+  onChange: (value: boolean | string[]) => void;
+}) {
+  if (field.type === "toggle") {
+    return (
+      <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}>
+        <input type="checkbox" checked={value === true} onChange={(e) => onChange(e.target.checked)} />
+        {field.label}
+      </label>
+    );
+  }
+  const selected = Array.isArray(value) ? value : [];
+  const options = field.options ?? [];
+  const all = [...options, ...selected.filter((v) => !options.includes(v))];
+  const toggle = (opt: string, on: boolean) =>
+    onChange(on ? [...selected, opt] : selected.filter((x) => x !== opt));
+  return (
+    <div>
+      <label className="label">{field.label}</label>
+      {all.length === 0 ? (
+        <p style={{ fontSize: 12, color: "var(--color-text-tertiary)", margin: "4px 0 0 0" }}>
+          No options defined.
+        </p>
+      ) : (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 14px", fontSize: 13 }}>
+          {all.map((opt) => (
+            <label key={opt} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <input
+                type="checkbox"
+                checked={selected.includes(opt)}
+                onChange={(e) => toggle(opt, e.target.checked)}
+              />
+              {opt}
+              {options.includes(opt) ? "" : " (not in list)"}
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function cloneStudent(s: Student): Student {
-  return { ...s };
+  // Deep-clone `fields` (incl. multi-select arrays) so draft edits don't mutate
+  // the baseline, which would break the JSON.stringify dirty check.
+  const fields: Record<string, string | boolean | string[]> = {};
+  for (const [k, v] of Object.entries(s.fields)) fields[k] = Array.isArray(v) ? [...v] : v;
+  return { ...s, fields };
 }
 
 function blankStudent(): Student {
@@ -958,16 +984,13 @@ function blankStudent(): Student {
     teacherId: "",
     birthday: null,
     age: null,
-    aacDevice: null,
     nextIepReview: null,
     nextTriennial: null,
     mandate: null,
     firstDay: null,
     lastDay: null,
     archived: false,
-    needsSpanish: false,
-    needsBengali: false,
-    journalMethod: "",
+    fields: {},
   };
 }
 

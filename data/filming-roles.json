@@ -1,0 +1,27 @@
+[
+  {
+    "id": "r_anchor",
+    "name": "Anchor",
+    "phrase": "the anchor",
+    "fields": [
+      "visualCues",
+      "facialExpressions"
+    ]
+  },
+  {
+    "id": "r_reporter",
+    "name": "Reporter",
+    "phrase": "a field reporter",
+    "fields": [
+      "pragmatic"
+    ]
+  },
+  {
+    "id": "r_weather",
+    "name": "Weather",
+    "phrase": "the weather reporter",
+    "fields": [
+      "visualCues"
+    ]
+  }
+]

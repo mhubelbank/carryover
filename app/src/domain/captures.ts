@@ -7,11 +7,12 @@
 //   - `{path | default: "fallback"}` substitution in templates (single-brace)
 
 import { attributeSatisfied } from "./activity";
-import type { Student } from "./student";
+import { studentContext, type Student } from "./student";
 import type { Activity, SessionCapture, Teacher } from "./teacher";
 
 export interface EvalContext {
-  student?: Student;
+  // The flattened student (base columns + custom field values), via studentContext.
+  student?: Record<string, unknown>;
   // Free-form activity (typically the rendered ActivityDef with `name`, etc.).
   activity?: Record<string, unknown>;
   // Current capture's field-state values, keyed by field name.
@@ -29,6 +30,13 @@ export function evalCondition(expr: string | undefined, ctx: EvalContext): boole
 }
 
 function evalAtom(expr: string, ctx: EvalContext): boolean {
+  // Membership: `student.language includes "Spanish"`. For a multi-select field
+  // (string[]) checks array membership; for a plain string, equality.
+  const inc = /^(.+?)\s+includes\s+["'](.*?)["']\s*$/.exec(expr);
+  if (inc) {
+    const v = resolvePath(inc[1]!.trim(), ctx);
+    return Array.isArray(v) ? v.includes(inc[2]) : v === inc[2];
+  }
   // Equality: `activity.id == "a_journal"`. Lets captures bind to an activity by
   // its stable catalog id rather than a (renameable) display name.
   const eq = /^(.+?)\s*==\s*["'](.*?)["']\s*$/.exec(expr);
@@ -100,7 +108,8 @@ export function renderCaptureTemplate(template: string, ctx: EvalContext): strin
 // activity). Used to know which capture forms to render. Defensive against
 // pre-migration teacher records that lack `sessionCaptures` entirely.
 export function activeCapturesFor(teacher: Teacher, student: Student): SessionCapture[] {
-  return (teacher.sessionCaptures ?? []).filter((c) => evalCondition(c.showIf, { student }));
+  const s = studentContext(student);
+  return (teacher.sessionCaptures ?? []).filter((c) => evalCondition(c.showIf, { student: s }));
 }
 
 // Build the `additionalContext` string by appending each active capture's
@@ -111,12 +120,13 @@ export function buildAdditionalContext(
   student: Student,
   captureState: Record<string, Record<string, unknown>>,
 ): string {
+  const s = studentContext(student);
   let out = "";
   for (const cap of activeCapturesFor(teacher, student)) {
     const inj = cap.promptInjection;
     if (!inj) continue;
     const state = captureState[cap.name] ?? {};
-    const ctx: EvalContext = { student, capture: state };
+    const ctx: EvalContext = { student: s, capture: state };
     if (!evalCondition(inj.when, ctx)) continue;
     out += renderCaptureTemplate(inj.template, ctx);
   }
@@ -130,11 +140,12 @@ export function buildPostProcess(
   teacher: Teacher,
   student: Student,
 ): ((finalNote: string) => string) | undefined {
+  const s = studentContext(student);
   const appends: string[] = [];
   for (const cap of teacher.sessionCaptures ?? []) {
     const pp = cap.postProcess;
     if (!pp) continue;
-    if (!evalCondition(pp.when, { student })) continue;
+    if (!evalCondition(pp.when, { student: s })) continue;
     appends.push(pp.appendToFinalNote);
   }
   if (appends.length === 0) return undefined;
@@ -161,14 +172,15 @@ export function applyActivityRewrite(
 ): string {
   // Eval/template context exposes the activity's id + name + per-session info.
   const actx = { id: activity.id, name: activity.name, additionalInfo };
+  const s = studentContext(student);
 
   if (activity.descriptionTemplate && attributeSatisfied(activity, student)) {
-    return renderCaptureTemplate(activity.descriptionTemplate, { student, activity: actx });
+    return renderCaptureTemplate(activity.descriptionTemplate, { student: s, activity: actx });
   }
 
   for (const cap of teacher.sessionCaptures ?? []) {
     if (!cap.activityDescriptionTemplate) continue;
-    const ctx: EvalContext = { student, activity: actx, capture: captureState[cap.name] ?? {} };
+    const ctx: EvalContext = { student: s, activity: actx, capture: captureState[cap.name] ?? {} };
     if (!evalCondition(cap.showIf, ctx)) continue;
     return renderCaptureTemplate(cap.activityDescriptionTemplate, ctx);
   }

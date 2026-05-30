@@ -28,7 +28,7 @@
   {
     "id": "a_journal",
     "name": "Completed a journal entry",
-    "descriptionTemplate": "Completed a journal entry during a lesson led by the collaborative teacher, with SLP support. Glued in a picture illustrating today's National Day and {student.journalMethod} a comment about it.",
+    "descriptionTemplate": "Completed a journal entry during a lesson led by the collaborative teacher, with SLP support. Glued in a picture illustrating today's National Day and {student.journalMethod | join: \", \"} a comment about it.",
     "requiresAttribute": "journalMethod"
   },
   {

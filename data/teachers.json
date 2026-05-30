@@ -11,24 +11,9 @@
       "a_news",
       "a_read"
     ],
-    "roles": [
-      {
-        "id": "r_anchor",
-        "name": "Anchor",
-        "phrase": "the anchor",
-        "fields": [
-          "visualCues",
-          "facialExpressions"
-        ]
-      },
-      {
-        "id": "r_reporter",
-        "name": "Reporter",
-        "phrase": "a field reporter",
-        "fields": [
-          "pragmatic"
-        ]
-      }
+    "filmingRoleIds": [
+      "r_anchor",
+      "r_reporter"
     ],
     "sessionCaptures": [],
     "archived": false
@@ -43,11 +28,11 @@
     "activityIds": [
       "a_circle"
     ],
-    "roles": [],
+    "filmingRoleIds": [],
     "sessionCaptures": [
       {
         "name": "bengali",
-        "showIf": "student.needsBengali",
+        "showIf": "student.language includes \"Bengali\"",
         "fields": [
           {
             "name": "bengaliUsed",
@@ -80,7 +65,7 @@
     "activityIds": [
       "a_cook"
     ],
-    "roles": [],
+    "filmingRoleIds": [],
     "sessionCaptures": [],
     "archived": false
   },
@@ -95,15 +80,8 @@
     "activityIds": [
       "a_story"
     ],
-    "roles": [
-      {
-        "id": "r_weather",
-        "name": "Weather",
-        "phrase": "the weather reporter",
-        "fields": [
-          "visualCues"
-        ]
-      }
+    "filmingRoleIds": [
+      "r_weather"
     ],
     "sessionCaptures": [],
     "archived": false
@@ -119,13 +97,13 @@
       "a_play",
       "a_journal"
     ],
-    "roles": [],
+    "filmingRoleIds": [],
     "sessionCaptures": [
       {
         "name": "spanish",
-        "showIf": "student.needsSpanish",
+        "showIf": "student.language includes \"Spanish\"",
         "postProcess": {
-          "when": "student.needsSpanish",
+          "when": "student.language includes \"Spanish\"",
           "appendToFinalNote": " All interactions occurred in both Spanish and English with teacher or paraprofessional translation support as needed."
         }
       }
