@@ -50,7 +50,10 @@ export function activityRefCounts(teachers: Teacher[]): Map<string, number> {
 // name. Returns "" when an ad-hoc activity has no text — caller drops the row.
 export function defaultDescription(activity: Activity, additionalInfo: string): string {
   const info = additionalInfo.trim();
-  if (activity.freeTextIsDescription) return info;
+  // For the ad-hoc "Other" the free text IS the description (the name never
+  // appears). `freeTextIsDescription` is kept as a fallback for already-saved
+  // data, but the behavior is now driven by the reserved id.
+  if (activity.id === RESERVED_OTHER_ID || activity.freeTextIsDescription) return info;
   return info ? `${activity.name} ${info}` : activity.name;
 }
 

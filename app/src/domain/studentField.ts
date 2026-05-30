@@ -49,10 +49,14 @@ export function studentFieldRefCounts(
 ): Map<string, number> {
   const counts = new Map<string, number>();
   for (const key of fieldKeys) {
+    if (!key) {
+      counts.set(key, 0); // a not-yet-named field references nothing
+      continue;
+    }
+    // Word-boundary match so `lang` doesn't count `student.language`.
+    const re = new RegExp(`student\\.${key}\\b`);
     let n = activities.filter((a) => a.requiresAttribute === key).length;
-    n += teachers.filter((t) =>
-      JSON.stringify(t.sessionCaptures ?? []).includes(`student.${key}`),
-    ).length;
+    n += teachers.filter((t) => re.test(JSON.stringify(t.sessionCaptures ?? []))).length;
     counts.set(key, n);
   }
   return counts;
