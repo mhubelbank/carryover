@@ -78,11 +78,11 @@ No "delete all data" affordance — user can delete the repo directly if needed.
 Sessions grouped by time slot and teacher; per-session "Generate N notes" button.
 
 Banners stack at top when triggered:
-- **Term ending** (~14 days before lastDay): yellow, "2025–2026 School Year ends June 26" with "Prepare new term →"
-- **IEP overdue**: red, "Sam's IEP review was on May 27. Goal update needed" with "Review Sam's goals →". Persists until resolved.
-- **IEP tomorrow**: blue (info), "Riley's IEP review is tomorrow"
+- **Term over** (on/after `lastDay`): yellow, "{term} is over — time to prepare the next term." with "Prepare new term →". She rarely has the next term's schedule before classes restart, so notifying earlier just creates dismissal fatigue.
+- **IEP overdue**: red, "Sam's IEP review was May 27." Actions on the right: **Change IEP date** (inline date editor to push the date back) and **Review goals →**. Persists until either action resolves it.
+- **IEP tomorrow**: blue (info), "Riley's IEP review is tomorrow" with the same **Change IEP date** affordance so she can push the date without leaving Today.
 
-**Overdue IEP blocks note generation** for the affected student. The session containing them dims, the student's pill turns red with an alert icon, and the Generate button disables.
+**IEP overdue is a soft block**, not a hard one. The student's session-pill turns red with an alert icon (informational) but the Generate button stays enabled — she can still generate notes for an overdue student and resolve the IEP separately.
 
 ### Students
 List with search and teacher filter. Inline rows: name, teacher, pronouns, AAC, goal count, next IEP date.
