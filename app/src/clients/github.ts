@@ -181,6 +181,31 @@ export class GitHubClient {
     sha?: string,
   ): Promise<string> {
     await this.ensureBranch();
+    try {
+      return await this.putFile(path, content, message, sha);
+    } catch (err) {
+      // Optimistic-concurrency recovery. A cached sha goes stale when the file
+      // changed on the branch since it was loaded — a prior save this session, a
+      // data-branch sync, or another device. GitHub then returns 409 ("… does
+      // not match …") for a stale sha, or 422 for a create (`sha` omitted) that
+      // collides with a file that now exists. In both cases, refetch the current
+      // sha and retry once: last-write-wins, which is correct for this
+      // single-user app and far better than a dead-end save error. A 422 with a
+      // sha already supplied is a real validation error — don't mask it.
+      const recoverable =
+        err instanceof GitHubError && (err.status === 409 || (err.status === 422 && sha == null));
+      if (!recoverable) throw err;
+      const current = await this.readFile(path);
+      return await this.putFile(path, content, message, current?.sha);
+    }
+  }
+
+  private async putFile(
+    path: string,
+    content: string,
+    message: string,
+    sha?: string,
+  ): Promise<string> {
     const b64 = btoa(unescape(encodeURIComponent(content)));
     const res = await this.request<{ content: { sha: string } }>(
       `/repos/${this.owner}/${this.repo}/contents/${encodePath(path)}`,
