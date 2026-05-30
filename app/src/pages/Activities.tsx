@@ -316,14 +316,27 @@ export function Activities({ onNavigate }: Props) {
           addLabel="Add role"
           onAdd={addRole}
           usedHeader="Used by teachers"
-          rows={roles
-            .map((r) => ({
-              id: r.id,
-              name: r.name,
-              ...roleUsers(r),
-              onClick: () => setView({ kind: "detail", cat: "role", id: r.id }),
-            }))
-            .sort((x, y) => x.name.localeCompare(y.name))}
+          rows={[
+            ...roles
+              .filter((r) => r.name !== "Other")
+              .map((r) => ({
+                id: r.id,
+                name: r.name,
+                ...roleUsers(r),
+                onClick: () => setView({ kind: "detail", cat: "role", id: r.id }),
+              }))
+              .sort((x, y) => x.name.localeCompare(y.name)),
+            ...roles
+              .filter((r) => r.name === "Other")
+              .map((r) => ({
+                id: r.id,
+                name: r.name,
+                ...roleUsers(r),
+                pinned: true,
+                bg: "var(--color-background-tertiary)",
+                onClick: () => setView({ kind: "detail", cat: "role", id: r.id }),
+              })),
+          ]}
         />
         <CatalogTable
           title="Student fields"
@@ -579,6 +592,11 @@ function ActivityDetail({
   onDelete: () => void;
 }) {
   const reserved = activity.id === RESERVED_OTHER_ID;
+  // Custom description is temporarily hidden; keep its inputs wired (see the
+  // commented MadlibEditor block below) so re-enabling is a one-line revert.
+  void fields;
+  void editNonce;
+  void MadlibEditor;
   return (
     <div className="card" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div>
@@ -602,16 +620,75 @@ function ActivityDetail({
         <>
           <div style={{ display: "flex", flexDirection: "column", gap: 10, fontSize: 13 }}>
             <Check
-              label="Segment-name field"
+              label="Segment-name field (per session)"
               checked={!!activity.requiresSegmentName}
               onChange={(v) => onChange({ requiresSegmentName: v })}
             />
             <Check
-              label="Additional-info field"
+              label="Additional-info field (per session)"
               checked={!!activity.freeText}
               onChange={(v) => onChange({ freeText: v })}
             />
+            <Check
+              label="Per-student options"
+              checked={!!activity.perStudentOptions}
+              onChange={(v) =>
+                onChange({
+                  perStudentOptions: v ? { label: "", options: [], template: "" } : undefined,
+                })
+              }
+            />
           </div>
+          {activity.perStudentOptions && (
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 12,
+                paddingLeft: 12,
+                borderLeft: "2px solid var(--color-border-tertiary)",
+              }}
+            >
+              <div>
+                <label className="label">Options label (shown on each student's card)</label>
+                <input
+                  className="input"
+                  placeholder="e.g. Pragmatic skills used"
+                  value={activity.perStudentOptions.label}
+                  onChange={(e) =>
+                    onChange({
+                      perStudentOptions: { ...activity.perStudentOptions!, label: e.target.value },
+                    })
+                  }
+                />
+              </div>
+              <OptionsEditor
+                options={activity.perStudentOptions.options}
+                onChange={(options) =>
+                  onChange({ perStudentOptions: { ...activity.perStudentOptions!, options } })
+                }
+              />
+              <div>
+                <label className="label">
+                  Note wording — use {"{options}"} for the chosen list option, {"{info}"} for additional info
+                </label>
+                <input
+                  className="input"
+                  placeholder="e.g. Displayed appropriate pragmatic language skills by {options} while {info}"
+                  value={activity.perStudentOptions.template}
+                  onChange={(e) =>
+                    onChange({
+                      perStudentOptions: { ...activity.perStudentOptions!, template: e.target.value },
+                    })
+                  }
+                />
+                <p style={{ fontSize: 12, color: "var(--color-text-tertiary)", margin: "4px 0 0 0" }}>
+                  When a student selects nothing, the activity's default description is used instead.
+                </p>
+              </div>
+            </div>
+          )}
+          {/* Custom description — temporarily hidden (commented out per request)
           <div>
             <h4 style={{ fontSize: 13, fontWeight: 500, margin: "0 0 4px 0" }}>Custom description</h4>
             <MadlibEditor
@@ -621,6 +698,7 @@ function ActivityDetail({
               onChange={onChange}
             />
           </div>
+          */}
           <div>
             <DeleteButton onClick={onDelete} />
           </div>
@@ -944,7 +1022,7 @@ function OptionsEditor({
 }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      <label className="label">Options (students pick any number)</label>
+      <label className="label">Options (can select multiple)</label>
       {options.map((opt, i) => (
         <div key={i} style={{ display: "flex", gap: 6 }}>
           <input

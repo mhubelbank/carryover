@@ -94,6 +94,7 @@ function blankRegularInput(): ActivityInput {
     response: [],
     additionalNotes: "",
     captures: {},
+    options: [],
   };
 }
 
@@ -945,7 +946,7 @@ function RegularStudentCard({
         const caps = def ? activityCapturesFor(teacher, { id: def.id, name: def.name }) : [];
         return (
         <div key={i} style={{ borderTop: i > 0 ? "0.5px solid var(--color-border-tertiary)" : undefined, paddingTop: i > 0 ? 10 : 0 }}>
-          <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 6 }}>
+          <div style={{ fontSize: 15, fontWeight: 600, color: "var(--color-text-primary)", marginBottom: 6 }}>
             {def?.name || `Activity ${i + 1}`}
           </div>
           {caps.length > 0 && (
@@ -953,6 +954,14 @@ function RegularStudentCard({
               captures={caps}
               state={inputs[i]?.captures ?? {}}
               onChange={(capName, fieldName, value) => onCaptureChange(i, capName, fieldName, value)}
+            />
+          )}
+          {def?.perStudentOptions && (def.perStudentOptions.options.length > 0) && (
+            <CheckGroup
+              label={def.perStudentOptions.label || "Options"}
+              options={def.perStudentOptions.options.map((o) => ({ value: o, label: o }))}
+              selected={inputs[i]?.options ?? []}
+              onChange={(opts) => onChange(i, { options: opts })}
             />
           )}
           <CheckGroup
@@ -1470,7 +1479,8 @@ function buildContext(
     // Student-level captures (e.g. Bengali) plus this activity's own captures
     // (e.g. pragmatic skills) feed the rewrite.
     const caps = { ...st.captures, ...(st.regular[i]?.captures ?? {}) };
-    return applyActivityRewrite(teacher, student, activity, def.additionalInfo, caps, fallback);
+    const selectedOptions = st.regular[i]?.options ?? [];
+    return applyActivityRewrite(teacher, student, activity, def.additionalInfo, caps, fallback, selectedOptions);
   });
   return regularContext({
     studentName: student.firstName,
