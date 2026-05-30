@@ -1007,26 +1007,39 @@ export function Schedule({ onNavigate, onOpenStudent }: Props) {
         </div>
       )}
 
-      {editing && (
-        <CellEditor
-          day={editing.day}
-          slot={editing.slot}
-          students={editorStudents(students, weekDate, editing.day)}
-          teachers={teachers}
-          selectedOrdered={(cells.get(`${editing.day}|${editing.slot}`) ?? [])
+      {editing &&
+        (() => {
+          // Mirror the week-view chip filter: in week mode, hide students whose
+          // enrollment window doesn't include this column's date from BOTH the
+          // add-list (editorStudents) and the already-assigned list. The entry
+          // stays in the file — just not shown for this date. (Usual mode:
+          // weekDate is null, so nothing is filtered — the template is dateless.)
+          const colDate = weekDate ? addDays(weekDate, WEEKDAYS.indexOf(editing.day)) : null;
+          const selectedOrdered = (cells.get(`${editing.day}|${editing.slot}`) ?? [])
             .map((id) => studentById.get(id))
-            .filter((s): s is Student => s != null)}
-          onToggle={(student, on) => toggleStudent(editing.day, editing.slot, student, on)}
-          onMove={(student, dir) => moveStudentInCell(editing.day, editing.slot, student.id, dir)}
-          onSort={() => sortCellByLastName(editing.day, editing.slot)}
-          onOpenStudent={(id) => {
-            setEditing(null);
-            onOpenStudent(id);
-          }}
-          onDelete={() => removeSlot(editing.day, editing.slot)}
-          onClose={() => setEditing(null)}
-        />
-      )}
+            .filter((s): s is Student => s != null)
+            .filter((s) => !colDate || isActiveOn(s, colDate));
+          return (
+            <CellEditor
+              day={editing.day}
+              slot={editing.slot}
+              students={editorStudents(students, weekDate, editing.day)}
+              teachers={teachers}
+              selectedOrdered={selectedOrdered}
+              onToggle={(student, on) => toggleStudent(editing.day, editing.slot, student, on)}
+              onMove={(student, dir) =>
+                moveStudentInCell(editing.day, editing.slot, student.id, dir)
+              }
+              onSort={() => sortCellByLastName(editing.day, editing.slot)}
+              onOpenStudent={(id) => {
+                setEditing(null);
+                onOpenStudent(id);
+              }}
+              onDelete={() => removeSlot(editing.day, editing.slot)}
+              onClose={() => setEditing(null)}
+            />
+          );
+        })()}
     </div>
   );
 }
