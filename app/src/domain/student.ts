@@ -16,7 +16,6 @@ export interface Student {
   // students should rely on `birthday`; preserved on load so existing ages
   // aren't lost during the transition.
   age: number | null;
-  aacDevice: string | null;
   nextIepReview: string | null;
   nextTriennial: string | null;
   mandate: string | null;
@@ -25,11 +24,17 @@ export interface Student {
   firstDay: string | null;
   lastDay: string | null;
   archived: boolean;
-  // First-class quirk attributes (previously stored under `fields`). Drive
+  // Configurable per-student attributes, keyed by StudentField.key. A toggle
+  // value is a boolean; a select value is a string[] (multi-select). Drives
   // teacher session-captures + post-processing in the Generate pipeline.
-  needsSpanish: boolean;
-  needsBengali: boolean;
-  journalMethod: "" | "traced" | "wrote";
+  fields: Record<string, string | boolean | string[]>;
+}
+
+// The student object flattened for condition/template evaluation: custom field
+// values are lifted to top level so `student.needsBengali` / `{student.journalMethod}`
+// / `student.language` resolve directly (the keys never shadow base columns).
+export function studentContext(student: Student): Record<string, unknown> {
+  return { ...student, ...student.fields };
 }
 
 export type AgeFlag = "ok" | "warn" | "alert";

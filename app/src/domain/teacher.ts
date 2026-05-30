@@ -61,6 +61,9 @@ export interface Activity {
   requiresAttribute?: string;
 }
 
+// A shared-catalog filming-day role (data/filming-roles.json), referenced by
+// teachers via `filmingRoleIds`. The news-show roles (Anchor, Reporter, …) are a
+// shared vocabulary; each teacher uses a subset.
 export interface Role {
   id: string;
   name: string;
@@ -120,7 +123,8 @@ export interface Teacher {
   modes: Mode[];
   // Ids into the shared activity catalog (data/activities.json).
   activityIds: string[];
-  roles: Role[];
+  // Ids into the shared filming-role catalog (data/filming-roles.json).
+  filmingRoleIds: string[];
   sessionCaptures: SessionCapture[];
   // Archived teachers stay in the file (their students' history still
   // references their id) but are hidden from active workflows: caseload

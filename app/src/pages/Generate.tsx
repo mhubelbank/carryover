@@ -44,10 +44,11 @@ import {
   catalogById,
   defaultDescription,
 } from "../domain/activity";
+import { resolveRoles } from "../domain/role";
 import type { Goal } from "../domain/goal";
 import type { SessionMetadata } from "../domain/session";
-import { displayName, fullName, type Student } from "../domain/student";
-import type { Activity, Mode, Teacher } from "../domain/teacher";
+import { displayName, fullName, studentContext, type Student } from "../domain/student";
+import type { Activity, Mode, Role, Teacher } from "../domain/teacher";
 
 interface Props {
   onNavigate: (page: NavPage) => void;
@@ -192,9 +193,12 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
   if (state.status !== "ready") return null;
   const { students, goals } = state.data;
   const catalog = state.data.activities;
+  const roleCatalog = state.data.filmingRoles;
   // The activities offered in the dropdown: this teacher's catalog activities
   // plus the reserved ad-hoc "Other".
   const activityOptions = teacher ? activityOptionsForGenerate(teacher, catalog) : [];
+  // The teacher's filming roles, resolved from the shared catalog.
+  const roleOptions = teacher ? resolveRoles(teacher, roleCatalog) : [];
 
   function setStudent(id: string, patch: Partial<StudentState>) {
     setStudentState((prev) => ({ ...prev, [id]: { ...prev[id]!, ...patch } }));
@@ -328,7 +332,7 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
         continue;
       }
       try {
-        const ctx = buildContext(mode, teacher, student, st, activities, goals, catalog);
+        const ctx = buildContext(mode, teacher, student, st, activities, goals, catalog, roleCatalog);
         const result = await generateNote(apiKey, prompts, ctx, {
           maxTokens: MAX_TOKENS_BY_MODE[mode],
           postProcess: buildPostProcess(teacher, student),
@@ -366,7 +370,7 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
     updateResult(studentId, { regenerating: true, error: undefined });
     try {
       const prompts = await loadPromptSet(client, mode);
-      const ctx = buildContext(mode, teacher, student, st, activities, goals, catalog);
+      const ctx = buildContext(mode, teacher, student, st, activities, goals, catalog, roleCatalog);
       const result = await generateNote(keys.anthropicApiKey, prompts, ctx, {
         maxTokens: MAX_TOKENS_BY_MODE[mode],
         postProcess: buildPostProcess(teacher, student),
@@ -561,7 +565,7 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
 
               {st.included && !st.absent && mode === "filming-day" && (
                 <FilmingStudentCard
-                  teacher={teacher}
+                  roles={roleOptions}
                   state={st}
                   studentGoals={studentGoals}
                   onRoleChange={(roleId) => setStudent(student.id, { roleId })}
@@ -722,6 +726,7 @@ function CapturePanel({
     (c) => c.fields && c.fields.length > 0,
   );
   if (captures.length === 0) return null;
+  const sCtx = studentContext(student);
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 12 }}>
       {captures.map((cap) => {
@@ -741,7 +746,7 @@ function CapturePanel({
             {(cap.fields ?? []).map((field) => {
               if (
                 field.showIf &&
-                !evalCondition(field.showIf, { student, capture: fieldState })
+                !evalCondition(field.showIf, { student: sCtx, capture: fieldState })
               ) {
                 return null;
               }
@@ -887,7 +892,7 @@ function RegularStudentCard({
 }
 
 function FilmingStudentCard({
-  teacher,
+  roles,
   state: st,
   studentGoals,
   onRoleChange,
@@ -895,7 +900,7 @@ function FilmingStudentCard({
   onPragmaticChange,
   onGoalsChange,
 }: {
-  teacher: Teacher;
+  roles: Role[];
   state: StudentState;
   studentGoals: Goal[];
   onRoleChange: (roleId: string) => void;
@@ -903,7 +908,7 @@ function FilmingStudentCard({
   onPragmaticChange: (key: PragmaticSkillKey, patch: Partial<PragmaticSkillValue>) => void;
   onGoalsChange: (ids: string[]) => void;
 }) {
-  const role = teacher.roles.find((r) => r.id === st.roleId);
+  const role = roles.find((r) => r.id === st.roleId);
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
@@ -915,7 +920,7 @@ function FilmingStudentCard({
             onChange={(e) => onRoleChange(e.target.value)}
           >
             <option value="">— Select —</option>
-            {teacher.roles.map((r) => (
+            {roles.map((r) => (
               <option key={r.id} value={r.id}>
                 {r.name}
               </option>
@@ -1312,10 +1317,11 @@ function buildContext(
   activities: ActivityDef[],
   goals: Goal[],
   catalog: Activity[],
+  roleCatalog: Role[],
 ) {
   const pronoun = student.pronouns.split("/")[0]?.trim() || student.pronouns;
   if (mode === "filming-day") {
-    const role = teacher.roles.find((r) => r.id === st.roleId);
+    const role = resolveRoles(teacher, roleCatalog).find((r) => r.id === st.roleId);
     if (!role) throw new Error(`Pick a role for ${fullName(student)}`);
     const phrase = resolveRolePhrase(role, st.filming);
     const roleData = buildRoleData(role, st.filming);

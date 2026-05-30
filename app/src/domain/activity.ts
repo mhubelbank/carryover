@@ -55,10 +55,44 @@ export function defaultDescription(activity: Activity, additionalInfo: string): 
 }
 
 // Whether a catalog activity's descriptionTemplate should apply for this
-// student: no required attribute, or the student has a truthy value for it.
+// student: no required attribute, or the student has a non-empty value for it
+// (a non-empty string, a true toggle, or a non-empty multi-select array).
 export function attributeSatisfied(activity: Activity, student: Student): boolean {
   if (!activity.requiresAttribute) return true;
-  const v = (student as unknown as Record<string, unknown>)[activity.requiresAttribute];
+  const v = student.fields?.[activity.requiresAttribute];
+  if (Array.isArray(v)) return v.length > 0;
   if (typeof v === "string") return v.trim() !== "";
   return Boolean(v);
+}
+
+// Madlib split/join for the catalog editor. The stored model is a
+// `descriptionTemplate` string with an optional `{student.<attr>}` placeholder
+// plus `requiresAttribute`; the editor presents it as before / {attr} / after.
+// These are inverse: parse(activity) → parts, build(parts) → stored fields.
+export function parseDescriptionTemplate(activity: Activity): {
+  attr: string;
+  before: string;
+  after: string;
+} {
+  const attr = activity.requiresAttribute ?? "";
+  const tpl = activity.descriptionTemplate ?? "";
+  if (!attr) return { attr: "", before: tpl, after: "" };
+  // Match `{student.<attr>}` with or without a trailing filter (e.g. `| join: ", "`).
+  const m = new RegExp(`\\{\\s*student\\.${attr}\\s*(?:\\|[^}]*)?\\}`).exec(tpl);
+  if (!m) return { attr, before: tpl, after: "" };
+  return { attr, before: tpl.slice(0, m.index).trim(), after: tpl.slice(m.index + m[0].length).trim() };
+}
+
+export function buildDescriptionTemplate(
+  attr: string,
+  before: string,
+  after: string,
+): { descriptionTemplate: string | undefined; requiresAttribute: string | undefined } {
+  const b = before.trim();
+  const a = after.trim();
+  // No attribute → a fixed description shared by all students (just the text).
+  if (!attr) return { descriptionTemplate: b || undefined, requiresAttribute: undefined };
+  // The attribute is a multi-select (string[]), so join its values for prose.
+  const tpl = [b, `{student.${attr} | join: ", "}`, a].filter((p) => p !== "").join(" ");
+  return { descriptionTemplate: tpl, requiresAttribute: attr };
 }

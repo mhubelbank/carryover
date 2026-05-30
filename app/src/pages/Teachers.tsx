@@ -8,7 +8,6 @@ import {
   teacherColor,
   type ColorKey,
   type Mode,
-  type Role,
   type Teacher,
 } from "../domain/teacher";
 import { RESERVED_OTHER_ID } from "../domain/activity";
@@ -24,18 +23,6 @@ interface Props {
 }
 
 const MODE_LABELS: Record<Mode, string> = { regular: "Regular", "filming-day": "Filming day" };
-
-// Display labels for the developer-defined filming-day field components.
-const FIELD_LABELS: Record<string, string> = {
-  visualCues: "Visual cues",
-  facialExpressions: "Facial expressions",
-  decodingCarryover: "Decoding carryover",
-  pragmatic: "Pragmatic skills",
-  compliments: "Gave compliments",
-  freeText: "Free-text description",
-};
-const fieldLabel = (key: string) => FIELD_LABELS[key] ?? key;
-const FIELD_KEYS = Object.keys(FIELD_LABELS);
 
 type View = { kind: "list" } | { kind: "detail"; id: string } | { kind: "create"; teacher: Teacher };
 
@@ -254,7 +241,7 @@ function TeacherDetail({
 
   const color = teacherColor(draft.color);
   const caseload = data.students.filter((s) => s.teacherId === draft.id);
-  const showFilming = draft.modes.includes("filming-day") || draft.roles.length > 0;
+  const showFilming = draft.modes.includes("filming-day") || draft.filmingRoleIds.length > 0;
   const dirty = isNew || JSON.stringify(draft) !== JSON.stringify(baseline);
 
   const set = (patch: Partial<Teacher>) => setDraft((d) => ({ ...d, ...patch }));
@@ -274,50 +261,19 @@ function TeacherDetail({
         : d.activityIds.filter((x) => x !== id),
     }));
 
-  const addRole = () =>
+  // Filming roles are a shared catalog (managed in the Activities tab); a teacher
+  // just selects which ones it uses.
+  const toggleRole = (id: string, on: boolean) =>
     setDraft((d) => ({
       ...d,
-      roles: [...d.roles, { id: crypto.randomUUID(), name: "", phrase: "", fields: [] }],
+      filmingRoleIds: on
+        ? [...new Set([...d.filmingRoleIds, id])]
+        : d.filmingRoleIds.filter((x) => x !== id),
     }));
-  const updateRole = (id: string, patch: Partial<Role>) =>
-    setDraft((d) => ({ ...d, roles: d.roles.map((r) => (r.id === id ? { ...r, ...patch } : r)) }));
-  const removeRole = (id: string) =>
-    setDraft((d) => ({ ...d, roles: d.roles.filter((r) => r.id !== id) }));
-  const toggleRoleField = (id: string, fieldKey: string, on: boolean) =>
-    setDraft((d) => ({
-      ...d,
-      roles: d.roles.map((r) =>
-        r.id === id
-          ? {
-              ...r,
-              fields: on
-                ? [...new Set([...r.fields, fieldKey])]
-                : r.fields.filter((f) => f !== fieldKey),
-            }
-          : r,
-      ),
-    }));
-
-  // Copy another teacher's roles in (appended with fresh ids).
-  const copyRolesFrom = (sourceId: string) => {
-    const source = data!.teachers.find((t) => t.id === sourceId);
-    if (!source) return;
-    setDraft((d) => ({
-      ...d,
-      roles: [
-        ...d.roles,
-        ...source.roles.map((r) => ({ ...r, id: crypto.randomUUID(), fields: [...r.fields] })),
-      ],
-    }));
-  };
-  const teachersWithRoles = data.teachers.filter(
-    (t) => !t.archived && t.id !== draft.id && t.roles.length > 0,
-  );
-
-  const dupRoleNames = duplicateNames(draft.roles.map((r) => r.name));
   // Catalog activities offered for selection (the reserved ad-hoc "Other" is
   // always available in Generate, so it isn't listed per-teacher).
   const selectableActivities = data.activities.filter((a) => a.id !== RESERVED_OTHER_ID);
+  const selectableRoles = data.filmingRoles;
 
   async function handleSave() {
     const problem = validateTeacherName(data!.teachers, draft);
@@ -327,13 +283,7 @@ function TeacherDetail({
     }
     setSaving(true);
     setError(null);
-    // Drop blank role rows on save.
-    const cleaned: Teacher = {
-      ...draft,
-      roles: draft.roles
-        .map((r) => ({ ...r, name: r.name.trim(), phrase: r.phrase.trim() }))
-        .filter((r) => r.name !== ""),
-    };
+    const cleaned: Teacher = { ...draft };
     const next = isNew
       ? [...data!.teachers, cleaned]
       : data!.teachers.map((t) => (t.id === cleaned.id ? cleaned : t));
@@ -503,59 +453,36 @@ function TeacherDetail({
 
       {showFilming && (
         <div className="card" style={{ marginBottom: "1rem" }}>
-          <SectionHeader
-            title="Filming day · roles"
-            onAdd={addRole}
-            addLabel="Add role"
-            extra={<CopyFromSelect teachers={teachersWithRoles} onCopy={copyRolesFrom} />}
-          />
-          {draft.roles.length === 0 ? (
-            <p style={{ fontSize: 13, color: "var(--color-text-tertiary)" }}>No roles yet.</p>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "baseline",
+              marginBottom: 10,
+            }}
+          >
+            <h3 className="card__title" style={{ margin: 0 }}>
+              Filming day · roles
+            </h3>
+            <button className="button button--small" onClick={() => onNavigate("activities")}>
+              Manage catalog
+            </button>
+          </div>
+          {selectableRoles.length === 0 ? (
+            <p style={{ fontSize: 13, color: "var(--color-text-tertiary)" }}>
+              No filming roles in the catalog yet. Add some in the Activities tab.
+            </p>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {draft.roles.map((role) => (
-                <div
-                  key={role.id}
-                  style={{
-                    border: "0.5px solid var(--color-border-tertiary)",
-                    borderRadius: "var(--border-radius-md)",
-                    padding: "10px 12px",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 8,
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <input
-                      className="input"
-                      style={{ width: 160, height: 32 }}
-                      placeholder="Role"
-                      value={role.name}
-                      onChange={(e) => updateRole(role.id, { name: e.target.value })}
-                    />
-                    <input
-                      className="input"
-                      style={{ flex: 1, height: 32 }}
-                      placeholder={'Phrase (e.g. "the anchor")'}
-                      value={role.phrase}
-                      onChange={(e) => updateRole(role.id, { phrase: e.target.value })}
-                    />
-                    <RemoveButton title="Remove role" onClick={() => removeRole(role.id)} />
-                  </div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 10, fontSize: 12 }}>
-                    {FIELD_KEYS.map((fk) => (
-                      <label key={fk} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <input
-                          type="checkbox"
-                          checked={role.fields.includes(fk)}
-                          onChange={(e) => toggleRoleField(role.id, fk, e.target.checked)}
-                        />
-                        {fieldLabel(fk)}
-                      </label>
-                    ))}
-                  </div>
-                  {dupRoleNames.has(role.name.trim().toLowerCase()) && <AlreadyUsed />}
-                </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 16px", fontSize: 13 }}>
+              {selectableRoles.map((r) => (
+                <label key={r.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <input
+                    type="checkbox"
+                    checked={draft.filmingRoleIds.includes(r.id)}
+                    onChange={(e) => toggleRole(r.id, e.target.checked)}
+                  />
+                  {r.name}
+                </label>
               ))}
             </div>
           )}
@@ -748,85 +675,12 @@ function EditField({ label, children }: { label: string; children: ReactNode }) 
   );
 }
 
-function SectionHeader({
-  title,
-  onAdd,
-  addLabel,
-  extra,
-}: {
-  title: string;
-  onAdd: () => void;
-  addLabel: string;
-  extra?: ReactNode;
-}) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: 8,
-        marginBottom: 12,
-      }}
-    >
-      <h3 className="card__title" style={{ margin: 0 }}>
-        {title}
-      </h3>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        {extra}
-        <button className="button button--ghost button--small" onClick={onAdd}>
-          <Icon name="plus" size={14} />
-          {addLabel}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function RemoveButton({ title, onClick }: { title: string; onClick: () => void }) {
-  return (
-    <button
-      className="button button--ghost button--small"
-      style={{ flexShrink: 0, padding: 6, color: "var(--color-text-tertiary)" }}
-      title={title}
-      onClick={onClick}
-    >
-      <Icon name="x" size={14} />
-    </button>
-  );
-}
-
-function AlreadyUsed() {
-  return <span style={{ fontSize: 12, color: "var(--color-text-warning)" }}>already used</span>;
-}
-
-function CopyFromSelect({ teachers, onCopy }: { teachers: Teacher[]; onCopy: (id: string) => void }) {
-  if (teachers.length === 0) return null;
-  return (
-    <select
-      className="select"
-      style={{ width: "auto", height: 30, fontSize: 13 }}
-      value=""
-      onChange={(e) => {
-        if (e.target.value) onCopy(e.target.value);
-      }}
-    >
-      <option value="">Copy from…</option>
-      {teachers.map((t) => (
-        <option key={t.id} value={t.id}>
-          {t.name}
-        </option>
-      ))}
-    </select>
-  );
-}
-
 function cloneTeacher(t: Teacher): Teacher {
   return {
     ...t,
     modes: [...t.modes],
     activityIds: [...t.activityIds],
-    roles: t.roles.map((r) => ({ ...r, fields: [...r.fields] })),
+    filmingRoleIds: [...t.filmingRoleIds],
     sessionCaptures: (t.sessionCaptures ?? []).map((c) => ({ ...c })),
   };
 }
@@ -838,7 +692,7 @@ function blankTeacher(): Teacher {
     color: "purple",
     modes: ["regular"],
     activityIds: [],
-    roles: [],
+    filmingRoleIds: [],
     sessionCaptures: [],
     archived: false,
   };
@@ -858,16 +712,5 @@ function validateTeacherName(teachers: Teacher[], candidate: Teacher): string | 
   );
   if (dupe) return `Another teacher is named "${name}". Teacher names must be unique.`;
   return null;
-}
-
-// Lowercased names that appear more than once (for the "already used" hint).
-function duplicateNames(names: string[]): Set<string> {
-  const counts = new Map<string, number>();
-  for (const n of names) {
-    const key = n.trim().toLowerCase();
-    if (key === "") continue;
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-  }
-  return new Set([...counts.entries()].filter(([, c]) => c > 1).map(([k]) => k));
 }
 
