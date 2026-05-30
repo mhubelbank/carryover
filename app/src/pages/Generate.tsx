@@ -32,6 +32,13 @@ import {
   loadPromptSet,
   type NoteResult,
 } from "../domain/notes";
+import {
+  activeCapturesFor,
+  applyActivityRewrite,
+  buildAdditionalContext,
+  buildPostProcess,
+  evalCondition,
+} from "../domain/captures";
 import type { Goal } from "../domain/goal";
 import type { SessionMetadata } from "../domain/session";
 import { displayName, fullName, type Student } from "../domain/student";
@@ -54,6 +61,10 @@ interface StudentState {
   roleId: string;
   filming: FilmingFieldValues;
   filmingGoalIds: string[];
+  // Per-teacher session-capture form state, keyed first by capture name then
+  // by field name. Drives the dynamic capture-form rendering and feeds
+  // additionalContext / activity-rewrite in buildContext.
+  captures: Record<string, Record<string, string | boolean>>;
 }
 
 interface ResultRow {
@@ -124,7 +135,7 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
   const caseload = useMemo(
     () =>
       state.status === "ready"
-        ? state.data.students.filter((s) => s.teacherId === teacherId)
+        ? state.data.students.filter((s) => !s.archived && s.teacherId === teacherId)
         : [],
     [state, teacherId],
   );
@@ -162,6 +173,7 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
               roleId: "",
               filming: blankFilming(),
               filmingGoalIds: [],
+              captures: {},
             };
       }
       return next;
@@ -188,6 +200,26 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
     setStudentState((prev) => {
       const cur = prev[id]!;
       return { ...prev, [id]: { ...cur, filming: { ...cur.filming, ...patch } } };
+    });
+  }
+
+  function setCaptureField(
+    id: string,
+    captureName: string,
+    fieldName: string,
+    value: string | boolean,
+  ) {
+    setStudentState((prev) => {
+      const cur = prev[id]!;
+      const allCaps = cur.captures;
+      const cap = allCaps[captureName] ?? {};
+      return {
+        ...prev,
+        [id]: {
+          ...cur,
+          captures: { ...allCaps, [captureName]: { ...cap, [fieldName]: value } },
+        },
+      };
     });
   }
 
@@ -278,6 +310,7 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
         const ctx = buildContext(mode, teacher, student, st, activities, goals);
         const result = await generateNote(apiKey, prompts, ctx, {
           maxTokens: MAX_TOKENS_BY_MODE[mode],
+          postProcess: buildPostProcess(teacher, student),
         });
         updateResult(student.id, { result });
       } catch (e) {
@@ -315,6 +348,7 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
       const ctx = buildContext(mode, teacher, student, st, activities, goals);
       const result = await generateNote(keys.anthropicApiKey, prompts, ctx, {
         maxTokens: MAX_TOKENS_BY_MODE[mode],
+        postProcess: buildPostProcess(teacher, student),
       });
       updateResult(studentId, { result, regenerating: false });
     } catch (e) {
@@ -483,6 +517,17 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
                 )}
               </div>
 
+              {st.included && !st.absent && (
+                <CapturePanel
+                  teacher={teacher}
+                  student={student}
+                  state={st.captures}
+                  onChange={(captureName, fieldName, value) =>
+                    setCaptureField(student.id, captureName, fieldName, value)
+                  }
+                />
+              )}
+
               {st.included && !st.absent && mode === "regular" && (
                 <RegularStudentCard
                   activities={activities}
@@ -633,6 +678,89 @@ function ActivityEditor({
           />
         </div>
       )}
+    </div>
+  );
+}
+
+function CapturePanel({
+  teacher,
+  student,
+  state,
+  onChange,
+}: {
+  teacher: Teacher;
+  student: Student;
+  state: Record<string, Record<string, string | boolean>>;
+  onChange: (captureName: string, fieldName: string, value: string | boolean) => void;
+}) {
+  // Only show captures whose top-level showIf passes for this student AND that
+  // have UI fields. Captures with no fields (Spanish post-process, journal
+  // rewrite) drive behavior silently.
+  const captures = activeCapturesFor(teacher, student).filter(
+    (c) => c.fields && c.fields.length > 0,
+  );
+  if (captures.length === 0) return null;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 12 }}>
+      {captures.map((cap) => {
+        const fieldState = state[cap.name] ?? {};
+        return (
+          <div
+            key={cap.name}
+            style={{
+              border: "0.5px dashed var(--color-border-tertiary)",
+              borderRadius: "var(--border-radius-md)",
+              padding: 10,
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+            }}
+          >
+            {(cap.fields ?? []).map((field) => {
+              if (
+                field.showIf &&
+                !evalCondition(field.showIf, { student, capture: fieldState })
+              ) {
+                return null;
+              }
+              const value = fieldState[field.name];
+              if (field.type === "bool") {
+                return (
+                  <label
+                    key={field.name}
+                    style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={value === true}
+                      onChange={(e) => onChange(cap.name, field.name, e.target.checked)}
+                    />
+                    {field.label ?? field.name}
+                  </label>
+                );
+              }
+              return (
+                <div key={field.name}>
+                  {field.label && (
+                    <label
+                      className="label"
+                      style={{ fontSize: 12, color: "var(--color-text-secondary)" }}
+                    >
+                      {field.label}
+                    </label>
+                  )}
+                  <input
+                    className="input"
+                    value={typeof value === "string" ? value : ""}
+                    placeholder={field.placeholder ?? ""}
+                    onChange={(e) => onChange(cap.name, field.name, e.target.value)}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -1144,6 +1272,7 @@ function buildContext(
       rolePhrase: phrase,
       selectedGoals: selectedShortNames,
       roleData,
+      additionalContext: buildAdditionalContext(teacher, student, st.captures),
     });
   }
   // Resolve regular goal IDs → shortname strings for the prompt template; the
@@ -1154,7 +1283,20 @@ function buildContext(
     ...input,
     goals: input.goals.map((id) => goalById.get(id)?.shortName ?? "").filter(Boolean),
   }));
-  const activityArr = buildRegularActivities(activities, resolvedInputs);
+  // Per-student activity-description rewrites (e.g. Robin's journal). The default
+  // description is the activity name + " " + additionalInfo, matching the
+  // original TSX behavior; a matching session-capture rewrites it in place.
+  const activityArr = buildRegularActivities(activities, resolvedInputs, (def) => {
+    const fallback = def.additionalInfo.trim()
+      ? `${def.name} ${def.additionalInfo.trim()}`
+      : def.name;
+    return applyActivityRewrite(
+      teacher,
+      student,
+      { name: def.name, additionalInfo: def.additionalInfo },
+      fallback,
+    );
+  });
   return regularContext({
     studentName: student.firstName,
     pronouns: student.pronouns,
@@ -1162,6 +1304,7 @@ function buildContext(
     individualSession: false,
     teacher,
     activities: activityArr,
+    additionalContext: buildAdditionalContext(teacher, student, st.captures),
   });
 }
 

@@ -80,7 +80,7 @@ export async function loadTermData(client: GitHubClient): Promise<LoadedTerm | n
   return {
     data: {
       term,
-      teachers: teachersFile ? (JSON.parse(teachersFile.text) as Teacher[]) : [],
+      teachers: teachersFile ? (JSON.parse(teachersFile.text) as unknown[]).map(toTeacher) : [],
       students: studentsFile ? parseCsv(studentsFile.text).map(toStudent) : [],
       goals: goalsFile ? parseCsv(goalsFile.text).map(toGoal) : [],
       schedule: scheduleFile ? parseCsv(scheduleFile.text).map(toScheduleEntry) : [],
@@ -314,6 +314,23 @@ export async function loadIepHistory(
     }
   }
   return reviews.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+}
+
+// Normalize a raw teacher record from teachers.json — handles older shapes that
+// predate `sessionCaptures` (still on disk on the data branch) and drops the
+// retired `perStudentFields` field so the in-memory type matches.
+function toTeacher(raw: unknown): Teacher {
+  const t = (raw ?? {}) as Partial<Teacher> & { perStudentFields?: unknown };
+  return {
+    id: t.id ?? "",
+    name: t.name ?? "",
+    color: t.color ?? "blue",
+    modes: t.modes ?? ["regular"],
+    activities: t.activities ?? [],
+    roles: t.roles ?? [],
+    sessionCaptures: t.sessionCaptures ?? [],
+    promptOverrides: t.promptOverrides,
+  } as Teacher;
 }
 
 function toStudent(row: Record<string, string>): Student {

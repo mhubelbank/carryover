@@ -567,7 +567,7 @@ function StudentDetail({
                   title={`Last day was ${draft.lastDay ?? ""}`}
                 >
                   <Icon name="alert-circle" size={11} />
-                  Past last day
+                  Past last day - archive when ready
                 </span>
               )}
             </h1>
