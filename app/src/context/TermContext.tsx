@@ -11,6 +11,7 @@ import {
 import { GitHubClient } from "../clients/github";
 import {
   loadTermData,
+  writeActivities,
   writeGoals,
   writeSchedule,
   writeStudents,
@@ -22,7 +23,7 @@ import {
 import type { Goal } from "../domain/goal";
 import type { ScheduleEntry } from "../domain/schedule";
 import type { Student } from "../domain/student";
-import type { Teacher } from "../domain/teacher";
+import type { Activity, Teacher } from "../domain/teacher";
 import type { Term } from "../domain/term";
 import { REPO_CONFIG, useAuth } from "./AuthContext";
 
@@ -51,6 +52,8 @@ interface TermContextValue {
   saveTeachers: (teachers: Teacher[]) => Promise<void>;
   // Persist the schedule: writes schedule.csv and updates state in place.
   saveSchedule: (schedule: ScheduleEntry[]) => Promise<void>;
+  // Persist the shared activity catalog: writes activities.json.
+  saveActivities: (activities: Activity[]) => Promise<void>;
 }
 
 const TermContext = createContext<TermContextValue | null>(null);
@@ -161,6 +164,18 @@ export function TermProvider({ children }: { children: ReactNode }) {
     [client],
   );
 
+  const saveActivities = useCallback(
+    async (activities: Activity[]) => {
+      if (!client) throw new Error("Not connected to the data repo");
+      const newSha = await writeActivities(client, activities, shasRef.current.activities);
+      shasRef.current = { ...shasRef.current, activities: newSha };
+      setState((prev) =>
+        prev.status === "ready" ? { ...prev, data: { ...prev.data, activities } } : prev,
+      );
+    },
+    [client],
+  );
+
   const { teacherById, studentById } = useMemo(() => {
     if (state.status !== "ready") {
       return {
@@ -186,6 +201,7 @@ export function TermProvider({ children }: { children: ReactNode }) {
       saveTerm,
       saveTeachers,
       saveSchedule,
+      saveActivities,
     }),
     [
       state,
@@ -198,6 +214,7 @@ export function TermProvider({ children }: { children: ReactNode }) {
       saveTerm,
       saveTeachers,
       saveSchedule,
+      saveActivities,
     ],
   );
 

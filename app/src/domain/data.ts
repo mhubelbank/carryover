@@ -5,7 +5,7 @@ import type { IepReview } from "./iep";
 import type { ScheduleEntry, Weekday } from "./schedule";
 import type { SessionMetadata } from "./session";
 import type { Student } from "./student";
-import type { Teacher } from "./teacher";
+import type { Activity, Teacher } from "./teacher";
 import type { Term } from "./term";
 
 export interface TermData {
@@ -14,6 +14,8 @@ export interface TermData {
   students: Student[];
   goals: Goal[];
   schedule: ScheduleEntry[];
+  // Shared activity catalog (data/activities.json), referenced by teachers.
+  activities: Activity[];
 }
 
 // Blob shas of each loaded file, needed to safely overwrite on save.
@@ -23,6 +25,7 @@ export interface FileShas {
   students?: string;
   goals?: string;
   schedule?: string;
+  activities?: string;
 }
 
 export interface LoadedTerm {
@@ -36,6 +39,7 @@ const PATHS = {
   students: "data/students.csv",
   goals: "data/goals.csv",
   schedule: "data/schedule.csv",
+  activities: "data/activities.json",
 } as const;
 
 const SESSIONS_DIR = "data/sessions";
@@ -70,11 +74,12 @@ export async function loadTermData(client: GitHubClient): Promise<LoadedTerm | n
   if (!termFile) return null;
   const term = JSON.parse(termFile.text) as Term;
 
-  const [teachersFile, studentsFile, goalsFile, scheduleFile] = await Promise.all([
+  const [teachersFile, studentsFile, goalsFile, scheduleFile, activitiesFile] = await Promise.all([
     client.readFile(PATHS.teachers),
     client.readFile(PATHS.students),
     client.readFile(PATHS.goals),
     client.readFile(PATHS.schedule),
+    client.readFile(PATHS.activities),
   ]);
 
   return {
@@ -84,6 +89,9 @@ export async function loadTermData(client: GitHubClient): Promise<LoadedTerm | n
       students: studentsFile ? parseCsv(studentsFile.text).map(toStudent) : [],
       goals: goalsFile ? parseCsv(goalsFile.text).map(toGoal) : [],
       schedule: scheduleFile ? parseCsv(scheduleFile.text).map(toScheduleEntry) : [],
+      activities: activitiesFile
+        ? (JSON.parse(activitiesFile.text) as unknown[]).map(toActivity)
+        : [],
     },
     shas: {
       term: termFile.sha,
@@ -91,6 +99,7 @@ export async function loadTermData(client: GitHubClient): Promise<LoadedTerm | n
       students: studentsFile?.sha,
       goals: goalsFile?.sha,
       schedule: scheduleFile?.sha,
+      activities: activitiesFile?.sha,
     },
   };
 }
@@ -169,6 +178,20 @@ export function writeTeachers(
     PATHS.teachers,
     `${JSON.stringify(teachers, null, 2)}\n`,
     "data: update teachers",
+    sha,
+  );
+}
+
+// Writes activities.json (the shared catalog); returns the new blob sha.
+export function writeActivities(
+  client: GitHubClient,
+  activities: Activity[],
+  sha: string | undefined,
+): Promise<string> {
+  return client.writeFile(
+    PATHS.activities,
+    `${JSON.stringify(activities, null, 2)}\n`,
+    "data: update activities",
     sha,
   );
 }
@@ -326,12 +349,29 @@ function toTeacher(raw: unknown): Teacher {
     name: t.name ?? "",
     color: t.color ?? "blue",
     modes: t.modes ?? ["regular"],
-    activities: t.activities ?? [],
+    // Activities are now ids into the shared catalog. Records lacking the field
+    // (pre-migration) load with an empty menu rather than crashing.
+    activityIds: t.activityIds ?? [],
     roles: t.roles ?? [],
     sessionCaptures: t.sessionCaptures ?? [],
     archived: t.archived === true,
     promptOverrides: t.promptOverrides,
   } as Teacher;
+}
+
+// Normalizes a raw catalog entry from activities.json, tolerating missing
+// optional metadata.
+function toActivity(raw: unknown): Activity {
+  const a = (raw ?? {}) as Partial<Activity>;
+  return {
+    id: a.id ?? "",
+    name: a.name ?? "",
+    requiresSegmentName: a.requiresSegmentName === true,
+    freeText: a.freeText === true,
+    freeTextIsDescription: a.freeTextIsDescription === true,
+    descriptionTemplate: a.descriptionTemplate,
+    requiresAttribute: a.requiresAttribute,
+  };
 }
 
 function toStudent(row: Record<string, string>): Student {

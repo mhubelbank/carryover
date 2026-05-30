@@ -6,8 +6,9 @@
 //   - `<path> startsWith "..."` operator
 //   - `{path | default: "fallback"}` substitution in templates (single-brace)
 
+import { attributeSatisfied } from "./activity";
 import type { Student } from "./student";
-import type { SessionCapture, Teacher } from "./teacher";
+import type { Activity, SessionCapture, Teacher } from "./teacher";
 
 export interface EvalContext {
   student?: Student;
@@ -28,6 +29,12 @@ export function evalCondition(expr: string | undefined, ctx: EvalContext): boole
 }
 
 function evalAtom(expr: string, ctx: EvalContext): boolean {
+  // Equality: `activity.id == "a_journal"`. Lets captures bind to an activity by
+  // its stable catalog id rather than a (renameable) display name.
+  const eq = /^(.+?)\s*==\s*["'](.*?)["']\s*$/.exec(expr);
+  if (eq) {
+    return resolvePath(eq[1]!.trim(), ctx) === eq[2];
+  }
   const sw = /^(.+?)\s+startsWith\s+["'](.+?)["']\s*$/.exec(expr);
   if (sw) {
     const v = resolvePath(sw[1]!.trim(), ctx);
@@ -134,21 +141,34 @@ export function buildPostProcess(
   return (note: string) => note + appends.join("");
 }
 
-// If an active capture's activityDescriptionTemplate matches this activity
-// (via the capture's `showIf` with the activity in scope), return the rendered
-// description; otherwise return the default. The capture's own field state is
-// threaded in as `capture` so the rewrite can interpolate per-session input
-// (e.g. a multiselect of skills: `{skills | join: ", "}`).
+// Resolve the activity description, with two ordered rewrite sources. In
+// practice only one fires per activity; the ordering is a safety net:
+//   1. The catalog activity's own `descriptionTemplate` (attribute-driven —
+//      e.g. the journal entry's "{student.journalMethod}"), applied when its
+//      `requiresAttribute` is satisfied.
+//   2. A session capture's `activityDescriptionTemplate` (form-driven — e.g.
+//      José's pragmatic skills multiselect), matched by activity id. The
+//      capture's field state is threaded in as `capture` so the rewrite can
+//      interpolate per-session input (`{skills | join: ", "}`).
+//   3. Otherwise the default description.
 export function applyActivityRewrite(
   teacher: Teacher,
   student: Student,
-  activity: { name: string; additionalInfo?: string },
+  activity: Activity,
+  additionalInfo: string,
   captureState: Record<string, Record<string, unknown>>,
   defaultDescription: string,
 ): string {
+  // Eval/template context exposes the activity's id + name + per-session info.
+  const actx = { id: activity.id, name: activity.name, additionalInfo };
+
+  if (activity.descriptionTemplate && attributeSatisfied(activity, student)) {
+    return renderCaptureTemplate(activity.descriptionTemplate, { student, activity: actx });
+  }
+
   for (const cap of teacher.sessionCaptures ?? []) {
     if (!cap.activityDescriptionTemplate) continue;
-    const ctx: EvalContext = { student, activity, capture: captureState[cap.name] ?? {} };
+    const ctx: EvalContext = { student, activity: actx, capture: captureState[cap.name] ?? {} };
     if (!evalCondition(cap.showIf, ctx)) continue;
     return renderCaptureTemplate(cap.activityDescriptionTemplate, ctx);
   }

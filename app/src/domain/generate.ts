@@ -62,10 +62,11 @@ export const ROLE_PHRASES: Record<string, string> = {
 // Regular mode
 // ---------------------------------------------------------------------------
 
-// Session-level activity (chosen once, shared across students). `hasSegmentName`
-// surfaces `segmentName`; `freeText` surfaces `additionalInfo`.
+// Session-level activity (chosen once, shared across students). `activityId`
+// references the shared catalog; the catalog entry's `requiresSegmentName`
+// surfaces `segmentName` and `freeText` surfaces `additionalInfo`.
 export interface ActivityDef {
-  name: string;
+  activityId: string;
   additionalInfo: string;
   segmentName: string;
   domains: string[];
@@ -94,25 +95,24 @@ export interface RenderedActivity {
   additionalNotes: string;
 }
 
-// Build the `activities` array for {{#each activities}}. Mirrors the original
-// per-teacher TSX exactly: description defaults to name (+ " " + additionalInfo
-// when free-text), every multi-select joined with ", ". Empty activities are
-// dropped. `describe` overrides the description (used for session-capture
-// activity-description rewrites, e.g. Robin's journal).
+// Build the `activities` array for {{#each activities}}. `describe` resolves the
+// activity's id (+ session inputs) to its final description string via the
+// catalog + any rewrite; every multi-select is joined with ", ". Rows with no
+// selected activity, or whose description comes back empty (an ad-hoc "Other"
+// with no detail), are dropped.
 export function buildRegularActivities(
   defs: ActivityDef[],
   inputs: ActivityInput[],
-  describe?: (def: ActivityDef, index: number) => string,
+  describe: (def: ActivityDef, index: number) => string,
 ): RenderedActivity[] {
   const out: RenderedActivity[] = [];
   defs.forEach((def, i) => {
-    if (!def.name.trim()) return;
+    if (!def.activityId) return;
+    const description = describe(def, i).trim();
+    if (!description) return;
     const input = inputs[i];
-    const fallback = def.additionalInfo.trim()
-      ? `${def.name} ${def.additionalInfo.trim()}`
-      : def.name;
     out.push({
-      description: describe ? describe(def, i) : fallback,
+      description,
       segmentName: def.segmentName || "",
       domains: def.domains.join(", "),
       goals: (input?.goals ?? []).join(", "),

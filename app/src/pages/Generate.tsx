@@ -39,10 +39,15 @@ import {
   buildPostProcess,
   evalCondition,
 } from "../domain/captures";
+import {
+  activityOptionsForGenerate,
+  catalogById,
+  defaultDescription,
+} from "../domain/activity";
 import type { Goal } from "../domain/goal";
 import type { SessionMetadata } from "../domain/session";
 import { displayName, fullName, type Student } from "../domain/student";
-import type { Mode, Teacher } from "../domain/teacher";
+import type { Activity, Mode, Teacher } from "../domain/teacher";
 
 interface Props {
   onNavigate: (page: NavPage) => void;
@@ -90,7 +95,7 @@ function blankRegularInput(): ActivityInput {
 }
 
 function blankActivity(): ActivityDef {
-  return { name: "", additionalInfo: "", segmentName: "", domains: [] };
+  return { activityId: "", additionalInfo: "", segmentName: "", domains: [] };
 }
 
 function blankFilming(): FilmingFieldValues {
@@ -186,6 +191,10 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
 
   if (state.status !== "ready") return null;
   const { students, goals } = state.data;
+  const catalog = state.data.activities;
+  // The activities offered in the dropdown: this teacher's catalog activities
+  // plus the reserved ad-hoc "Other".
+  const activityOptions = teacher ? activityOptionsForGenerate(teacher, catalog) : [];
 
   function setStudent(id: string, patch: Partial<StudentState>) {
     setStudentState((prev) => ({ ...prev, [id]: { ...prev[id]!, ...patch } }));
@@ -319,7 +328,7 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
         continue;
       }
       try {
-        const ctx = buildContext(mode, teacher, student, st, activities, goals);
+        const ctx = buildContext(mode, teacher, student, st, activities, goals, catalog);
         const result = await generateNote(apiKey, prompts, ctx, {
           maxTokens: MAX_TOKENS_BY_MODE[mode],
           postProcess: buildPostProcess(teacher, student),
@@ -357,7 +366,7 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
     updateResult(studentId, { regenerating: true, error: undefined });
     try {
       const prompts = await loadPromptSet(client, mode);
-      const ctx = buildContext(mode, teacher, student, st, activities, goals);
+      const ctx = buildContext(mode, teacher, student, st, activities, goals, catalog);
       const result = await generateNote(keys.anthropicApiKey, prompts, ctx, {
         maxTokens: MAX_TOKENS_BY_MODE[mode],
         postProcess: buildPostProcess(teacher, student),
@@ -471,7 +480,7 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
                 key={i}
                 index={i}
                 activity={a}
-                teacher={teacher}
+                options={activityOptions}
                 onChange={(patch) => patchActivity(i, patch)}
                 onRemove={activities.length > 1 ? () => removeActivity(i) : undefined}
               />
@@ -543,6 +552,7 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
               {st.included && !st.absent && mode === "regular" && (
                 <RegularStudentCard
                   activities={activities}
+                  options={activityOptions}
                   inputs={st.regular}
                   studentGoals={studentGoals}
                   onChange={(idx, patch) => setRegularInput(student.id, idx, patch)}
@@ -592,17 +602,17 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
 function ActivityEditor({
   index,
   activity,
-  teacher,
+  options,
   onChange,
   onRemove,
 }: {
   index: number;
   activity: ActivityDef;
-  teacher: Teacher;
+  options: Activity[];
   onChange: (patch: Partial<ActivityDef>) => void;
   onRemove?: () => void;
 }) {
-  const def = teacher.activities.find((a) => a.name === activity.name);
+  const def = options.find((a) => a.id === activity.activityId);
   return (
     <div
       style={{
@@ -637,12 +647,12 @@ function ActivityEditor({
           <label className="label">Activity</label>
           <select
             className="select"
-            value={activity.name}
-            onChange={(e) => onChange({ name: e.target.value })}
+            value={activity.activityId}
+            onChange={(e) => onChange({ activityId: e.target.value })}
           >
             <option value="">— Select —</option>
-            {teacher.activities.map((a) => (
-              <option key={a.id} value={a.name}>
+            {options.map((a) => (
+              <option key={a.id} value={a.id}>
                 {a.name}
               </option>
             ))}
@@ -680,7 +690,7 @@ function ActivityEditor({
           />
         </div>
       )}
-      {def?.hasSegmentName && (
+      {def?.requiresSegmentName && (
         <div>
           <label className="label">Segment name</label>
           <input
@@ -814,11 +824,13 @@ function CapturePanel({
 
 function RegularStudentCard({
   activities,
+  options,
   inputs,
   studentGoals,
   onChange,
 }: {
   activities: ActivityDef[];
+  options: Activity[];
   inputs: ActivityInput[];
   studentGoals: Goal[];
   onChange: (idx: number, patch: Partial<ActivityInput>) => void;
@@ -828,7 +840,7 @@ function RegularStudentCard({
       {activities.map((a, i) => (
         <div key={i} style={{ borderTop: i > 0 ? "0.5px solid var(--color-border-tertiary)" : undefined, paddingTop: i > 0 ? 10 : 0 }}>
           <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 6 }}>
-            {a.name || `Activity ${i + 1}`}
+            {options.find((o) => o.id === a.activityId)?.name || `Activity ${i + 1}`}
           </div>
           <CheckGroup
             label="Goals"
@@ -1299,6 +1311,7 @@ function buildContext(
   st: StudentState,
   activities: ActivityDef[],
   goals: Goal[],
+  catalog: Activity[],
 ) {
   const pronoun = student.pronouns.split("/")[0]?.trim() || student.pronouns;
   if (mode === "filming-day") {
@@ -1330,20 +1343,16 @@ function buildContext(
     ...input,
     goals: input.goals.map((id) => goalById.get(id)?.shortName ?? "").filter(Boolean),
   }));
-  // Per-student activity-description rewrites (e.g. Robin's journal). The default
-  // description is the activity name + " " + additionalInfo, matching the
-  // original TSX behavior; a matching session-capture rewrites it in place.
+  // Resolve each selected activityId → its catalog entry, then build the
+  // description: catalog descriptionTemplate (e.g. journal) or a session-capture
+  // rewrite (e.g. José's pragmatic skills), falling back to the default. A
+  // dangling id (catalog entry deleted) yields "" and is dropped downstream.
+  const byId = catalogById(activityOptionsForGenerate(teacher, catalog));
   const activityArr = buildRegularActivities(activities, resolvedInputs, (def) => {
-    const fallback = def.additionalInfo.trim()
-      ? `${def.name} ${def.additionalInfo.trim()}`
-      : def.name;
-    return applyActivityRewrite(
-      teacher,
-      student,
-      { name: def.name, additionalInfo: def.additionalInfo },
-      st.captures,
-      fallback,
-    );
+    const activity = byId.get(def.activityId);
+    if (!activity) return "";
+    const fallback = defaultDescription(activity, def.additionalInfo);
+    return applyActivityRewrite(teacher, student, activity, def.additionalInfo, st.captures, fallback);
   });
   return regularContext({
     studentName: student.firstName,

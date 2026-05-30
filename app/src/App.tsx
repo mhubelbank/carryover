@@ -8,6 +8,7 @@ import { Settings } from "./pages/Settings";
 import { Today } from "./pages/Today";
 import { Students } from "./pages/Students";
 import { Teachers } from "./pages/Teachers";
+import { Activities } from "./pages/Activities";
 import { Schedule } from "./pages/Schedule";
 import { Generate } from "./pages/Generate";
 import { FirstTermSetup } from "./pages/FirstTermSetup";
@@ -91,6 +92,8 @@ function Pages() {
           onOpenStudent={openStudent}
         />
       );
+    case "activities":
+      return <Activities onNavigate={setPage} />;
     case "schedule":
       return <Schedule onNavigate={setPage} onOpenStudent={openStudent} />;
     case "generate":
