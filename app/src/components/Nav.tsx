@@ -17,7 +17,6 @@ interface NavProps {
 const TABS: Array<{ id: Exclude<NavPage, "settings">; label: string }> = [
   { id: "today", label: "Today" },
   { id: "schedule", label: "Schedule" },
-  { id: "generate", label: "Generate notes" },
   { id: "students", label: "Students" },
   { id: "teachers", label: "Teachers" },
   { id: "activities", label: "Activities" },
