@@ -7,7 +7,7 @@ import { daysBetween, formatLong, formatShort, mondayOf, parseDate, startOfDay, 
 import { loadWeekSchedule } from "../domain/data";
 import { slotStartMinutes, type ScheduleEntry } from "../domain/schedule";
 import { teacherColor } from "../domain/teacher";
-import { fullName, type Student } from "../domain/student";
+import { fullName, isActiveOn, type Student } from "../domain/student";
 
 interface Props {
   onNavigate: (page: NavPage) => void;
@@ -83,7 +83,16 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate }: 
   const daysToEnd = lastDay ? daysBetween(now, lastDay) : null;
   const termEnding = daysToEnd != null && daysToEnd >= 0 && daysToEnd <= 14;
 
-  const sessions = buildSessions(effectiveSchedule, weekdayName(selected));
+  // Skip students who are archived OR outside their enrollment window for the
+  // selected date. The schedule.csv may still list them, but they don't appear
+  // in that day's session.
+  const activeStudentIds = new Set(
+    students.filter((s) => isActiveOn(s, selected)).map((s) => s.id),
+  );
+  const sessions = buildSessions(effectiveSchedule, weekdayName(selected)).map((s) => ({
+    ...s,
+    studentIds: s.studentIds.filter((id) => activeStudentIds.has(id)),
+  })).filter((s) => s.studentIds.length > 0);
   const studentCount = new Set(sessions.flatMap((s) => s.studentIds)).size;
 
   const firstDay = parseDate(term.firstDay);

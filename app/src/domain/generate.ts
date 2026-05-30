@@ -95,20 +95,24 @@ export interface RenderedActivity {
 }
 
 // Build the `activities` array for {{#each activities}}. Mirrors the original
-// per-teacher TSX exactly: description = name (+ " " + additionalInfo when
-// free-text), every multi-select joined with ", ". Empty activities are dropped.
+// per-teacher TSX exactly: description defaults to name (+ " " + additionalInfo
+// when free-text), every multi-select joined with ", ". Empty activities are
+// dropped. `describe` overrides the description (used for session-capture
+// activity-description rewrites, e.g. Nina's journal).
 export function buildRegularActivities(
   defs: ActivityDef[],
   inputs: ActivityInput[],
+  describe?: (def: ActivityDef, index: number) => string,
 ): RenderedActivity[] {
   const out: RenderedActivity[] = [];
   defs.forEach((def, i) => {
     if (!def.name.trim()) return;
     const input = inputs[i];
+    const fallback = def.additionalInfo.trim()
+      ? `${def.name} ${def.additionalInfo.trim()}`
+      : def.name;
     out.push({
-      description: def.additionalInfo.trim()
-        ? `${def.name} ${def.additionalInfo.trim()}`
-        : def.name,
+      description: describe ? describe(def, i) : fallback,
       segmentName: def.segmentName || "",
       domains: def.domains.join(", "),
       goals: (input?.goals ?? []).join(", "),

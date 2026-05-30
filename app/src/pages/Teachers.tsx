@@ -9,7 +9,6 @@ import {
   type Activity,
   type ColorKey,
   type Mode,
-  type PerStudentField,
   type Role,
   type Teacher,
 } from "../domain/teacher";
@@ -263,19 +262,6 @@ function TeacherDetail({
       ),
     }));
 
-  const addField = () =>
-    setDraft((d) => ({
-      ...d,
-      perStudentFields: [...d.perStudentFields, { key: "", label: "", type: "bool" }],
-    }));
-  const updateFieldLabel = (index: number, label: string) =>
-    setDraft((d) => ({
-      ...d,
-      perStudentFields: d.perStudentFields.map((f, i) => (i === index ? { ...f, label } : f)),
-    }));
-  const removeField = (index: number) =>
-    setDraft((d) => ({ ...d, perStudentFields: d.perStudentFields.filter((_, i) => i !== index) }));
-
   // Copy another teacher's activities/roles in (appended with fresh ids).
   const copyActivitiesFrom = (sourceId: string) => {
     const source = data!.teachers.find((t) => t.id === sourceId);
@@ -312,7 +298,7 @@ function TeacherDetail({
     }
     setSaving(true);
     setError(null);
-    // Drop blank rows; derive keys for new per-student fields.
+    // Drop blank activity/role rows on save.
     const cleaned: Teacher = {
       ...draft,
       activities: draft.activities
@@ -321,7 +307,6 @@ function TeacherDetail({
       roles: draft.roles
         .map((r) => ({ ...r, name: r.name.trim(), phrase: r.phrase.trim() }))
         .filter((r) => r.name !== ""),
-      perStudentFields: finalizeFields(draft.perStudentFields),
     };
     const next = isNew
       ? [...data!.teachers, cleaned]
@@ -568,34 +553,6 @@ function TeacherDetail({
           )}
         </div>
       )}
-
-      <div className="card" style={{ marginBottom: "1rem" }}>
-        <SectionHeader title="Per-student fields" onAdd={addField} addLabel="Add field" />
-        {draft.perStudentFields.length === 0 ? (
-          <p style={{ fontSize: 13, color: "var(--color-text-tertiary)" }}>
-            No per-student fields. Students under {draft.name || "this teacher"} only have the standard
-            fields.
-          </p>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {draft.perStudentFields.map((field, i) => (
-              <div key={field.key || `new-${i}`} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <input
-                  className="input"
-                  style={{ flex: 1, height: 32 }}
-                  placeholder="Field label (e.g. Needs Bengali support)"
-                  value={field.label}
-                  onChange={(e) => updateFieldLabel(i, e.target.value)}
-                />
-                <span style={{ fontSize: 11, color: "var(--color-text-tertiary)", flexShrink: 0 }}>
-                  yes / no
-                </span>
-                <RemoveButton title="Remove field" onClick={() => removeField(i)} />
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
 
       <div className="card">
         <div
@@ -862,7 +819,7 @@ function cloneTeacher(t: Teacher): Teacher {
     modes: [...t.modes],
     activities: t.activities.map((a) => ({ ...a })),
     roles: t.roles.map((r) => ({ ...r, fields: [...r.fields] })),
-    perStudentFields: t.perStudentFields.map((f) => ({ ...f })),
+    sessionCaptures: (t.sessionCaptures ?? []).map((c) => ({ ...c })),
   };
 }
 
@@ -874,7 +831,7 @@ function blankTeacher(): Teacher {
     modes: ["regular"],
     activities: [],
     roles: [],
-    perStudentFields: [],
+    sessionCaptures: [],
   };
 }
 
@@ -899,32 +856,3 @@ function duplicateNames(names: string[]): Set<string> {
   return new Set([...counts.entries()].filter(([, c]) => c > 1).map(([k]) => k));
 }
 
-// Drop label-less fields; derive a stable camelCase key for new ones (empty
-// key) while preserving existing keys so student values stay mapped. Keys are
-// de-duplicated.
-function finalizeFields(fields: PerStudentField[]): PerStudentField[] {
-  const used = new Set<string>();
-  const result: PerStudentField[] = [];
-  for (const field of fields) {
-    const label = field.label.trim();
-    if (label === "") continue;
-    const base = field.key.trim() || camelKey(label);
-    let key = base;
-    let n = 2;
-    while (used.has(key)) key = `${base}${n++}`;
-    used.add(key);
-    result.push({ key, label, type: "bool" });
-  }
-  return result;
-}
-
-function camelKey(label: string): string {
-  const words = label
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-  if (words.length === 0) return "field";
-  return words[0] + words.slice(1).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join("");
-}

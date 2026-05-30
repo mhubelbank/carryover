@@ -55,10 +55,44 @@ export interface Role {
   fields: string[];
 }
 
-export interface PerStudentField {
-  key: string;
-  label: string;
-  type: "bool";
+// A per-session UI field collected inside a session capture. Rendered in the
+// Generate form when the capture is active for the student.
+export interface SessionCaptureField {
+  name: string;
+  type: "bool" | "text";
+  label?: string;
+  placeholder?: string;
+  // Condition controlling whether this field renders. Bare names resolve
+  // against the current capture's field values; dotted paths (e.g.
+  // `student.needsBengali`) resolve against the wider context.
+  showIf?: string;
+}
+
+// Declarative per-teacher session-time behavior. Three patterns:
+//   1. fields + promptInjection (e.g. Joanne's Bengali) — UI form fields whose
+//      values feed a template appended to additionalContext.
+//   2. postProcess (e.g. Nina's Spanish) — no UI, deterministic string append
+//      to the final note. Bypasses the LLM.
+//   3. activityDescriptionTemplate (e.g. Nina's journal) — rewrites the
+//      activity description string before it reaches the prompt.
+export interface SessionCapture {
+  // Stable key used to store this capture's form state per student.
+  name: string;
+  // Top-level condition gating whether this capture applies for a given
+  // student / activity. Empty means always-on.
+  showIf?: string;
+  fields?: SessionCaptureField[];
+  promptInjection?: {
+    // Condition (within the capture's field state) gating injection.
+    when?: string;
+    template: string;
+  };
+  postProcess?: {
+    // Independent condition (typically student.X). Used outside the form.
+    when?: string;
+    appendToFinalNote: string;
+  };
+  activityDescriptionTemplate?: string;
 }
 
 export interface Teacher {
@@ -68,6 +102,6 @@ export interface Teacher {
   modes: Mode[];
   activities: Activity[];
   roles: Role[];
-  perStudentFields: PerStudentField[];
+  sessionCaptures: SessionCapture[];
   promptOverrides?: Record<string, string>;
 }

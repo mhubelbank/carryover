@@ -29,8 +29,8 @@ Chosen over GitHub Pages (private Pages requires Enterprise plan; Pro only hides
 
 ### Stored in the repo (GitHub API)
 
-- **`data/teachers.json`** — id (stable, name-independent), name (display label), color (one of 12 palette options), supported modes (regular, filming-day), activities[], roles[] (filming-day only), per-student field declarations (e.g. Joanne's `needsBengali`), optional prompt overrides
-- **`data/students.csv`** — id, name, pronouns, teacherId, age, AAC device, next IEP review date (nullable), per-teacher quirk values
+- **`data/teachers.json`** — id (stable, name-independent), name (display label), color (one of 12 palette options), supported modes (regular, filming-day), activities[], roles[] (filming-day only), **`sessionCaptures[]`** declaring per-teacher session-time behavior (see below), optional prompt overrides
+- **`data/students.csv`** — id, firstName, middle, lastName, pronouns, teacherId, birthday, age (legacy fallback), aacDevice, nextIepReview, nextTriennial, mandate, firstDay, lastDay, archived, needsSpanish, needsBengali, journalMethod. Durable student attributes live as first-class columns (no `fields` blob); empty for most students — sparse columns are fine.
 - **`data/goals.csv`** — studentId, longTermGoal text, shortName, archived (bool)
 - **`data/schedule.csv`** — teacherId, dayOfWeek, timeSlot, studentId
 - **`data/term.json`** — termType (school-year | summer), firstDay, lastDay, label (auto-generated)
@@ -87,7 +87,9 @@ Banners stack at top when triggered:
 ### Students
 List with search and teacher filter. Inline rows: name, teacher, pronouns, AAC, goal count, next IEP date.
 
-Detail view: profile (name, pronouns, age, teacher, AAC), IEP dates, teacher-specific fields (rendered from teacher's per-student field declarations), and **IEP history timeline** — one row per past review, showing what changed (`+ N goals` / `N retired` / "Nothing changed" affirmation) and linking to a diff view.
+Detail view: profile (first / middle / last name, pronouns, birthday + computed age, teacher, AAC), IEP dates, enrollment window (firstDay / lastDay), language / session supports (`needsSpanish`, `needsBengali`, `journalMethod`), and **IEP history timeline** — one row per past review, showing what changed (`+ N goals` / `N retired` / "Nothing changed" affirmation) and linking to a diff view.
+
+Same-teacher first-name collisions are handled by the table's display cascade (first → first L. → first last → first middle last) and the form's collision check, which blocks save when first + middle + last all match another active student on the same teacher. Archived students are out of the collision pool. The Students list has an Active / Archived toggle, and past-`lastDay` rows are flagged with a one-click "Archive N departed students" banner.
 
 ### Generate notes
 
@@ -173,7 +175,7 @@ List of all teachers; per-teacher edit view with:
 - **Basics**: name + color (12-swatch palette, preview shows real teachers in their current colors)
 - **Regular activities**: drag-orderable, each with edit/remove and optional flags (`hasSegmentName`, `freeText`)
 - **Filming-day roles**: drag-orderable; each opens a dialog to set name, phrase, and which conditional field-components are enabled (Visual cues, Facial expressions, Decoding carryover, Pragmatic skills, Gave compliments, Free-text role description). Field types themselves are developer-defined.
-- **Per-student fields**: declared here, rendered on student detail (e.g. Joanne declares "Bengali support: bool")
+- **Session captures**: declarative per-teacher session-time behavior (see "Session captures" under LLM details below). Authored by editing `data/teachers.json` directly for now; a UI for this is out of scope for v1.
 - **Prompt overrides** (advanced, disclosed)
 
 ### New term setup wizard
@@ -216,6 +218,16 @@ The generated all-notes block uses the disambiguated display name, so whatever d
 - Spend cap set in her Anthropic dashboard
 - Failures retried with backoff; persistent failure shows an error on the per-student card with regenerate option
 - When trial data is present for a student (Trials mode), the draft prompt receives it as structured input and is instructed to incorporate the trial sentence(s) verbatim in the format above. The review/streamline passes are constrained to preserve those exact numbers.
+
+### Session captures (per-teacher, declarative)
+
+Each teacher in `data/teachers.json` carries a `sessionCaptures` array. Each capture has a top-level `showIf` (typically reads a student attribute like `student.needsBengali`) that gates whether it applies for a given student / activity. Three capture patterns are supported, and a single capture may combine them:
+
+1. **Form fields + prompt injection** — `fields[]` declares per-session UI inputs (bool / text), with optional per-field `showIf` to nest conditional fields. When `promptInjection.when` is met (typically a captured field value), `promptInjection.template` is rendered against `{student, capture}` and appended to the prompt's `additionalContext` (regular and filming both). Example: Joanne's Bengali capture surfaces a `bengaliUsed` checkbox and a conditional `bengaliDetails` text field, injecting `\nBengali language support: …` into the draft prompt.
+2. **Post-process append** — `postProcess.when` + `postProcess.appendToFinalNote`. No UI, no LLM call — a deterministic string append to the final note after the streamline pass. Example: Nina's Spanish capture, which appends a fixed translation-support sentence whenever `student.needsSpanish`.
+3. **Activity description rewrite** — `activityDescriptionTemplate` interpolates student/activity attributes into the activity description string *before* it reaches the prompt. The capture's `showIf` typically combines a student attr with a `startsWith` match on the activity name. Example: Nina's journal capture rewrites the description for activities starting with "Completed a journal entry" to incorporate `student.journalMethod`.
+
+The expression syntax in `showIf` / `when` supports dotted paths (`student.X`, `activity.Y`), bare identifiers (resolved against the capture's current field state), `&&` between atoms, and `<path> startsWith "..."`. Template substitution uses single-brace `{path | default: "fallback"}` (distinct from the double-brace Mustache syntax used by the LLM-prompt templates in `data/prompts/`).
 
 ## Quirks preserved from current app
 
