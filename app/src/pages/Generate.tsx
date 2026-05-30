@@ -34,7 +34,7 @@ import {
 } from "../domain/notes";
 import type { Goal } from "../domain/goal";
 import type { SessionMetadata } from "../domain/session";
-import type { Student } from "../domain/student";
+import { displayName, fullName, type Student } from "../domain/student";
 import type { Mode, Teacher } from "../domain/teacher";
 
 interface Props {
@@ -240,9 +240,12 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
     setPhase("running");
     setError(null);
     // Initialize result rows so the UI can show per-student progress.
+    // The all-notes block uses the disambiguated display name (scoped to the
+    // students actually in this session), so two "Kai"s on the same caseload
+    // render as "Kai M." vs "Kai R." before the colon.
     const initial: ResultRow[] = includedStudents.map((s) => ({
       studentId: s.id,
-      name: s.name,
+      name: displayName(s, includedStudents),
       absent: studentState[s.id]!.absent,
     }));
     setResults(initial);
@@ -263,7 +266,11 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
       const st = studentState[student.id]!;
       if (st.absent) {
         updateResult(student.id, {
-          result: { draft: "", reviewed: "", final: absentNote(student.name) },
+          result: {
+            draft: "",
+            reviewed: "",
+            final: absentNote(displayName(student, includedStudents)),
+          },
         });
         continue;
       }
@@ -457,7 +464,7 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
                     checked={st.included}
                     onChange={(e) => setStudent(student.id, { included: e.target.checked })}
                   />
-                  <span style={{ fontSize: 15, fontWeight: 500 }}>{student.name}</span>
+                  <span style={{ fontSize: 15, fontWeight: 500 }}>{fullName(student)}</span>
                   <span style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>
                     {student.pronouns}
                   </span>
@@ -1121,14 +1128,16 @@ function buildContext(
   const pronoun = student.pronouns.split("/")[0]?.trim() || student.pronouns;
   if (mode === "filming-day") {
     const role = teacher.roles.find((r) => r.id === st.roleId);
-    if (!role) throw new Error(`Pick a role for ${student.name}`);
+    if (!role) throw new Error(`Pick a role for ${fullName(student)}`);
     const phrase = resolveRolePhrase(role, st.filming);
     const roleData = buildRoleData(role, st.filming);
     const selectedShortNames = goals
       .filter((g) => st.filmingGoalIds.includes(g.id))
       .map((g) => g.shortName);
     return filmingContext({
-      studentName: student.name,
+      // Narrative uses first name only for natural clinical prose; the all-notes
+      // block separately uses displayName for the colon-label disambiguation.
+      studentName: student.firstName,
       pronouns: student.pronouns,
       teacher,
       role: { ...role, name: role.name },
@@ -1147,7 +1156,7 @@ function buildContext(
   }));
   const activityArr = buildRegularActivities(activities, resolvedInputs);
   return regularContext({
-    studentName: student.name,
+    studentName: student.firstName,
     pronouns: student.pronouns,
     pronoun,
     individualSession: false,

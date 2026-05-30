@@ -6,7 +6,14 @@ import { loadIepHistory } from "../domain/data";
 import { formatShort, parseDate } from "../domain/dates";
 import type { Goal } from "../domain/goal";
 import type { IepReview } from "../domain/iep";
-import { ageFlag, type Student } from "../domain/student";
+import {
+  ageFlag,
+  computedAge,
+  displayName,
+  fullName,
+  isDeparted,
+  type Student,
+} from "../domain/student";
 import { StudentGoals } from "./Goals";
 
 interface Props {
@@ -65,7 +72,6 @@ export function Students({ onNavigate, target, onTargetConsumed }: Props) {
         />
       );
     }
-    // Student was removed — fall through to the list.
   }
   if (view.kind === "goals") {
     return (
@@ -94,9 +100,11 @@ function StudentsList({
   onOpen: (id: string) => void;
   onAdd: () => void;
 }) {
-  const { state, teacherById } = useTerm();
+  const { state, teacherById, saveStudents } = useTerm();
   const [query, setQuery] = useState("");
   const [teacherFilter, setTeacherFilter] = useState<string>("all");
+  const [archivedView, setArchivedView] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   const data = state.status === "ready" ? state.data : null;
   const goalCount = useMemo(
@@ -105,11 +113,24 @@ function StudentsList({
   );
   if (!data) return null;
 
+  const pool = data.students.filter((s) => s.archived === archivedView);
+  const departed = !archivedView ? pool.filter((s) => isDeparted(s)) : [];
   const q = query.trim().toLowerCase();
-  const filtered = data.students
+  const filtered = pool
     .filter((s) => (teacherFilter === "all" ? true : s.teacherId === teacherFilter))
-    .filter((s) => (q === "" ? true : s.name.toLowerCase().includes(q)))
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .filter((s) => (q === "" ? true : fullName(s).toLowerCase().includes(q)))
+    .sort((a, b) => fullName(a).localeCompare(fullName(b)));
+
+  async function archiveDeparted() {
+    if (departed.length === 0) return;
+    const ids = new Set(departed.map((s) => s.id));
+    setBusy(true);
+    try {
+      await saveStudents(data!.students.map((s) => (ids.has(s.id) ? { ...s, archived: true } : s)));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <div className="shell">
@@ -127,15 +148,77 @@ function StudentsList({
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 500, margin: 0 }}>Students</h1>
           <p style={{ margin: "4px 0 0 0", color: "var(--color-text-secondary)", fontSize: 14 }}>
-            {data.students.length} student{data.students.length === 1 ? "" : "s"} across{" "}
-            {data.teachers.length} teacher{data.teachers.length === 1 ? "" : "s"}
+            {pool.length} {archivedView ? "archived" : "active"} student
+            {pool.length === 1 ? "" : "s"} across {data.teachers.length} teacher
+            {data.teachers.length === 1 ? "" : "s"}
           </p>
         </div>
-        <button className="button button--small" onClick={onAdd}>
-          <Icon name="plus" size={14} />
-          Add student
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <div
+            style={{
+              display: "inline-flex",
+              border: "0.5px solid var(--color-border-secondary)",
+              borderRadius: "var(--border-radius-md)",
+              overflow: "hidden",
+            }}
+          >
+            <button
+              className="button button--small"
+              onClick={() => setArchivedView(false)}
+              style={{
+                border: "none",
+                borderRadius: 0,
+                background: !archivedView ? "var(--color-background-secondary)" : "transparent",
+              }}
+            >
+              Active
+            </button>
+            <button
+              className="button button--small"
+              onClick={() => setArchivedView(true)}
+              style={{
+                border: "none",
+                borderRadius: 0,
+                background: archivedView ? "var(--color-background-secondary)" : "transparent",
+              }}
+            >
+              Archived
+            </button>
+          </div>
+          {!archivedView && (
+            <button className="button button--small" onClick={onAdd}>
+              <Icon name="plus" size={14} />
+              Add student
+            </button>
+          )}
+        </div>
       </div>
+
+      {departed.length > 0 && (
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 10,
+            padding: "10px 14px",
+            marginBottom: "1rem",
+            border: "0.5px solid var(--color-border-warning)",
+            background: "var(--color-background-warning)",
+            color: "var(--color-text-warning)",
+            borderRadius: "var(--border-radius-md)",
+            fontSize: 13,
+          }}
+        >
+          <span>
+            {departed.length} student{departed.length === 1 ? " is" : "s are"} past their last day
+            — ready to archive.
+          </span>
+          <button className="button button--small" onClick={archiveDeparted} disabled={busy}>
+            {busy ? "Archiving…" : `Archive ${departed.length}`}
+          </button>
+        </div>
+      )}
 
       <div style={{ display: "flex", gap: 8, marginBottom: "1rem" }}>
         <div style={{ flex: 1, position: "relative" }}>
@@ -181,14 +264,17 @@ function StudentsList({
           overflow: "hidden",
         }}
       >
-        <table style={{ width: "100%", fontSize: 14, borderCollapse: "collapse", tableLayout: "fixed" }}>
+        <table
+          style={{ width: "100%", fontSize: 14, borderCollapse: "collapse", tableLayout: "fixed" }}
+        >
           <thead>
             <tr style={{ background: "var(--color-background-secondary)" }}>
-              <th style={th(24)}>Name</th>
+              <th style={th(22)}>Name</th>
               <th style={th(14)}>Teacher</th>
-              <th style={th(12)}>Pronouns</th>
-              <th style={th(24)}>AAC device</th>
-              <th style={th(9)}>Goals</th>
+              <th style={th(8)}>Age</th>
+              <th style={th(10)}>Pronouns</th>
+              <th style={th(22)}>AAC device</th>
+              <th style={th(7)}>Goals</th>
               <th style={th(12)}>Next IEP</th>
               <th style={{ width: "5%" }} />
             </tr>
@@ -197,23 +283,47 @@ function StudentsList({
             {filtered.map((s) => {
               const iep = parseDate(s.nextIepReview);
               const count = goalCount.get(s.id) ?? 0;
+              const departedRow = isDeparted(s);
+              const age = computedAge(s);
+              const display = displayName(s, pool);
               return (
                 <tr
                   key={s.id}
                   onClick={() => onOpen(s.id)}
-                  style={{ borderTop: "0.5px solid var(--color-border-tertiary)", cursor: "pointer" }}
+                  style={{
+                    borderTop: "0.5px solid var(--color-border-tertiary)",
+                    cursor: "pointer",
+                    color: departedRow ? "var(--color-text-tertiary)" : undefined,
+                  }}
                 >
-                  <td style={td()}>{s.name}</td>
+                  <td style={td()}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                      {departedRow && (
+                        <span
+                          title={`Past last day (${s.lastDay ?? ""})`}
+                          style={{ color: "var(--color-text-warning)", lineHeight: 0 }}
+                        >
+                          <Icon name="alert-circle" size={13} />
+                        </span>
+                      )}
+                      <span>{display}</span>
+                    </span>
+                  </td>
                   <td style={td("var(--color-text-secondary)")}>
                     {teacherById.get(s.teacherId)?.name ?? "—"}
                   </td>
+                  <td style={td(ageColorOf(age))}>{age ?? "—"}</td>
                   <td style={td("var(--color-text-secondary)")}>{s.pronouns || "—"}</td>
                   <td style={{ ...td("var(--color-text-secondary)"), fontSize: 13 }}>
                     {s.aacDevice ?? "—"}
                   </td>
                   <td
                     style={{
-                      ...td(count === 0 ? "var(--color-text-warning)" : "var(--color-text-secondary)"),
+                      ...td(
+                        count === 0
+                          ? "var(--color-text-warning)"
+                          : "var(--color-text-secondary)",
+                      ),
                       fontWeight: count === 0 ? 500 : 400,
                     }}
                   >
@@ -242,8 +352,8 @@ function StudentsList({
           }}
         >
           {filtered.length === 0
-            ? "No students match"
-            : `Showing ${filtered.length} of ${data.students.length}`}
+            ? `No ${archivedView ? "archived" : "active"} students match`
+            : `Showing ${filtered.length} of ${pool.length}`}
         </div>
       </div>
     </div>
@@ -295,38 +405,34 @@ function StudentDetail({
 
   const teacher = teacherById.get(draft.teacherId);
   const dirty = isNew || JSON.stringify(draft) !== JSON.stringify(baseline);
-  const flag = ageFlag(draft.age);
-  const ageColor =
-    flag === "alert"
-      ? "var(--color-text-danger)"
-      : flag === "warn"
-        ? "var(--color-text-warning)"
-        : undefined;
+  const liveAge = computedAge(draft);
+  const flag = ageFlag(liveAge);
+  const ageColor = ageColorOf(liveAge, flag);
   const goalCount = data.goals.filter((g) => g.studentId === draft.id && !g.archived).length;
 
-  const trimmedName = draft.name.trim().toLowerCase();
+  // New collision rule: same first + middle + last AND same teacher, comparing
+  // against active (non-archived) students only. Archived students are out of
+  // the collision pool by design.
+  const draftKey = nameKey(draft);
+  const samePool = data.students.filter((s) => !s.archived || s.id === draft.id);
   const sameTeacherDupe =
-    trimmedName !== "" &&
-    data.students.some(
+    draftKey !== "" &&
+    samePool.some(
       (s) =>
-        s.id !== draft.id &&
-        s.teacherId === draft.teacherId &&
-        s.name.trim().toLowerCase() === trimmedName,
+        s.id !== draft.id && s.teacherId === draft.teacherId && nameKey(s) === draftKey,
     );
-  const crossTeacherDupe = data.students.find(
+  const crossTeacherDupe = samePool.find(
     (s) =>
       s.id !== draft.id &&
       s.teacherId !== draft.teacherId &&
-      s.name.trim() !== "" &&
-      s.name.trim().toLowerCase() === trimmedName,
+      draftKey !== "" &&
+      nameKey(s) === draftKey,
   );
 
   const set = (patch: Partial<Student>) => setDraft((d) => ({ ...d, ...patch }));
-  const setBoolField = (key: string, on: boolean) =>
-    setDraft((d) => ({ ...d, fields: { ...d.fields, [key]: on ? "true" : "false" } }));
 
   async function handleSave() {
-    const problem = validateStudentName(data!.students, draft);
+    const problem = validateStudent(data!.students, draft);
     if (problem) {
       setError(problem);
       return;
@@ -347,6 +453,24 @@ function StudentDetail({
     }
   }
 
+  async function handleArchiveToggle() {
+    setSaving(true);
+    setError(null);
+    try {
+      const next = data!.students.map((s) =>
+        s.id === draft.id ? { ...s, archived: !s.archived } : s,
+      );
+      await saveStudents(next);
+      // Reflect new archived state in the draft + baseline so the toolbar updates.
+      setDraft((d) => ({ ...d, archived: !d.archived }));
+      setBaseline((b) => ({ ...b, archived: !b.archived }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Archive failed");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function handleRemove() {
     setSaving(true);
     setError(null);
@@ -358,6 +482,10 @@ function StudentDetail({
       setSaving(false);
     }
   }
+
+  const headerName = fullName(draft).trim() || "New student";
+  const initial = draft.firstName.trim().charAt(0).toUpperCase() || "?";
+  const departedNow = isDeparted(draft);
 
   return (
     <div className="shell">
@@ -397,11 +525,51 @@ function StudentDetail({
               fontSize: 15,
             }}
           >
-            {draft.name.trim().charAt(0).toUpperCase() || "?"}
+            {initial}
           </div>
           <div>
-            <h1 style={{ fontSize: 22, fontWeight: 500, margin: 0 }}>
-              {draft.name.trim() || "New student"}
+            <h1
+              style={{
+                fontSize: 22,
+                fontWeight: 500,
+                margin: 0,
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              {headerName}
+              {draft.archived && (
+                <span
+                  style={{
+                    fontSize: 11,
+                    padding: "2px 8px",
+                    background: "var(--color-background-secondary)",
+                    color: "var(--color-text-tertiary)",
+                    borderRadius: "var(--border-radius-md)",
+                  }}
+                >
+                  Archived
+                </span>
+              )}
+              {departedNow && !draft.archived && (
+                <span
+                  style={{
+                    fontSize: 11,
+                    padding: "2px 8px",
+                    background: "var(--color-background-warning)",
+                    color: "var(--color-text-warning)",
+                    borderRadius: "var(--border-radius-md)",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 4,
+                  }}
+                  title={`Last day was ${draft.lastDay ?? ""}`}
+                >
+                  <Icon name="alert-circle" size={11} />
+                  Past last day
+                </span>
+              )}
             </h1>
             <p style={{ margin: "4px 0 0 0", color: "var(--color-text-secondary)", fontSize: 14 }}>
               {teacher ? `${teacher.name}'s caseload` : "No teacher"} · {goalCount} goal
@@ -415,6 +583,13 @@ function StudentDetail({
               View goals
               <Icon name="chevron-right" size={14} />
             </button>
+            <button
+              className="button button--small"
+              onClick={handleArchiveToggle}
+              disabled={saving}
+            >
+              {draft.archived ? "Unarchive" : "Archive"}
+            </button>
             {confirmingRemove ? (
               <>
                 <button
@@ -424,7 +599,11 @@ function StudentDetail({
                 >
                   Cancel
                 </button>
-                <button className="button button--small button--danger-text" onClick={handleRemove} disabled={saving}>
+                <button
+                  className="button button--small button--danger-text"
+                  onClick={handleRemove}
+                  disabled={saving}
+                >
                   Confirm remove
                 </button>
               </>
@@ -442,9 +621,30 @@ function StudentDetail({
 
       <div className="card" style={{ marginBottom: "1rem" }}>
         <h3 className="card__title">Profile</h3>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "14px 20px" }}>
-          <EditField label="Name">
-            <input className="input" value={draft.name} onChange={(e) => set({ name: e.target.value })} />
+        <div
+          style={{ display: "grid", gridTemplateColumns: "2fr 1fr 2fr", gap: "14px 20px" }}
+        >
+          <EditField label="First name">
+            <input
+              className="input"
+              value={draft.firstName}
+              onChange={(e) => set({ firstName: e.target.value })}
+            />
+          </EditField>
+          <EditField label="Middle / suffix">
+            <input
+              className="input"
+              value={draft.middle}
+              placeholder="R."
+              onChange={(e) => set({ middle: e.target.value })}
+            />
+          </EditField>
+          <EditField label="Last name">
+            <input
+              className="input"
+              value={draft.lastName}
+              onChange={(e) => set({ lastName: e.target.value })}
+            />
           </EditField>
           <EditField label="Pronouns">
             <input
@@ -454,13 +654,26 @@ function StudentDetail({
               onChange={(e) => set({ pronouns: e.target.value })}
             />
           </EditField>
+          <EditField label="Birthday">
+            <input
+              className="input"
+              type="date"
+              value={draft.birthday ?? ""}
+              onChange={(e) => set({ birthday: e.target.value || null })}
+            />
+          </EditField>
           <EditField label="Age">
             <input
               className="input"
-              type="number"
-              value={draft.age ?? ""}
-              style={ageColor ? { color: ageColor } : undefined}
-              onChange={(e) => set({ age: e.target.value === "" ? null : Number(e.target.value) })}
+              value={liveAge ?? ""}
+              readOnly
+              style={{
+                ...(ageColor ? { color: ageColor } : {}),
+                background: "var(--color-background-secondary)",
+                cursor: "not-allowed",
+              }}
+              placeholder={draft.birthday ? "" : "Set birthday"}
+              title="Computed from birthday"
             />
           </EditField>
           <EditField label="Teacher">
@@ -482,15 +695,48 @@ function StudentDetail({
               <input
                 className="input"
                 value={draft.aacDevice ?? ""}
-                onChange={(e) => set({ aacDevice: e.target.value === "" ? null : e.target.value })}
+                onChange={(e) =>
+                  set({ aacDevice: e.target.value === "" ? null : e.target.value })
+                }
               />
             </EditField>
           </div>
         </div>
 
         <Divider />
-        <h3 style={{ fontSize: 14, fontWeight: 500, margin: "0 0 12px 0" }}>IEP dates</h3>
+        <h3 style={{ fontSize: 14, fontWeight: 500, margin: "0 0 12px 0" }}>Enrollment</h3>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "14px 20px" }}>
+          <EditField label="First day">
+            <input
+              className="input"
+              type="date"
+              value={draft.firstDay ?? ""}
+              onChange={(e) => set({ firstDay: e.target.value || null })}
+            />
+          </EditField>
+          <EditField label="Last day">
+            <input
+              className="input"
+              type="date"
+              value={draft.lastDay ?? ""}
+              onChange={(e) => set({ lastDay: e.target.value || null })}
+            />
+          </EditField>
+          <EditField label="Mandate">
+            <input
+              className="input"
+              value={draft.mandate ?? ""}
+              placeholder="1:30:1"
+              onChange={(e) =>
+                set({ mandate: e.target.value === "" ? null : e.target.value })
+              }
+            />
+          </EditField>
+        </div>
+
+        <Divider />
+        <h3 style={{ fontSize: 14, fontWeight: 500, margin: "0 0 12px 0" }}>IEP dates</h3>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px 20px" }}>
           <EditField label="Next IEP review">
             <input
               className="input"
@@ -507,42 +753,43 @@ function StudentDetail({
               onChange={(e) => set({ nextTriennial: e.target.value || null })}
             />
           </EditField>
-          <EditField label="Mandate">
-            <input
-              className="input"
-              value={draft.mandate ?? ""}
-              placeholder="1:30:1"
-              onChange={(e) => set({ mandate: e.target.value === "" ? null : e.target.value })}
-            />
-          </EditField>
         </div>
 
-        {teacher && teacher.perStudentFields.length > 0 && (
-          <>
-            <Divider />
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-              <h3 style={{ fontSize: 14, fontWeight: 500, margin: 0 }}>Teacher-specific fields</h3>
-              <span style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>
-                (from {teacher.name}'s setup)
-              </span>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {teacher.perStudentFields.map((field) => (
-                <label
-                  key={field.key}
-                  style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={isTruthy(draft.fields[field.key])}
-                    onChange={(e) => setBoolField(field.key, e.target.checked)}
-                  />
-                  {field.label}
-                </label>
-              ))}
-            </div>
-          </>
-        )}
+        <Divider />
+        <h3 style={{ fontSize: 14, fontWeight: 500, margin: "0 0 12px 0" }}>
+          Language / session supports
+        </h3>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}>
+            <input
+              type="checkbox"
+              checked={draft.needsSpanish}
+              onChange={(e) => set({ needsSpanish: e.target.checked })}
+            />
+            Needs Spanish translation support
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}>
+            <input
+              type="checkbox"
+              checked={draft.needsBengali}
+              onChange={(e) => set({ needsBengali: e.target.checked })}
+            />
+            Needs Bengali translation support
+          </label>
+          <EditField label="Journal method">
+            <select
+              className="select"
+              value={draft.journalMethod}
+              onChange={(e) =>
+                set({ journalMethod: e.target.value as Student["journalMethod"] })
+              }
+            >
+              <option value="">— Not applicable —</option>
+              <option value="traced">traced</option>
+              <option value="wrote">wrote</option>
+            </select>
+          </EditField>
+        </div>
       </div>
 
       {!isNew && (
@@ -582,14 +829,14 @@ function StudentDetail({
 
       {sameTeacherDupe ? (
         <p role="alert" style={{ marginTop: 14, fontSize: 13, color: "var(--color-text-danger)" }}>
-          Another student named "{draft.name.trim()}" is already on this teacher's caseload. Add a
-          distinguisher (e.g. "{draft.name.trim()} R.") so notes don't get mixed up.
+          Another student with the same first + last name is already on this teacher's caseload.
+          Add a middle initial or suffix (e.g. "R.") so notes don't get mixed up.
         </p>
       ) : crossTeacherDupe ? (
         <p style={{ marginTop: 14, fontSize: 12, color: "var(--color-text-warning)" }}>
-          Another student named "{draft.name.trim()}" is on{" "}
-          {teacherById.get(crossTeacherDupe.teacherId)?.name ?? "another"}'s caseload. They never share a
-          session, but you may want to distinguish them.
+          Another student with the same name is on{" "}
+          {teacherById.get(crossTeacherDupe.teacherId)?.name ?? "another"}'s caseload. They never
+          share a session, but you may want to distinguish them.
         </p>
       ) : null}
 
@@ -680,7 +927,9 @@ function ReviewRow({ review }: { review: IepReview }) {
           )}
         </div>
         {review.note && (
-          <p style={{ margin: 0, fontSize: 12, color: "var(--color-text-secondary)" }}>{review.note}</p>
+          <p style={{ margin: 0, fontSize: 12, color: "var(--color-text-secondary)" }}>
+            {review.note}
+          </p>
         )}
       </div>
     </div>
@@ -721,11 +970,6 @@ function Divider() {
   );
 }
 
-function isTruthy(value: string | undefined): boolean {
-  const t = (value ?? "").trim().toLowerCase();
-  return t === "true" || t === "1" || t === "yes";
-}
-
 function countActiveGoals(goals: Goal[]): Map<string, number> {
   const counts = new Map<string, number>();
   for (const goal of goals) {
@@ -736,40 +980,65 @@ function countActiveGoals(goals: Goal[]): Map<string, number> {
 }
 
 function cloneStudent(s: Student): Student {
-  return { ...s, fields: { ...s.fields } };
+  return { ...s };
 }
 
 function blankStudent(): Student {
   return {
     id: `s_${crypto.randomUUID()}`,
-    name: "",
+    firstName: "",
+    middle: "",
+    lastName: "",
     pronouns: "",
     teacherId: "",
+    birthday: null,
     age: null,
     aacDevice: null,
     nextIepReview: null,
     nextTriennial: null,
     mandate: null,
-    fields: {},
+    firstDay: null,
+    lastDay: null,
+    archived: false,
+    needsSpanish: false,
+    needsBengali: false,
+    journalMethod: "",
   };
 }
 
-// Same-teacher duplicate names produce two identical blocks in the all-notes
-// paste target, risking a wrong note in a legally-binding record — so block
-// and require a distinguisher. Cross-teacher dupes are only soft-warned (above).
-function validateStudentName(students: Student[], candidate: Student): string | null {
-  const name = candidate.name.trim();
-  if (name === "") return "Name can't be empty.";
-  const dupeSameTeacher = students.some(
+// Lower-cased "first|middle|last" key used to compare two students' identity.
+function nameKey(s: Pick<Student, "firstName" | "middle" | "lastName">): string {
+  const f = s.firstName.trim().toLowerCase();
+  const m = s.middle.trim().toLowerCase();
+  const l = s.lastName.trim().toLowerCase();
+  if (f === "" && m === "" && l === "") return "";
+  return `${f}|${m}|${l}`;
+}
+
+// Same-teacher first+middle+last collisions produce two identical labels in the
+// all-notes paste target — block save until the middle/suffix differentiates
+// them. Archived students are excluded from the pool by design.
+function validateStudent(students: Student[], candidate: Student): string | null {
+  if (candidate.firstName.trim() === "") return "First name can't be empty.";
+  const key = nameKey(candidate);
+  const dupe = students.some(
     (s) =>
+      !s.archived &&
       s.id !== candidate.id &&
       s.teacherId === candidate.teacherId &&
-      s.name.trim().toLowerCase() === name.toLowerCase(),
+      nameKey(s) === key,
   );
-  if (dupeSameTeacher) {
-    return `Another student named "${name}" is on this teacher's caseload. Add a distinguisher (e.g. "${name} R.") so notes don't get mixed up.`;
+  if (dupe) {
+    return "Another active student with the same first + last name is on this teacher's caseload. Add a middle initial or suffix to distinguish them.";
   }
   return null;
+}
+
+function ageColorOf(age: number | null, flag = ageFlag(age)): string | undefined {
+  if (age == null) return undefined;
+  if (flag === "alert") return "var(--color-text-danger)";
+  if (flag === "warn") return "var(--color-text-warning)";
+  return undefined;
 }
 
 function th(widthPct: number) {
