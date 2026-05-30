@@ -683,6 +683,9 @@ function blankTeacher(): Teacher {
 function validateTeacherName(teachers: Teacher[], candidate: Teacher): string | null {
   const name = candidate.name.trim();
   if (name === "") return "Name can't be empty.";
+  if (candidate.modes.length === 0) {
+    return "Pick at least one session mode (regular or filming-day).";
+  }
   // Archived teachers stay in the file with their original name; the uniqueness
   // check only enforces against active teachers so she can reuse a retired
   // teacher's name without a fight.

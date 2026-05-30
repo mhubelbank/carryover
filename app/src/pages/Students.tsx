@@ -411,14 +411,11 @@ function StudentDetail({
   // New collision rule: same first + middle + last AND same teacher, comparing
   // against active (non-archived) students only. Archived students are out of
   // the collision pool by design.
+  // Same-teacher name collisions are blocked at save time via validateStudent
+  // (-> setError), consistent with the other editors. The cross-teacher case is
+  // only an informational nudge (they never share a session), shown inline below.
   const draftKey = nameKey(draft);
   const samePool = data.students.filter((s) => !s.archived || s.id === draft.id);
-  const sameTeacherDupe =
-    draftKey !== "" &&
-    samePool.some(
-      (s) =>
-        s.id !== draft.id && s.teacherId === draft.teacherId && nameKey(s) === draftKey,
-    );
   const crossTeacherDupe = samePool.find(
     (s) =>
       s.id !== draft.id &&
@@ -765,12 +762,7 @@ function StudentDetail({
         </div>
       )}
 
-      {sameTeacherDupe ? (
-        <p role="alert" style={{ marginTop: 14, fontSize: 13, color: "var(--color-text-danger)" }}>
-          Another student with the same first + last name is already on this teacher's caseload.
-          Add a middle initial or suffix (e.g. "R.") so notes don't get mixed up.
-        </p>
-      ) : crossTeacherDupe ? (
+      {crossTeacherDupe ? (
         <p style={{ marginTop: 14, fontSize: 12, color: "var(--color-text-warning)" }}>
           Another student with the same name is on{" "}
           {teacherById.get(crossTeacherDupe.teacherId)?.name ?? "another"}'s caseload. They never
@@ -790,7 +782,6 @@ function StudentDetail({
           discardLabel={isNew ? "Cancel" : "Discard"}
           saveLabel={isNew ? "Create student" : "Save"}
           saving={saving}
-          saveDisabled={sameTeacherDupe}
           onDiscard={isNew ? onBack : () => setDraft(cloneStudent(baseline))}
           onSave={handleSave}
         />
@@ -987,6 +978,12 @@ function nameKey(s: Pick<Student, "firstName" | "middle" | "lastName">): string 
 // them. Archived students are excluded from the pool by design.
 function validateStudent(students: Student[], candidate: Student): string | null {
   if (candidate.firstName.trim() === "") return "First name can't be empty.";
+  // No teacher check: a student may legitimately be unassigned (e.g. not yet
+  // placed for the year). They simply won't appear under a teacher until set.
+  // ISO date strings sort lexicographically, so a string compare is the order.
+  if (candidate.firstDay && candidate.lastDay && candidate.firstDay > candidate.lastDay) {
+    return "Last day can't be before first day.";
+  }
   const key = nameKey(candidate);
   const dupe = students.some(
     (s) =>
