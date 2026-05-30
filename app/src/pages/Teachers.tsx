@@ -13,6 +13,7 @@ import {
   type Role,
   type Teacher,
 } from "../domain/teacher";
+import { fullName } from "../domain/student";
 
 interface Props {
   onNavigate: (page: NavPage) => void;
@@ -620,7 +621,7 @@ function TeacherDetail({
               <button
                 key={s.id}
                 onClick={() => onOpenStudent(s.id)}
-                title={`Open ${s.name}`}
+                title={`Open ${fullName(s)}`}
                 style={{
                   fontSize: 13,
                   fontFamily: "inherit",
@@ -632,7 +633,7 @@ function TeacherDetail({
                   borderRadius: "var(--border-radius-md)",
                 }}
               >
-                {s.name}
+                {fullName(s)}
               </button>
             ))}
           </div>

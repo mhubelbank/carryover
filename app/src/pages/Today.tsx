@@ -7,7 +7,7 @@ import { daysBetween, formatLong, formatShort, mondayOf, parseDate, startOfDay, 
 import { loadWeekSchedule } from "../domain/data";
 import { slotStartMinutes, type ScheduleEntry } from "../domain/schedule";
 import { teacherColor } from "../domain/teacher";
-import type { Student } from "../domain/student";
+import { fullName, type Student } from "../domain/student";
 
 interface Props {
   onNavigate: (page: NavPage) => void;
@@ -170,13 +170,13 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate }: 
               </button>
             }
           >
-            {student.name}'s IEP review was {formatShort(parseDate(student.nextIepReview) ?? now)} — goal
+            {fullName(student)}'s IEP review was {formatShort(parseDate(student.nextIepReview) ?? now)} — goal
             update needed before generating notes
           </Banner>
         ))}
         {tomorrowStudents.map((student) => (
           <Banner key={student.id} variant="info">
-            {student.name}'s IEP review is tomorrow
+            {fullName(student)}'s IEP review is tomorrow
           </Banner>
         ))}
       </div>
@@ -279,7 +279,7 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate }: 
                       <button
                         key={`${id}-${i}`}
                         onClick={() => onOpenStudent(id)}
-                        title={`Open ${student?.name ?? "student"}`}
+                        title={`Open ${student ? fullName(student) : "student"}`}
                         style={{
                           fontSize: 13,
                           fontFamily: "inherit",
@@ -299,7 +299,7 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate }: 
                         }}
                       >
                         {isOverdue && <Icon name="alert-circle" size={13} />}
-                        {student?.name ?? "Unknown"}
+                        {student ? fullName(student) : "Unknown"}
                       </button>
                     );
                   })}

@@ -40,18 +40,27 @@ const PATHS = {
 
 const SESSIONS_DIR = "sessions";
 
-// students.csv standard columns, in order. Teacher-specific quirk columns are
-// appended after these (the union of all students' `fields` keys).
-const STUDENT_STANDARD_COLUMNS = [
+// students.csv columns, in order. Legacy `name` and old per-teacher quirk
+// columns are read at load (see toStudent) but no longer written.
+const STUDENT_COLUMNS = [
   "id",
-  "name",
+  "firstName",
+  "middle",
+  "lastName",
   "pronouns",
   "teacherId",
+  "birthday",
   "age",
   "aacDevice",
   "nextIepReview",
   "nextTriennial",
   "mandate",
+  "firstDay",
+  "lastDay",
+  "archived",
+  "needsSpanish",
+  "needsBengali",
+  "journalMethod",
 ];
 
 // Loads the full term bundle. Returns null when there's no term.json yet —
@@ -86,25 +95,28 @@ export async function loadTermData(client: GitHubClient): Promise<LoadedTerm | n
   };
 }
 
-// Serialize the roster back to students.csv, preserving teacher-specific quirk
-// columns (the union of all students' field keys, appended after the standard
-// columns).
 export function studentsToCsv(students: Student[]): string {
-  const fieldKeys = [...new Set(students.flatMap((s) => Object.keys(s.fields)))].sort();
-  const headers = [...STUDENT_STANDARD_COLUMNS, ...fieldKeys];
   const rows = students.map((s) => [
     s.id,
-    s.name,
+    s.firstName,
+    s.middle,
+    s.lastName,
     s.pronouns,
     s.teacherId,
+    s.birthday ?? "",
     s.age == null ? "" : String(s.age),
     s.aacDevice ?? "",
     s.nextIepReview ?? "",
     s.nextTriennial ?? "",
     s.mandate ?? "",
-    ...fieldKeys.map((k) => s.fields[k] ?? ""),
+    s.firstDay ?? "",
+    s.lastDay ?? "",
+    s.archived ? "true" : "false",
+    s.needsSpanish ? "true" : "false",
+    s.needsBengali ? "true" : "false",
+    s.journalMethod,
   ]);
-  return serializeCsv(headers, rows);
+  return serializeCsv(STUDENT_COLUMNS, rows);
 }
 
 // Writes students.csv; returns the new blob sha for the next safe overwrite.
@@ -304,24 +316,39 @@ export async function loadIepHistory(
   return reviews.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 }
 
-const STUDENT_COLUMNS = new Set(STUDENT_STANDARD_COLUMNS);
-
 function toStudent(row: Record<string, string>): Student {
-  const fields: Record<string, string> = {};
-  for (const [key, value] of Object.entries(row)) {
-    if (!STUDENT_COLUMNS.has(key)) fields[key] = value;
+  // Migrate legacy single-`name` column into firstName/lastName on the fly.
+  // The new schema's columns take precedence when present.
+  let firstName = (row.firstName ?? "").trim();
+  let lastName = (row.lastName ?? "").trim();
+  if (!firstName && !lastName && row.name) {
+    const parts = row.name.trim().split(/\s+/);
+    firstName = parts[0] ?? "";
+    lastName = parts.length > 1 ? parts.slice(1).join(" ") : "";
   }
+  // Legacy per-student quirk fields lived as their own CSV columns (the
+  // teacher-declared `fields` keys). Prefer first-class column when present;
+  // otherwise fall back to any legacy column of the same name.
+  const journalRaw = (row.journalMethod ?? "").trim();
   return {
     id: row.id ?? "",
-    name: row.name ?? "",
+    firstName,
+    middle: (row.middle ?? "").trim(),
+    lastName,
     pronouns: row.pronouns ?? "",
     teacherId: row.teacherId ?? "",
+    birthday: blankToNull(row.birthday),
     age: numberOrNull(row.age),
     aacDevice: blankToNull(row.aacDevice),
     nextIepReview: blankToNull(row.nextIepReview),
     nextTriennial: blankToNull(row.nextTriennial),
     mandate: blankToNull(row.mandate),
-    fields,
+    firstDay: blankToNull(row.firstDay),
+    lastDay: blankToNull(row.lastDay),
+    archived: isTrue(row.archived),
+    needsSpanish: isTrue(row.needsSpanish),
+    needsBengali: isTrue(row.needsBengali),
+    journalMethod: journalRaw === "traced" || journalRaw === "wrote" ? journalRaw : "",
   };
 }
 

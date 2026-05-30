@@ -5,6 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import { useTerm } from "../context/TermContext";
 import { loadSessions } from "../domain/data";
 import { groupByLongTerm, type Goal } from "../domain/goal";
+import { fullName } from "../domain/student";
 import { goalUsageCounts } from "../domain/session";
 import { suggestShortnames } from "../domain/shortnames";
 
@@ -131,7 +132,7 @@ function GoalsView({
           onClick={onBack}
           style={{ padding: 0, color: "var(--color-text-secondary)" }}
         >
-          ← {student.name}
+          ← {fullName(student)}
         </button>
       </div>
 
@@ -145,7 +146,7 @@ function GoalsView({
         }}
       >
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 500, margin: 0 }}>{student.name}'s goals</h1>
+          <h1 style={{ fontSize: 22, fontWeight: 500, margin: 0 }}>{fullName(student)}'s goals</h1>
           <p style={{ margin: "4px 0 0 0", color: "var(--color-text-secondary)", fontSize: 14 }}>
             {activeCount} short-term goal{activeCount === 1 ? "" : "s"} across {activeGroups.length}{" "}
             long-term area{activeGroups.length === 1 ? "" : "s"}
@@ -163,7 +164,7 @@ function GoalsView({
           className="card"
           style={{ textAlign: "center", color: "var(--color-text-tertiary)", fontSize: 14 }}
         >
-          No goals yet for {student.name}. Use "Add goals" to paste them in.
+          No goals yet for {fullName(student)}. Use "Add goals" to paste them in.
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -461,11 +462,11 @@ function AddGoals({
           onClick={onDone}
           style={{ padding: 0, color: "var(--color-text-secondary)" }}
         >
-          ← {student.name}'s goals
+          ← {fullName(student)}'s goals
         </button>
       </div>
 
-      <h1 style={{ fontSize: 22, fontWeight: 500, margin: "0 0 4px 0" }}>Add goals for {student.name}</h1>
+      <h1 style={{ fontSize: 22, fontWeight: 500, margin: "0 0 4px 0" }}>Add goals for {fullName(student)}</h1>
       <p style={{ margin: "0 0 1.5rem 0", color: "var(--color-text-secondary)", fontSize: 14 }}>
         For each long-term goal, paste the LTG text and its short-term goals below it (one per line), then
         suggest shortnames.
@@ -657,7 +658,7 @@ function AddGoals({
           <div style={{ marginTop: "1.25rem", display: "flex", justifyContent: "flex-end" }}>
             <button className="button button--success" onClick={handleSave} disabled={busy}>
               <Icon name="check" size={14} />
-              {busy ? "Saving…" : `Save ${review.length} goal${review.length === 1 ? "" : "s"} to ${student.name}`}
+              {busy ? "Saving…" : `Save ${review.length} goal${review.length === 1 ? "" : "s"} to ${fullName(student)}`}
             </button>
           </div>
         </div>

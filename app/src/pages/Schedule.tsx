@@ -25,7 +25,7 @@ import {
   type ScheduleEntry,
   type Weekday,
 } from "../domain/schedule";
-import type { Student } from "../domain/student";
+import { fullName, type Student } from "../domain/student";
 import { teacherColor, type Teacher } from "../domain/teacher";
 
 interface Props {
@@ -654,7 +654,7 @@ export function Schedule({ onNavigate }: Props) {
                                     whiteSpace: "nowrap",
                                   }}
                                 >
-                                  {student?.name ?? "Unknown"}
+                                  {student ? fullName(student) : "Unknown"}
                                 </span>
                               );
                             })}
@@ -823,8 +823,8 @@ function CellEditor({
   const [query, setQuery] = useState("");
   const q = query.trim().toLowerCase();
   const filtered = [...students]
-    .filter((s) => (q === "" ? true : s.name.toLowerCase().includes(q)))
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .filter((s) => (q === "" ? true : fullName(s).toLowerCase().includes(q)))
+    .sort((a, b) => fullName(a).localeCompare(fullName(b)));
 
   return (
     <div
@@ -923,7 +923,7 @@ function CellEditor({
                   <span
                     style={{ width: 8, height: 8, borderRadius: 2, background: color.bg, flexShrink: 0 }}
                   />
-                  <span style={{ flex: 1 }}>{student.name}</span>
+                  <span style={{ flex: 1 }}>{fullName(student)}</span>
                   <span style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>
                     {teacher?.name ?? "—"}
                   </span>
