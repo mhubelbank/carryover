@@ -171,12 +171,16 @@ One column per weekday; each day has its **own** chronological list of time bloc
 Out of scope for now: non-student activity blocks the source sheet encodes (PREP periods, "News", Breakfast/Lunch coverage, the "Available" column).
 
 ### Teachers
-List of all teachers; per-teacher edit view with:
+List of teachers with an Active / Archived toggle (mirrors Students). Per-teacher edit view with:
 - **Basics**: name + color (12-swatch palette, preview shows real teachers in their current colors)
 - **Regular activities**: drag-orderable, each with edit/remove and optional flags (`hasSegmentName`, `freeText`)
 - **Filming-day roles**: drag-orderable; each opens a dialog to set name, phrase, and which conditional field-components are enabled (Visual cues, Facial expressions, Decoding carryover, Pragmatic skills, Gave compliments, Free-text role description). Field types themselves are developer-defined.
 - **Session captures**: declarative per-teacher session-time behavior (see "Session captures" under LLM details below). Authored by editing `data/teachers.json` directly for now; a UI for this is out of scope for v1.
 - **Prompt overrides** (advanced, disclosed)
+
+Toolbar action is **Archive / Unarchive** — there is no hard delete. Archiving a teacher hides them from Today's session list, Generate's teacher picker, the Students teacher filter, and uniqueness checks. Their existing records (students' `teacherId`, schedule entries, session metadata) remain valid; archived teachers stay selectable on the **Students detail** form so she can reassign a student off an archived teacher's caseload.
+
+Students follow the same model — toolbar shows **Archive / Unarchive** only, no Remove.
 
 ### New term setup wizard
 Reachable from Today's term-ending banner (auto-prompts ~14 days before lastDay) or from Settings → Term → "Prepare new term".

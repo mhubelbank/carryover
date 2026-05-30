@@ -37,7 +37,8 @@
         ]
       }
     ],
-    "sessionCaptures": []
+    "sessionCaptures": [],
+    "archived": false
   },
   {
     "id": "t_joanne",
@@ -82,7 +83,8 @@
           "template": "\nBengali language support: {bengaliDetails | default: 'Bengali translations were provided when needed'}"
         }
       }
-    ]
+    ],
+    "archived": false
   },
   {
     "id": "t_jose",
@@ -98,7 +100,8 @@
       }
     ],
     "roles": [],
-    "sessionCaptures": []
+    "sessionCaptures": [],
+    "archived": false
   },
   {
     "id": "t_lefkie",
@@ -124,7 +127,8 @@
         ]
       }
     ],
-    "sessionCaptures": []
+    "sessionCaptures": [],
+    "archived": false
   },
   {
     "id": "t_nina",
@@ -158,6 +162,7 @@
         "showIf": "student.journalMethod && activity.name startsWith \"Completed a journal entry\"",
         "activityDescriptionTemplate": "Completed a journal entry during a lesson led by the collaborative teacher, with SLP support. Glued in a picture illustrating today's National Day and {student.journalMethod} a comment about it."
       }
-    ]
+    ],
+    "archived": false
   }
 ]

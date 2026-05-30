@@ -103,5 +103,10 @@ export interface Teacher {
   activities: Activity[];
   roles: Role[];
   sessionCaptures: SessionCapture[];
+  // Archived teachers stay in the file (their students' history still
+  // references their id) but are hidden from active workflows: caseload
+  // dropdowns, the Today session list, the Generate teacher picker, and
+  // collision/uniqueness checks treat them as out-of-pool.
+  archived: boolean;
   promptOverrides?: Record<string, string>;
 }

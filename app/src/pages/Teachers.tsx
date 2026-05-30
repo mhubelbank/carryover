@@ -98,6 +98,7 @@ function TeacherList({
   onAdd: () => void;
 }) {
   const { state } = useTerm();
+  const [archivedView, setArchivedView] = useState(false);
   const data = state.status === "ready" ? state.data : null;
   if (!data) return null;
 
@@ -105,6 +106,7 @@ function TeacherList({
   for (const s of data.students) {
     studentCount.set(s.teacherId, (studentCount.get(s.teacherId) ?? 0) + 1);
   }
+  const pool = data.teachers.filter((t) => t.archived === archivedView);
 
   return (
     <div className="shell">
@@ -121,13 +123,48 @@ function TeacherList({
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 500, margin: 0 }}>Teachers</h1>
           <p style={{ margin: "4px 0 0 0", color: "var(--color-text-secondary)", fontSize: 14 }}>
-            {data.teachers.length} teacher{data.teachers.length === 1 ? "" : "s"}
+            {pool.length} {archivedView ? "archived" : "active"} teacher{pool.length === 1 ? "" : "s"}
           </p>
         </div>
-        <button className="button button--small" onClick={onAdd}>
-          <Icon name="plus" size={14} />
-          Add teacher
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <div
+            style={{
+              display: "inline-flex",
+              border: "0.5px solid var(--color-border-secondary)",
+              borderRadius: "var(--border-radius-md)",
+              overflow: "hidden",
+            }}
+          >
+            <button
+              className="button button--small"
+              onClick={() => setArchivedView(false)}
+              style={{
+                border: "none",
+                borderRadius: 0,
+                background: !archivedView ? "var(--color-background-secondary)" : "transparent",
+              }}
+            >
+              Active
+            </button>
+            <button
+              className="button button--small"
+              onClick={() => setArchivedView(true)}
+              style={{
+                border: "none",
+                borderRadius: 0,
+                background: archivedView ? "var(--color-background-secondary)" : "transparent",
+              }}
+            >
+              Archived
+            </button>
+          </div>
+          {!archivedView && (
+            <button className="button button--small" onClick={onAdd}>
+              <Icon name="plus" size={14} />
+              Add teacher
+            </button>
+          )}
+        </div>
       </div>
 
       <div
@@ -137,7 +174,7 @@ function TeacherList({
           overflow: "hidden",
         }}
       >
-        {data.teachers.map((teacher, i) => {
+        {pool.map((teacher, i) => {
           const color = teacherColor(teacher.color);
           const count = studentCount.get(teacher.id) ?? 0;
           return (
@@ -210,7 +247,6 @@ function TeacherDetail({
   const [baseline, setBaseline] = useState<Teacher>(() => cloneTeacher(teacher));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [confirmingRemove, setConfirmingRemove] = useState(false);
   const [colorOpen, setColorOpen] = useState(false);
 
   const data = state.status === "ready" ? state.data : null;
@@ -283,9 +319,11 @@ function TeacherDetail({
     }));
   };
   const teachersWithActivities = data.teachers.filter(
-    (t) => t.id !== draft.id && t.activities.length > 0,
+    (t) => !t.archived && t.id !== draft.id && t.activities.length > 0,
   );
-  const teachersWithRoles = data.teachers.filter((t) => t.id !== draft.id && t.roles.length > 0);
+  const teachersWithRoles = data.teachers.filter(
+    (t) => !t.archived && t.id !== draft.id && t.roles.length > 0,
+  );
 
   const dupActivityNames = duplicateNames(draft.activities.map((a) => a.name));
   const dupRoleNames = duplicateNames(draft.roles.map((r) => r.name));
@@ -323,28 +361,21 @@ function TeacherDetail({
     }
   }
 
-  async function handleRemove() {
+  async function handleArchiveToggle() {
     setSaving(true);
     setError(null);
     try {
-      await saveTeachers(data!.teachers.filter((t) => t.id !== draft.id));
-      onBack();
+      const next = data!.teachers.map((t) =>
+        t.id === draft.id ? { ...t, archived: !t.archived } : t,
+      );
+      await saveTeachers(next);
+      setDraft((d) => ({ ...d, archived: !d.archived }));
+      setBaseline((b) => ({ ...b, archived: !b.archived }));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Remove failed");
+      setError(e instanceof Error ? e.message : "Archive failed");
+    } finally {
       setSaving(false);
     }
-  }
-
-  function onRemoveClick() {
-    if (caseload.length > 0) {
-      setError(
-        `Reassign ${caseload.length} student${caseload.length === 1 ? "" : "s"} off ${
-          draft.name || "this teacher"
-        }'s caseload before removing.`,
-      );
-      return;
-    }
-    setConfirmingRemove(true);
   }
 
   return (
@@ -370,30 +401,31 @@ function TeacherDetail({
           marginBottom: "1.5rem",
         }}
       >
-        <h1 style={{ fontSize: 22, fontWeight: 500, margin: 0 }}>{draft.name.trim() || "New teacher"}</h1>
-        {!isNew &&
-          (confirmingRemove ? (
-            <div style={{ display: "flex", gap: 8 }}>
-              <button
-                className="button button--small"
-                onClick={() => setConfirmingRemove(false)}
-                disabled={saving}
-              >
-                Cancel
-              </button>
-              <button
-                className="button button--small button--danger-text"
-                onClick={handleRemove}
-                disabled={saving}
-              >
-                Confirm remove
-              </button>
-            </div>
-          ) : (
-            <button className="button button--small button--danger-text" onClick={onRemoveClick}>
-              Remove teacher
-            </button>
-          ))}
+        <h1 style={{ fontSize: 22, fontWeight: 500, margin: 0, display: "flex", alignItems: "center", gap: 8 }}>
+          {draft.name.trim() || "New teacher"}
+          {draft.archived && (
+            <span
+              style={{
+                fontSize: 11,
+                padding: "2px 8px",
+                background: "var(--color-background-secondary)",
+                color: "var(--color-text-tertiary)",
+                borderRadius: "var(--border-radius-md)",
+              }}
+            >
+              Archived
+            </span>
+          )}
+        </h1>
+        {!isNew && (
+          <button
+            className="button button--small"
+            onClick={handleArchiveToggle}
+            disabled={saving}
+          >
+            {draft.archived ? "Unarchive" : "Archive"}
+          </button>
+        )}
       </div>
 
       <div className="card" style={{ marginBottom: "1rem" }}>
@@ -832,14 +864,21 @@ function blankTeacher(): Teacher {
     activities: [],
     roles: [],
     sessionCaptures: [],
+    archived: false,
   };
 }
 
 function validateTeacherName(teachers: Teacher[], candidate: Teacher): string | null {
   const name = candidate.name.trim();
   if (name === "") return "Name can't be empty.";
+  // Archived teachers stay in the file with their original name; the uniqueness
+  // check only enforces against active teachers so she can reuse a retired
+  // teacher's name without a fight.
   const dupe = teachers.some(
-    (t) => t.id !== candidate.id && t.name.trim().toLowerCase() === name.toLowerCase(),
+    (t) =>
+      !t.archived &&
+      t.id !== candidate.id &&
+      t.name.trim().toLowerCase() === name.toLowerCase(),
   );
   if (dupe) return `Another teacher is named "${name}". Teacher names must be unique.`;
   return null;

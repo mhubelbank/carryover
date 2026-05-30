@@ -93,15 +93,17 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate }: 
   }
 
   // Skip students who are archived OR outside their enrollment window for the
-  // selected date. The schedule.csv may still list them, but they don't appear
-  // in that day's session.
+  // selected date. Skip sessions owned by an archived teacher entirely.
   const activeStudentIds = new Set(
     students.filter((s) => isActiveOn(s, selected)).map((s) => s.id),
   );
-  const sessions = buildSessions(effectiveSchedule, weekdayName(selected)).map((s) => ({
-    ...s,
-    studentIds: s.studentIds.filter((id) => activeStudentIds.has(id)),
-  })).filter((s) => s.studentIds.length > 0);
+  const sessions = buildSessions(effectiveSchedule, weekdayName(selected))
+    .filter((s) => !teacherById.get(s.teacherId)?.archived)
+    .map((s) => ({
+      ...s,
+      studentIds: s.studentIds.filter((id) => activeStudentIds.has(id)),
+    }))
+    .filter((s) => s.studentIds.length > 0);
   const studentCount = new Set(sessions.flatMap((s) => s.studentIds)).size;
 
   const firstDay = parseDate(term.firstDay);
