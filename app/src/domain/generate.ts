@@ -80,6 +80,9 @@ export interface ActivityInput {
   redirection: string[];
   response: string[];
   additionalNotes: string;
+  // Per-activity session-capture state (e.g. José's pragmatic-skills multiselect)
+  // — captures whose showIf matches the selected activity, keyed capture→field.
+  captures: Record<string, Record<string, string | boolean | string[]>>;
 }
 
 // One entry of the `activities` array the regular templates iterate over.

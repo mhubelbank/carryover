@@ -258,6 +258,7 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate }: 
                   borderTop: `4px solid ${color.bg}`,
                   borderRadius: "var(--border-radius-md)",
                   padding: "14px 16px",
+                  background: "var(--color-background-secondary)",
                 }}
               >
                 <div
@@ -320,7 +321,7 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate }: 
                           gap: 4,
                           background: isOverdue
                             ? "var(--color-background-danger)"
-                            : "var(--color-background-secondary)",
+                            : "var(--color-background-tertiary)",
                           color: isOverdue
                             ? "var(--color-text-danger)"
                             : "var(--color-text-primary)",

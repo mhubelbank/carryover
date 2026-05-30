@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "../components/Icon";
 import { Nav, type NavPage } from "../components/Nav";
+import { SaveBar } from "../components/SaveBar";
 import { useTerm } from "../context/TermContext";
 import {
   addDays,
@@ -954,23 +955,13 @@ export function Schedule({ onNavigate, onOpenStudent }: Props) {
       )}
 
       {dirty && (
-        <div
-          style={{
-            marginTop: "1.25rem",
-            padding: "12px 16px",
-            background: "var(--color-background-secondary)",
-            borderRadius: "var(--border-radius-md)",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: 12,
-          }}
-        >
-          <p style={{ margin: 0, fontSize: 13, color: "var(--color-text-secondary)" }}>
-            Unsaved changes
-          </p>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            {weekKey === null && (
+        <SaveBar
+          message="Unsaved changes"
+          saving={saving}
+          onDiscard={handleDiscard}
+          onSave={handleSave}
+          extra={
+            weekKey === null ? (
               <label
                 style={{
                   display: "inline-flex",
@@ -992,19 +983,9 @@ export function Schedule({ onNavigate, onOpenStudent }: Props) {
                   style={{ height: 28, fontSize: 13, padding: "2px 6px", width: 140 }}
                 />
               </label>
-            )}
-            <button className="button button--small" onClick={handleDiscard} disabled={saving}>
-              Discard
-            </button>
-            <button
-              className="button button--small button--primary"
-              onClick={handleSave}
-              disabled={saving}
-            >
-              {saving ? "Saving…" : "Save"}
-            </button>
-          </div>
-        </div>
+            ) : undefined
+          }
+        />
       )}
 
       {editing &&
@@ -1403,7 +1384,7 @@ function EventChip({ event, onClick }: { event: CalendarEvent; onClick: () => vo
       ? {
           bg: "var(--color-background-info)",
           color: "var(--color-text-info)",
-          label: "IEP",
+          label: "IEP review",
         }
       : event.kind === "first-day"
         ? {

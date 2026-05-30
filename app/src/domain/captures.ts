@@ -112,6 +112,18 @@ export function activeCapturesFor(teacher: Teacher, student: Student): SessionCa
   return (teacher.sessionCaptures ?? []).filter((c) => evalCondition(c.showIf, { student: s }));
 }
 
+// Captures whose `showIf` matches a specific activity (and that have form
+// fields) — rendered on the activity card in Generate so activity-scoped inputs
+// like the pragmatic-skills multiselect appear only when that activity is picked.
+export function activityCapturesFor(
+  teacher: Teacher,
+  activity: { id: string; name: string },
+): SessionCapture[] {
+  return (teacher.sessionCaptures ?? []).filter(
+    (c) => (c.fields?.length ?? 0) > 0 && evalCondition(c.showIf, { activity }),
+  );
+}
+
 // Build the `additionalContext` string by appending each active capture's
 // promptInjection template (when its `when` condition is met by the capture
 // state). Empty if no injections fire.
