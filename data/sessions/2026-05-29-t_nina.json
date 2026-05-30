@@ -1,0 +1,13 @@
+{
+  "date": "2026-05-29",
+  "teacherId": "t_nina",
+  "students": [
+    {
+      "studentId": "s_aiden",
+      "goalIds": [
+        "g_ac494896-65bd-4ac2-8642-a62589fe3ee1"
+      ],
+      "mode": "regular"
+    }
+  ]
+}

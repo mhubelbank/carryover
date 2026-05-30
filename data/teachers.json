@@ -74,29 +74,6 @@
           "when": "bengaliUsed",
           "template": "\nBengali language support: {bengaliDetails | default: 'Bengali translations were provided when needed'}"
         }
-      },
-      {
-        "name": "pragmatic",
-        "showIf": "activity.id == \"pragmatic_skills\"",
-        "fields": [
-          {
-            "name": "skills",
-            "type": "multiselect",
-            "label": "Pragmatic skills used (in this activity)",
-            "options": [
-              "attending to a performance (clapping at appropriate times, facing the stage)",
-              "asking for help",
-              "effectively interacting with members of the community",
-              "expressing wants",
-              "following social cues from peers and adults",
-              "initiating social greetings appropriately",
-              "responding to social greetings appropriately",
-              "using appropriate volume for the setting",
-              "waiting for their turn to speak"
-            ]
-          }
-        ],
-        "activityDescriptionTemplate": "Displayed appropriate pragmatic language skills by {skills | join: \", \"} while {activity.additionalInfo}"
       }
     ],
     "archived": false
@@ -122,31 +99,7 @@
       "other"
     ],
     "filmingRoleIds": [],
-    "sessionCaptures": [
-      {
-        "name": "pragmatic",
-        "showIf": "activity.id == \"pragmatic_skills\"",
-        "fields": [
-          {
-            "name": "skills",
-            "type": "multiselect",
-            "label": "Pragmatic skills used (in this activity)",
-            "options": [
-              "attending to a performance (clapping at appropriate times, facing the stage)",
-              "asking for help",
-              "effectively interacting with members of the community",
-              "expressing wants",
-              "following social cues from peers and adults",
-              "initiating social greetings appropriately",
-              "responding to social greetings appropriately",
-              "using appropriate volume for the setting",
-              "waiting for their turn to speak"
-            ]
-          }
-        ],
-        "activityDescriptionTemplate": "Displayed appropriate pragmatic language skills by {skills | join: \", \"} while {activity.additionalInfo}"
-      }
-    ],
+    "sessionCaptures": [],
     "archived": false
   },
   {
@@ -178,31 +131,7 @@
       "r_studio_audience",
       "r_other"
     ],
-    "sessionCaptures": [
-      {
-        "name": "pragmatic",
-        "showIf": "activity.id == \"pragmatic_skills\"",
-        "fields": [
-          {
-            "name": "skills",
-            "type": "multiselect",
-            "label": "Pragmatic skills used (in this activity)",
-            "options": [
-              "attending to a performance (clapping at appropriate times, facing the stage)",
-              "asking for help",
-              "effectively interacting with members of the community",
-              "expressing wants",
-              "following social cues from peers and adults",
-              "initiating social greetings appropriately",
-              "responding to social greetings appropriately",
-              "using appropriate volume for the setting",
-              "waiting for their turn to speak"
-            ]
-          }
-        ],
-        "activityDescriptionTemplate": "Displayed appropriate pragmatic language skills by {skills | join: \", \"} while {activity.additionalInfo}"
-      }
-    ],
+    "sessionCaptures": [],
     "archived": false
   },
   {
@@ -234,29 +163,6 @@
           "when": "student.language includes \"Spanish\"",
           "appendToFinalNote": " All interactions occurred in both Spanish and English with teacher or paraprofessional translation support as needed."
         }
-      },
-      {
-        "name": "pragmatic",
-        "showIf": "activity.id == \"pragmatic_skills\"",
-        "fields": [
-          {
-            "name": "skills",
-            "type": "multiselect",
-            "label": "Pragmatic skills used (in this activity)",
-            "options": [
-              "attending to a performance (clapping at appropriate times, facing the stage)",
-              "asking for help",
-              "effectively interacting with members of the community",
-              "expressing wants",
-              "following social cues from peers and adults",
-              "initiating social greetings appropriately",
-              "responding to social greetings appropriately",
-              "using appropriate volume for the setting",
-              "waiting for their turn to speak"
-            ]
-          }
-        ],
-        "activityDescriptionTemplate": "Displayed appropriate pragmatic language skills by {skills | join: \", \"} while {activity.additionalInfo}"
       }
     ],
     "archived": false

@@ -1,55 +1,100 @@
 [
   {
     "id": "watch_news_wh",
-    "name": "Watched the 811X Dragon news and answered WH questions about it"
+    "name": "Watched the 811X Dragon news and answered WH questions about it",
+    "requiresSegmentName": false,
+    "freeText": false,
+    "freeTextIsDescription": false
   },
   {
     "id": "watch_news_worksheet",
-    "name": "Watched the 811X Dragon news and completed a corresponding, provider created, differentiated worksheet"
+    "name": "Watched the 811X Dragon news and completed a corresponding, provider created, differentiated worksheet",
+    "requiresSegmentName": false,
+    "freeText": false,
+    "freeTextIsDescription": false,
+    "perStudentOptions": {
+      "label": "",
+      "options": [],
+      "template": "Foo bar"
+    }
   },
   {
     "id": "write_script_next_week",
-    "name": "Wrote the script for next week's news"
+    "name": "Wrote the script for next week's news",
+    "requiresSegmentName": false,
+    "freeText": false,
+    "freeTextIsDescription": false
   },
   {
     "id": "research_visuals",
     "name": "Researched/created visuals for upcoming news segments",
-    "requiresSegmentName": true
+    "requiresSegmentName": true,
+    "freeText": false,
+    "freeTextIsDescription": false
   },
   {
     "id": "class_choose_segment",
     "name": "Worked together as a class to choose the next news segment they plan to create",
-    "requiresSegmentName": true
+    "requiresSegmentName": true,
+    "freeText": false,
+    "freeTextIsDescription": false
   },
   {
     "id": "filmed_gave_directions",
     "name": "Filmed for a news segment: gave directions (i.e., quiet on set, roll tape, action, cut)",
-    "requiresSegmentName": true
+    "requiresSegmentName": true,
+    "freeText": false,
+    "freeTextIsDescription": false
   },
   {
     "id": "filmed_responded_directions",
     "name": "Filmed for a news segment: responded to directions given by staff and peers (i.e., quiet on set, roll tape, action, cut)",
-    "requiresSegmentName": true
+    "requiresSegmentName": true,
+    "freeText": false,
+    "freeTextIsDescription": false
   },
   {
     "id": "write_script_upcoming",
     "name": "Wrote the script for an upcoming segment",
-    "requiresSegmentName": true
+    "requiresSegmentName": true,
+    "freeText": false,
+    "freeTextIsDescription": false
   },
   {
     "id": "journal_entry",
     "name": "Completed a journal entry",
+    "requiresSegmentName": false,
+    "freeText": false,
+    "freeTextIsDescription": false,
     "descriptionTemplate": "Completed a journal entry during a lesson led by the collaborative teacher, with SLP support. Glued in a picture illustrating today's National Day and {student.journalMethod | join: \", \"} a comment about it.",
     "requiresAttribute": "journalMethod"
   },
   {
     "id": "pragmatic_skills",
     "name": "Displayed appropriate pragmatic language skills",
-    "freeText": true
+    "requiresSegmentName": false,
+    "freeText": true,
+    "freeTextIsDescription": false,
+    "perStudentOptions": {
+      "label": "Pragmatic skills used (in this activity)",
+      "options": [
+        "attending to a performance (clapping at appropriate times, facing the stage)",
+        "asking for help",
+        "effectively interacting with members of the community",
+        "expressing wants",
+        "following social cues from peers and adults",
+        "initiating social greetings appropriately",
+        "responding to social greetings appropriately",
+        "using appropriate volume for the setting",
+        "waiting for their turn to speak"
+      ],
+      "template": "Displayed appropriate pragmatic language skills by {options} while {info}"
+    }
   },
   {
     "id": "other",
     "name": "Other",
+    "requiresSegmentName": false,
     "freeText": true,
     "freeTextIsDescription": true
   }
