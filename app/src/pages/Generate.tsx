@@ -63,8 +63,9 @@ interface StudentState {
   filmingGoalIds: string[];
   // Per-teacher session-capture form state, keyed first by capture name then
   // by field name. Drives the dynamic capture-form rendering and feeds
-  // additionalContext / activity-rewrite in buildContext.
-  captures: Record<string, Record<string, string | boolean>>;
+  // additionalContext / activity-rewrite in buildContext. Multiselect fields
+  // store the chosen subset as a string[].
+  captures: Record<string, Record<string, string | boolean | string[]>>;
 }
 
 interface ResultRow {
@@ -210,7 +211,7 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
     id: string,
     captureName: string,
     fieldName: string,
-    value: string | boolean,
+    value: string | boolean | string[],
   ) {
     setStudentState((prev) => {
       const cur = prev[id]!;
@@ -701,8 +702,8 @@ function CapturePanel({
 }: {
   teacher: Teacher;
   student: Student;
-  state: Record<string, Record<string, string | boolean>>;
-  onChange: (captureName: string, fieldName: string, value: string | boolean) => void;
+  state: Record<string, Record<string, string | boolean | string[]>>;
+  onChange: (captureName: string, fieldName: string, value: string | boolean | string[]) => void;
 }) {
   // Only show captures whose top-level showIf passes for this student AND that
   // have UI fields. Captures with no fields (Spanish post-process, journal
@@ -735,6 +736,41 @@ function CapturePanel({
                 return null;
               }
               const value = fieldState[field.name];
+              if (field.type === "multiselect") {
+                const selected = Array.isArray(value) ? value : [];
+                return (
+                  <div key={field.name}>
+                    {field.label && (
+                      <label
+                        className="label"
+                        style={{ fontSize: 12, color: "var(--color-text-secondary)" }}
+                      >
+                        {field.label}
+                      </label>
+                    )}
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px", fontSize: 13 }}>
+                      {(field.options ?? []).map((opt) => (
+                        <label key={opt} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          <input
+                            type="checkbox"
+                            checked={selected.includes(opt)}
+                            onChange={(e) =>
+                              onChange(
+                                cap.name,
+                                field.name,
+                                e.target.checked
+                                  ? [...selected, opt]
+                                  : selected.filter((x) => x !== opt),
+                              )
+                            }
+                          />
+                          {opt}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                );
+              }
               if (field.type === "bool") {
                 return (
                   <label
@@ -1305,6 +1341,7 @@ function buildContext(
       teacher,
       student,
       { name: def.name, additionalInfo: def.additionalInfo },
+      st.captures,
       fallback,
     );
   });
