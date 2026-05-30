@@ -104,6 +104,15 @@ function GoalsView({
   const removeGoal = (id: string) => setDraft((d) => d.filter((g) => g.id !== id));
 
   async function handleSave() {
+    // A shortname is the goal's checkbox label in Generate; a long-term goal is
+    // its grouping key. Neither may be blank on an active goal.
+    const blank = draft.find(
+      (g) => !g.archived && (g.shortName.trim() === "" || g.longTermGoal.trim() === ""),
+    );
+    if (blank) {
+      setError("Every goal needs a shortname (and long-term goal). Fill it in or remove the row.");
+      return;
+    }
     const dup = findDuplicateShortname(draft);
     if (dup) {
       setError(dup);
@@ -429,6 +438,10 @@ function AddGoals({
       shortName: it.shortName.trim(),
       archived: false,
     }));
+    if (newGoals.some((g) => g.longTermGoal === "" || g.shortName === "")) {
+      setError("Each goal needs a long-term goal and a shortname before saving.");
+      return;
+    }
     const dup = findDuplicateShortname(newGoals);
     if (dup) {
       setError(dup);

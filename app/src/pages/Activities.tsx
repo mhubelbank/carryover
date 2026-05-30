@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Nav, type NavPage } from "../components/Nav";
 import { SaveBar } from "../components/SaveBar";
 import { useTerm } from "../context/TermContext";
@@ -82,6 +82,10 @@ export function Activities({ onNavigate }: Props) {
   // Bumped on discard so a detail's MadlibEditor (which holds its own
   // before/after state) remounts and re-reads the reverted template.
   const [editNonce, setEditNonce] = useState(0);
+  // Save validation is page-level (one save covers all three catalogs), so a
+  // stale error would otherwise follow you onto unrelated detail views. Clear it
+  // whenever you navigate; the next save attempt re-reports anything still wrong.
+  useEffect(() => setError(null), [view]);
 
   if (state.status !== "ready") return null;
   const { teachers, students } = state.data;
@@ -166,7 +170,20 @@ export function Activities({ onNavigate }: Props) {
 
   async function handleSave() {
     setError(null);
-    const cleanedActs = acts.map((a) => ({ ...a, name: a.name.trim() }));
+    const cleanedActs = acts.map((a) => {
+      const name = a.name.trim();
+      if (!a.perStudentOptions) return { ...a, name };
+      const pso = a.perStudentOptions;
+      return {
+        ...a,
+        name,
+        perStudentOptions: {
+          label: pso.label.trim(),
+          options: pso.options.map((o) => o.trim()).filter(Boolean),
+          template: pso.template.trim(),
+        },
+      };
+    });
     const cleanedRoles = roles.map((r) => ({ ...r, name: r.name.trim(), phrase: r.phrase.trim() }));
     const cleanedFields: StudentField[] = sf.map((f) => {
       const label = f.label.trim();
@@ -187,12 +204,47 @@ export function Activities({ onNavigate }: Props) {
       setError("Every activity needs a name.");
       return;
     }
+    // Per-student options, when enabled, need a label and at least one option;
+    // a non-empty wording template must reference both tokens (bare or filtered,
+    // e.g. `{options | join: "; "}`) or the chosen options / additional info
+    // silently won't appear in the note.
+    for (const a of cleanedActs) {
+      const pso = a.perStudentOptions;
+      if (!pso) continue;
+      if (pso.label === "") {
+        setError(`"${a.name}" per-student options: a label is required.`);
+        return;
+      }
+      if (pso.options.length === 0) {
+        setError(`"${a.name}" per-student options: add at least one option.`);
+        return;
+      }
+      // The template is what folds the selection into the note; without it the
+      // checklist renders but never affects the wording (a silent no-op).
+      if (pso.template === "") {
+        setError(`"${a.name}" per-student options: add the note wording.`);
+        return;
+      }
+      if (!/\{\s*options\b/.test(pso.template) || !/\{\s*info\b/.test(pso.template)) {
+        setError(
+          `"${a.name}" per-student options: the note wording must include both {options} and {info}.`,
+        );
+        return;
+      }
+    }
     if (cleanedRoles.some((r) => r.name === "")) {
       setError("Every filming role needs a name.");
       return;
     }
     if (cleanedFields.some((f) => f.label === "")) {
       setError("Every student field needs a name.");
+      return;
+    }
+    // A dropdown field with no options renders no choices on the Students page —
+    // a dead field. Mirrors the per-student-options rule above.
+    const emptySelect = cleanedFields.find((f) => f.type === "select" && (f.options ?? []).length === 0);
+    if (emptySelect) {
+      setError(`Dropdown field "${emptySelect.label}" needs at least one option.`);
       return;
     }
     for (const f of cleanedFields) {
