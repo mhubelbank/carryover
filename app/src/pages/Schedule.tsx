@@ -25,11 +25,12 @@ import {
   type ScheduleEntry,
   type Weekday,
 } from "../domain/schedule";
-import { fullName, type Student } from "../domain/student";
+import { fullName, isActiveOn, type Student } from "../domain/student";
 import { teacherColor, type Teacher } from "../domain/teacher";
 
 interface Props {
   onNavigate: (page: NavPage) => void;
+  onOpenStudent: (studentId: string, view?: "detail" | "goals") => void;
 }
 
 const BASE_PX_PER_MIN = 2;
@@ -40,7 +41,22 @@ const HEADER_PX = 30;
 const CELL_PAD_PX = 12;
 const DEFAULT_CELL_PX = 46;
 
-export function Schedule({ onNavigate }: Props) {
+// Past-week snapshots when saving a Usual change are bounded to this many
+// weeks back from the "Apply from" date. Beyond that, older weeks inherit the
+// new Usual — keeps save latency + data-branch noise bounded since retroactive
+// note generation that far back is rare.
+const USUAL_LOOKBACK_WEEKS = 4;
+
+// Per-event height in the calendar-event row above each day's time grid.
+const EVENT_LINE_PX = 22;
+
+interface CalendarEvent {
+  kind: "iep" | "first-day" | "last-day";
+  studentId: string;
+  firstName: string;
+}
+
+export function Schedule({ onNavigate, onOpenStudent }: Props) {
   const { state, client, teacherById, studentById, saveSchedule } = useTerm();
   const [draft, setDraft] = useState<ScheduleEntry[]>(() =>
     state.status === "ready" ? state.data.schedule.map(cloneEntry) : [],
@@ -58,13 +74,22 @@ export function Schedule({ onNavigate }: Props) {
   const [newEnd, setNewEnd] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Effective-from date for a Usual-schedule change. Defaults to today; past
+  // weeks (before this Monday) get snapshotted with the OLD Usual so the new
+  // template doesn't apply retroactively. Only consulted when saving Usual.
+  const [usualEffectiveDate, setUsualEffectiveDate] = useState(() =>
+    toISODate(startOfDay(new Date())),
+  );
 
   // Which schedule is being edited: null = the usual template; otherwise the ISO
   // Monday of a specific week (its deviation file). weekSha tracks that file's
   // blob for safe overwrite/delete; isDeviated is whether the file exists yet.
-  const [weekKey, setWeekKey] = useState<string | null>(null);
+  // Defaults to the current week so she lands on "today's view" instead of the
+  // template. The Usual schedule is one tab-click away when she needs it.
+  const [weekKey, setWeekKey] = useState<string | null>(() =>
+    toISODate(mondayOf(toWeekday(startOfDay(new Date())))),
+  );
   const [weekSha, setWeekSha] = useState<string | undefined>(undefined);
-  const [isDeviated, setIsDeviated] = useState(false);
   const [loadingWeek, setLoadingWeek] = useState(false);
 
   // Natural rendered height of each block's content, keyed by `${day}|${slot}`.
@@ -159,7 +184,6 @@ export function Schedule({ onNavigate }: Props) {
       setBaseline(template.map(cloneEntry));
       setExtraSlots({});
       setWeekSha(undefined);
-      setIsDeviated(false);
       setLoadingWeek(false);
       return;
     }
@@ -174,7 +198,6 @@ export function Schedule({ onNavigate }: Props) {
         setBaseline(entries.map(cloneEntry));
         setExtraSlots({});
         setWeekSha(res?.sha);
-        setIsDeviated(!!res);
         setLoadingWeek(false);
       })
       .catch((e: unknown) => {
@@ -215,6 +238,12 @@ export function Schedule({ onNavigate }: Props) {
   const { term, teachers, students, schedule: templateSchedule } = state.data;
 
   const dirty = normalize(draft) !== normalize(baseline);
+  // Saved-state deviation from the usual template. Drives the "Customized this
+  // week" / "Same as usual" label so it reflects content equality rather than
+  // mere file existence (a week-file may exist but contain template-equivalent
+  // data after an add-then-remove cycle).
+  const templateNorm = normalize(templateSchedule);
+  const customizedSaved = weekKey !== null && normalize(baseline) !== templateNorm;
   const totalBlocks = WEEKDAYS.reduce((n, d) => n + (slotsByDay.get(d)?.length ?? 0), 0);
   // Pad the bottom so a stretched last block can't collide with the Add control.
   const bodyHeight = (axis.gridEnd - axis.gridStart) * scale + cellHeight;
@@ -230,6 +259,38 @@ export function Schedule({ onNavigate }: Props) {
     !weekDate || (minMonday !== null && addDays(weekDate, -7).getTime() < minMonday.getTime());
   const nextDisabled =
     !weekDate || (maxMonday !== null && addDays(weekDate, 7).getTime() > maxMonday.getTime());
+
+  // Calendar-event markers per day-column (week mode only): IEP review dates,
+  // first day, last day. Rendered as clickable chips above the time grid that
+  // navigate to the student's detail page.
+  const weeklyEvents: CalendarEvent[][] = WEEKDAYS.map((_, i) => {
+    if (!weekDate) return [];
+    const iso = toISODate(addDays(weekDate, i));
+    const events: CalendarEvent[] = [];
+    for (const s of students) {
+      if (s.archived) continue;
+      if (s.nextIepReview === iso) events.push({ kind: "iep", studentId: s.id, firstName: s.firstName });
+      if (s.firstDay === iso) events.push({ kind: "first-day", studentId: s.id, firstName: s.firstName });
+      if (s.lastDay === iso) events.push({ kind: "last-day", studentId: s.id, firstName: s.firstName });
+    }
+    return events;
+  });
+  const maxEventsPerDay = Math.max(0, ...weeklyEvents.map((e) => e.length));
+  // Events are rendered as a single absolute-positioned chip stack per column.
+  // We only need to *shift* the body down by the amount the stack overflows the
+  // natural clearance above the earliest slot — anything that fits inside that
+  // clearance just overlays it, no shift. So the row above the body carries
+  // only the overflow, not the entire stack height.
+  const earliestSlotMin = Math.min(
+    Infinity,
+    ...WEEKDAYS.flatMap((d) => (slotsByDay.get(d) ?? []).map((s) => slotStartMinutes(s))),
+  );
+  const clearancePx = Number.isFinite(earliestSlotMin)
+    ? (earliestSlotMin - axis.gridStart) * scale
+    : Infinity;
+  const neededOverlayPx = maxEventsPerDay * EVENT_LINE_PX + 4;
+  const eventsTopShift =
+    maxEventsPerDay > 0 ? Math.max(0, neededOverlayPx + 4 - clearancePx) : 0;
 
   const addStart = parseTimeInput(newStart);
   const addEnd = parseTimeInput(newEnd);
@@ -291,6 +352,37 @@ export function Schedule({ onNavigate }: Props) {
     setEditing({ day, slot });
   }
 
+  // Swap a student with its neighbor inside one cell's entry list. Entry order
+  // in schedule.csv is preserved by writeSchedule, so this directly drives the
+  // pill order, Today's session order, and Generate's all-notes paste order.
+  function moveStudentInCell(day: Weekday, slot: string, studentId: string, dir: -1 | 1) {
+    setDraft((d) => {
+      const inCell = d.filter((e) => e.dayOfWeek === day && e.timeSlot === slot);
+      const others = d.filter((e) => !(e.dayOfWeek === day && e.timeSlot === slot));
+      const i = inCell.findIndex((e) => e.studentId === studentId);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= inCell.length) return d;
+      [inCell[i], inCell[j]] = [inCell[j]!, inCell[i]!];
+      return [...others, ...inCell];
+    });
+  }
+
+  function sortCellByLastName(day: Weekday, slot: string) {
+    setDraft((d) => {
+      const inCell = d.filter((e) => e.dayOfWeek === day && e.timeSlot === slot);
+      const others = d.filter((e) => !(e.dayOfWeek === day && e.timeSlot === slot));
+      inCell.sort((a, b) => {
+        const sa = studentById.get(a.studentId);
+        const sb = studentById.get(b.studentId);
+        const la = (sa?.lastName ?? "").toLowerCase();
+        const lb = (sb?.lastName ?? "").toLowerCase();
+        if (la !== lb) return la.localeCompare(lb);
+        return (sa?.firstName ?? "").toLowerCase().localeCompare((sb?.firstName ?? "").toLowerCase());
+      });
+      return [...others, ...inCell];
+    });
+  }
+
   function removeSlot(day: Weekday, slot: string) {
     setDraft((d) => d.filter((e) => !(e.dayOfWeek === day && e.timeSlot === slot)));
     setExtraSlots((s) => ({ ...s, [day]: (s[day] ?? []).filter((x) => x !== slot) }));
@@ -307,12 +399,52 @@ export function Schedule({ onNavigate }: Props) {
     setError(null);
     try {
       if (weekKey === null) {
+        // Usual save: snapshot every past week (Mondays strictly before the
+        // effective Monday) that doesn't already have a deviation file. Each
+        // snapshot uses the OLD Usual (`baseline`), so retroactive note
+        // generation reflects what the schedule actually was. Then write the
+        // new Usual. Weeks she's already customized are skipped (her
+        // deviations win). Serialized to avoid ref-conflicts on the branch.
+        if (!client) throw new Error("Not connected to the data repo");
+        const effDate = parseDate(usualEffectiveDate);
+        if (effDate && firstDay) {
+          const firstMon = mondayOf(firstDay);
+          const effMon = mondayOf(effDate);
+          // Cap the lookback so an end-of-year Usual change doesn't write a
+          // commit per week back to September. Older weeks inherit the new
+          // Usual; the lookback covers her realistic retroactive-note window.
+          const earliestMon = addDays(effMon, -7 * USUAL_LOOKBACK_WEEKS);
+          const startMon =
+            firstMon.getTime() > earliestMon.getTime() ? firstMon : earliestMon;
+          const dir = await client.listDir("data/schedule");
+          const existing = new Set(
+            dir
+              .filter((e) => e.type === "file" && e.name.endsWith(".csv"))
+              .map((e) => e.name.replace(/\.csv$/, "")),
+          );
+          let cur = startMon;
+          while (cur.getTime() < effMon.getTime()) {
+            const key = toISODate(cur);
+            if (!existing.has(key)) {
+              await writeWeekSchedule(client, key, baseline, undefined);
+            }
+            cur = addDays(cur, 7);
+          }
+        }
         await saveSchedule(draft);
       } else {
         if (!client) throw new Error("Not connected to the data repo");
-        const newSha = await writeWeekSchedule(client, weekKey, draft, weekSha);
-        setWeekSha(newSha);
-        setIsDeviated(true);
+        // If the week's content has converged back to the usual template,
+        // delete the deviation file instead of saving a redundant snapshot. This
+        // keeps "Customized this week" honest after add-then-remove cycles and
+        // avoids leaving template-equivalent files on the data branch.
+        if (normalize(draft) === normalize(templateSchedule)) {
+          if (weekSha) await deleteWeekSchedule(client, weekKey, weekSha);
+          setWeekSha(undefined);
+        } else {
+          const newSha = await writeWeekSchedule(client, weekKey, draft, weekSha);
+          setWeekSha(newSha);
+        }
       }
       setBaseline(draft.map(cloneEntry));
     } catch (e) {
@@ -332,7 +464,6 @@ export function Schedule({ onNavigate }: Props) {
       setBaseline(templateSchedule.map(cloneEntry));
       setExtraSlots({});
       setWeekSha(undefined);
-      setIsDeviated(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Reset failed");
     } finally {
@@ -401,35 +532,22 @@ export function Schedule({ onNavigate }: Props) {
         </div>
 
         {weekKey !== null && weekDate && (
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <button
-              className="button button--small"
-              onClick={() => stepWeek(-1)}
-              disabled={prevDisabled}
-              aria-label="Previous week"
-            >
-              <Icon name="chevron-left" size={14} />
-            </button>
-            <span style={{ fontSize: 13, minWidth: 92, textAlign: "center" }}>
-              {formatWeekRange(weekDate)}
-            </span>
-            <button
-              className="button button--small"
-              onClick={() => stepWeek(1)}
-              disabled={nextDisabled}
-              aria-label="Next week"
-            >
-              <Icon name="chevron-right" size={14} />
-            </button>
+          <>
             <span
               style={{
                 fontSize: 12,
-                color: isDeviated ? "var(--color-text-warning)" : "var(--color-text-tertiary)",
+                color: customizedSaved
+                  ? "var(--color-text-warning)"
+                  : "var(--color-text-tertiary)",
               }}
             >
-              {loadingWeek ? "Loading…" : isDeviated ? "Customized this week" : "Same as usual"}
+              {loadingWeek
+                ? "Loading…"
+                : customizedSaved
+                  ? "Customized this week"
+                  : "Same as usual"}
             </span>
-            {isDeviated && (
+            {customizedSaved && (
               <button
                 className="button button--small button--danger-text"
                 onClick={handleResetToUsual}
@@ -438,7 +556,35 @@ export function Schedule({ onNavigate }: Props) {
                 Reset to usual
               </button>
             )}
-          </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: "auto" }}>
+              <span style={{ fontSize: 13, minWidth: 92, textAlign: "right" }}>
+                {formatWeekRange(weekDate)}
+              </span>
+              <button
+                className="button button--small"
+                onClick={() => stepWeek(-1)}
+                disabled={prevDisabled}
+                aria-label="Previous week"
+              >
+                <Icon name="chevron-left" size={14} />
+              </button>
+              <button
+                className="button button--small"
+                onClick={() => setWeekKey(toISODate(todayMonday))}
+                disabled={weekKey === toISODate(todayMonday)}
+              >
+                This week
+              </button>
+              <button
+                className="button button--small"
+                onClick={() => stepWeek(1)}
+                disabled={nextDisabled}
+                aria-label="Next week"
+              >
+                <Icon name="chevron-right" size={14} />
+              </button>
+            </div>
+          </>
         )}
       </div>
 
@@ -469,10 +615,24 @@ export function Schedule({ onNavigate }: Props) {
         ))}
       </div>
 
-      <div style={{ display: "flex", alignItems: "stretch" }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "stretch",
+          // Usual mode gets faint diagonal gray stripes so it's instantly
+          // distinguishable from a dated week view at a glance. No padding —
+          // would make the canvas narrower than the week view.
+          backgroundImage:
+            weekKey === null
+              ? "repeating-linear-gradient(45deg, rgba(0,0,0,0.04), rgba(0,0,0,0.04) 6px, transparent 6px, transparent 12px)"
+              : undefined,
+          borderRadius: "var(--border-radius-md)",
+        }}
+      >
         {/* Hour gutter */}
         <div style={{ width: 46, flexShrink: 0 }}>
           <div style={{ height: HEADER_PX }} />
+          {eventsTopShift > 0 && <div style={{ height: eventsTopShift }} />}
           <div style={{ position: "relative", height: bodyHeight }}>
             {axis.hours.map((h) => (
               <div
@@ -530,6 +690,36 @@ export function Schedule({ onNavigate }: Props) {
                 )}
               </div>
 
+              {maxEventsPerDay > 0 && (
+                <div
+                  style={{
+                    height: eventsTopShift,
+                    position: "relative",
+                    zIndex: 5,
+                    overflow: "visible",
+                    borderLeft: "0.5px solid var(--color-border-tertiary)",
+                  }}
+                >
+                  {!outOfTerm &&
+                    (weeklyEvents[dayIndex] ?? []).map((event, i) => (
+                      <div
+                        key={`${event.kind}-${event.studentId}-${i}`}
+                        style={{
+                          position: "absolute",
+                          top: i * EVENT_LINE_PX,
+                          left: 4,
+                          right: 4,
+                        }}
+                      >
+                        <EventChip
+                          event={event}
+                          onClick={() => onOpenStudent(event.studentId)}
+                        />
+                      </div>
+                    ))}
+                </div>
+              )}
+
               <div
                 style={{
                   position: "relative",
@@ -572,10 +762,19 @@ export function Schedule({ onNavigate }: Props) {
                   const top = (slotStartMinutes(slot) - axis.gridStart) * scale;
                   const durationPx = (slotEndMinutes(slot) - slotStartMinutes(slot)) * scale;
                   const minHeight = Math.max(cellHeight, durationPx);
-                  const studentIds = cells.get(`${day}|${slot}`) ?? [];
+                  const rawStudentIds = cells.get(`${day}|${slot}`) ?? [];
+                  // Hide archived students from every view; in week mode also
+                  // hide students outside their enrollment window for this
+                  // column's date (mirrors Today). The schedule entry stays in
+                  // the file — just not rendered for this date.
+                  const studentIds = rawStudentIds.filter((id) => {
+                    const s = studentById.get(id);
+                    if (!s || s.archived) return false;
+                    return !columnDate || isActiveOn(s, columnDate);
+                  });
                   const deviates =
                     weekKey !== null &&
-                    !sameStudents(templateCells.get(`${day}|${slot}`), studentIds);
+                    !sameStudents(templateCells.get(`${day}|${slot}`), rawStudentIds);
                   return (
                     <button
                       key={slot}
@@ -770,7 +969,30 @@ export function Schedule({ onNavigate }: Props) {
           <p style={{ margin: 0, fontSize: 13, color: "var(--color-text-secondary)" }}>
             Unsaved changes
           </p>
-          <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            {weekKey === null && (
+              <label
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  fontSize: 13,
+                  color: "var(--color-text-secondary)",
+                  whiteSpace: "nowrap",
+                  flexShrink: 0,
+                }}
+                title={`The last ${USUAL_LOOKBACK_WEEKS} weeks before this date keep the old schedule (snapshotted). New Usual applies from this date forward; earlier weeks inherit the new Usual.`}
+              >
+                <span style={{ whiteSpace: "nowrap" }}>Apply from</span>
+                <input
+                  className="input"
+                  type="date"
+                  value={usualEffectiveDate}
+                  onChange={(e) => setUsualEffectiveDate(e.target.value)}
+                  style={{ height: 28, fontSize: 13, padding: "2px 6px", width: 140 }}
+                />
+              </label>
+            )}
             <button className="button button--small" onClick={handleDiscard} disabled={saving}>
               Discard
             </button>
@@ -789,10 +1011,18 @@ export function Schedule({ onNavigate }: Props) {
         <CellEditor
           day={editing.day}
           slot={editing.slot}
-          students={students}
-          teacherById={teacherById}
-          selectedIds={new Set(cells.get(`${editing.day}|${editing.slot}`) ?? [])}
+          students={editorStudents(students, weekDate, editing.day)}
+          teachers={teachers}
+          selectedOrdered={(cells.get(`${editing.day}|${editing.slot}`) ?? [])
+            .map((id) => studentById.get(id))
+            .filter((s): s is Student => s != null)}
           onToggle={(student, on) => toggleStudent(editing.day, editing.slot, student, on)}
+          onMove={(student, dir) => moveStudentInCell(editing.day, editing.slot, student.id, dir)}
+          onSort={() => sortCellByLastName(editing.day, editing.slot)}
+          onOpenStudent={(id) => {
+            setEditing(null);
+            onOpenStudent(id);
+          }}
           onDelete={() => removeSlot(editing.day, editing.slot)}
           onClose={() => setEditing(null)}
         />
@@ -805,26 +1035,54 @@ function CellEditor({
   day,
   slot,
   students,
-  teacherById,
-  selectedIds,
+  teachers,
+  selectedOrdered,
   onToggle,
+  onMove,
+  onSort,
+  onOpenStudent,
   onDelete,
   onClose,
 }: {
   day: Weekday;
   slot: string;
   students: Student[];
-  teacherById: Map<string, Teacher>;
-  selectedIds: Set<string>;
+  teachers: Teacher[];
+  selectedOrdered: Student[];
   onToggle: (student: Student, on: boolean) => void;
+  onMove: (student: Student, dir: -1 | 1) => void;
+  onSort: () => void;
+  onOpenStudent: (studentId: string) => void;
   onDelete: () => void;
   onClose: () => void;
 }) {
   const [query, setQuery] = useState("");
   const q = query.trim().toLowerCase();
-  const filtered = [...students]
+  const selectedSet = new Set(selectedOrdered.map((s) => s.id));
+  // "Add students" list: filtered + unselected, grouped by teacher so a
+  // caseload is scannable at a glance. Unassigned students (no teacher) last.
+  const filteredUnselected = students
+    .filter((s) => !selectedSet.has(s.id))
     .filter((s) => (q === "" ? true : fullName(s).toLowerCase().includes(q)))
     .sort((a, b) => fullName(a).localeCompare(fullName(b)));
+  const grouped = new Map<string, Student[]>();
+  for (const s of filteredUnselected) {
+    const key = s.teacherId || "__unassigned";
+    const arr = grouped.get(key) ?? [];
+    arr.push(s);
+    grouped.set(key, arr);
+  }
+  const groups: { key: string; label: string; color: string; students: Student[] }[] = [];
+  for (const t of teachers) {
+    const list = grouped.get(t.id);
+    if (list && list.length > 0) {
+      groups.push({ key: t.id, label: t.name, color: teacherColor(t.color).bg, students: list });
+    }
+  }
+  const unassigned = grouped.get("__unassigned");
+  if (unassigned && unassigned.length > 0) {
+    groups.push({ key: "__unassigned", label: "Unassigned", color: "transparent", students: unassigned });
+  }
 
   return (
     <div
@@ -844,7 +1102,7 @@ function CellEditor({
         onClick={(e) => e.stopPropagation()}
         className="card"
         style={{
-          width: 380,
+          width: 480,
           maxHeight: "80vh",
           display: "flex",
           flexDirection: "column",
@@ -856,7 +1114,7 @@ function CellEditor({
           <div>
             <h3 style={{ fontSize: 15, fontWeight: 500, margin: 0 }}>{day}</h3>
             <p style={{ margin: "2px 0 0 0", fontSize: 12, color: "var(--color-text-secondary)" }}>
-              {slot} · {selectedIds.size} student{selectedIds.size === 1 ? "" : "s"}
+              {slot} · {selectedOrdered.length} student{selectedOrdered.length === 1 ? "" : "s"}
             </p>
           </div>
           <button
@@ -892,45 +1150,212 @@ function CellEditor({
           />
         </div>
 
-        <div style={{ overflowY: "auto", display: "flex", flexDirection: "column" }}>
-          {filtered.length === 0 ? (
-            <p style={{ fontSize: 13, color: "var(--color-text-tertiary)", padding: "8px 0" }}>
-              No students match.
-            </p>
-          ) : (
-            filtered.map((student) => {
-              const teacher = teacherById.get(student.teacherId);
-              const color = teacherColor(teacher?.color);
-              const checked = selectedIds.has(student.id);
-              return (
-                <label
+        <div style={{ overflowY: "auto", display: "flex", flexDirection: "column", gap: 10 }}>
+          {selectedOrdered.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "0 4px 4px 4px",
+                  fontSize: 11,
+                  fontWeight: 500,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.04em",
+                  color: "var(--color-text-tertiary)",
+                }}
+              >
+                <span>In this slot — paste order</span>
+                <button
+                  className="button button--ghost button--small"
+                  onClick={onSort}
+                  style={{ padding: "2px 6px", fontSize: 11, textTransform: "none" }}
+                  title="Sort selected students alphabetically by last name"
+                >
+                  Sort by last name
+                </button>
+              </div>
+              {selectedOrdered.map((student, i) => (
+                <div
                   key={student.id}
                   style={{
                     display: "flex",
                     alignItems: "center",
-                    gap: 10,
-                    padding: "8px 4px",
+                    gap: 6,
+                    padding: "4px 4px",
                     fontSize: 14,
-                    cursor: "pointer",
-                    borderTop: "0.5px solid var(--color-border-tertiary)",
                   }}
                 >
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={(e) => onToggle(student, e.target.checked)}
-                  />
                   <span
-                    style={{ width: 8, height: 8, borderRadius: 2, background: color.bg, flexShrink: 0 }}
-                  />
-                  <span style={{ flex: 1 }}>{fullName(student)}</span>
-                  <span style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>
-                    {teacher?.name ?? "—"}
+                    style={{
+                      fontSize: 11,
+                      color: "var(--color-text-tertiary)",
+                      width: 16,
+                      textAlign: "right",
+                    }}
+                  >
+                    {i + 1}.
                   </span>
-                </label>
-              );
-            })
+                  {(() => {
+                    const t = teachers.find((x) => x.id === student.teacherId);
+                    const c = teacherColor(t?.color);
+                    return (
+                      <button
+                        onClick={() => onOpenStudent(student.id)}
+                        title={`Open ${fullName(student)}`}
+                        style={{
+                          flex: 1,
+                          minWidth: 0,
+                          textAlign: "left",
+                          padding: "3px 10px",
+                          background: c.bg,
+                          color: c.text,
+                          border: "none",
+                          borderRadius: "var(--border-radius-md)",
+                          fontSize: 13,
+                          fontFamily: "inherit",
+                          cursor: "pointer",
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                        }}
+                      >
+                        {fullName(student)}
+                      </button>
+                    );
+                  })()}
+                  <button
+                    className="button button--ghost button--small"
+                    onClick={() => onMove(student, -1)}
+                    disabled={i === 0}
+                    title="Move up"
+                    style={{ padding: 2, color: "var(--color-text-secondary)", lineHeight: 0 }}
+                    aria-label="Move up"
+                  >
+                    <Icon name="chevron-left" size={14} />
+                  </button>
+                  <button
+                    className="button button--ghost button--small"
+                    onClick={() => onMove(student, 1)}
+                    disabled={i === selectedOrdered.length - 1}
+                    title="Move down"
+                    style={{ padding: 2, color: "var(--color-text-secondary)", lineHeight: 0 }}
+                    aria-label="Move down"
+                  >
+                    <Icon name="chevron-right" size={14} />
+                  </button>
+                  <button
+                    className="button button--ghost button--small"
+                    onClick={() => onToggle(student, false)}
+                    title="Remove from this slot"
+                    style={{ padding: 2, color: "var(--color-text-tertiary)", lineHeight: 0 }}
+                    aria-label="Remove"
+                  >
+                    <Icon name="x" size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
           )}
+
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              paddingTop: selectedOrdered.length > 0 ? 10 : 0,
+              borderTop:
+                selectedOrdered.length > 0
+                  ? "0.5px solid var(--color-border-tertiary)"
+                  : undefined,
+            }}
+          >
+            <div
+              style={{
+                padding: "0 4px 4px 4px",
+                fontSize: 11,
+                fontWeight: 500,
+                textTransform: "uppercase",
+                letterSpacing: "0.04em",
+                color: "var(--color-text-tertiary)",
+              }}
+            >
+              Add students
+            </div>
+            {groups.length === 0 ? (
+              <p style={{ fontSize: 13, color: "var(--color-text-tertiary)", padding: "8px 0" }}>
+                {q === ""
+                  ? "All eligible students are already in this slot."
+                  : "No students match."}
+              </p>
+            ) : (
+              groups.map((group) => (
+                <div key={group.key} style={{ display: "flex", flexDirection: "column" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      padding: "6px 4px 4px 4px",
+                      fontSize: 11,
+                      fontWeight: 500,
+                      color: "var(--color-text-tertiary)",
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: 2,
+                        background: group.color,
+                        flexShrink: 0,
+                      }}
+                    />
+                    {group.label}
+                  </div>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      columnGap: 10,
+                    }}
+                  >
+                    {group.students.map((student) => (
+                      <label
+                        key={student.id}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          padding: "5px 4px 5px 14px",
+                          fontSize: 14,
+                          cursor: "pointer",
+                          minWidth: 0,
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={false}
+                          onChange={() => onToggle(student, true)}
+                        />
+                        <span
+                          style={{
+                            flex: 1,
+                            minWidth: 0,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {fullName(student)}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </div>
 
         <div style={{ display: "flex", gap: 8 }}>
@@ -957,6 +1382,64 @@ function formatHour(h: number): string {
 }
 
 // Whether a week cell's students match the usual template's for that cell.
+function EventChip({ event, onClick }: { event: CalendarEvent; onClick: () => void }) {
+  // Color-keyed by event type: IEP = info blue, start = success green, last
+  // day = warning amber. Each row is a single line — name + short label suffix.
+  const palette =
+    event.kind === "iep"
+      ? {
+          bg: "var(--color-background-info)",
+          color: "var(--color-text-info)",
+          label: "IEP",
+        }
+      : event.kind === "first-day"
+        ? {
+            bg: "var(--color-background-success)",
+            color: "var(--color-text-success)",
+            label: "First day",
+          }
+        : {
+            bg: "var(--color-background-warning)",
+            color: "var(--color-text-warning)",
+            label: "Last day",
+          };
+  return (
+    <button
+      onClick={onClick}
+      title={`${event.firstName} · ${palette.label}`}
+      style={{
+        fontSize: 10,
+        padding: "0 6px",
+        background: palette.bg,
+        color: palette.color,
+        border: "none",
+        borderRadius: "var(--border-radius-md)",
+        cursor: "pointer",
+        whiteSpace: "nowrap",
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        height: EVENT_LINE_PX - 2,
+        lineHeight: `${EVENT_LINE_PX - 2}px`,
+        textAlign: "left",
+        fontFamily: "inherit",
+      }}
+    >
+      {event.firstName} · {palette.label}
+    </button>
+  );
+}
+
+// Students offered in the cell editor: drop archived everywhere, and in week
+// mode drop anyone whose enrollment window doesn't include the column's date.
+function editorStudents(students: Student[], weekDate: Date | null, day: Weekday): Student[] {
+  const columnDate = weekDate ? addDays(weekDate, WEEKDAYS.indexOf(day)) : null;
+  return students.filter((s) => {
+    if (s.archived) return false;
+    if (columnDate && !isActiveOn(s, columnDate)) return false;
+    return true;
+  });
+}
+
 function sameStudents(template: Set<string> | undefined, week: string[]): boolean {
   const tmpl = template ?? EMPTY_SET;
   if (tmpl.size !== week.length) return false;

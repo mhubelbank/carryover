@@ -92,7 +92,7 @@ function Pages() {
         />
       );
     case "schedule":
-      return <Schedule onNavigate={setPage} />;
+      return <Schedule onNavigate={setPage} onOpenStudent={openStudent} />;
     case "generate":
       return (
         <Generate
