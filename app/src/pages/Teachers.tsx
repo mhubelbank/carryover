@@ -6,12 +6,12 @@ import {
   COLOR_KEYS,
   TEACHER_COLORS,
   teacherColor,
-  type Activity,
   type ColorKey,
   type Mode,
   type Role,
   type Teacher,
 } from "../domain/teacher";
+import { RESERVED_OTHER_ID } from "../domain/activity";
 import { fullName } from "../domain/student";
 
 interface Props {
@@ -264,15 +264,15 @@ function TeacherDetail({
       modes: on ? [...new Set([...d.modes, mode])] : d.modes.filter((m) => m !== mode),
     }));
 
-  const addActivity = () =>
-    setDraft((d) => ({ ...d, activities: [...d.activities, { id: crypto.randomUUID(), name: "" }] }));
-  const updateActivity = (id: string, patch: Partial<Activity>) =>
+  // Activities are a shared catalog (managed in the Activities tab); a teacher
+  // just selects which ones it uses.
+  const toggleActivity = (id: string, on: boolean) =>
     setDraft((d) => ({
       ...d,
-      activities: d.activities.map((a) => (a.id === id ? { ...a, ...patch } : a)),
+      activityIds: on
+        ? [...new Set([...d.activityIds, id])]
+        : d.activityIds.filter((x) => x !== id),
     }));
-  const removeActivity = (id: string) =>
-    setDraft((d) => ({ ...d, activities: d.activities.filter((a) => a.id !== id) }));
 
   const addRole = () =>
     setDraft((d) => ({
@@ -298,15 +298,7 @@ function TeacherDetail({
       ),
     }));
 
-  // Copy another teacher's activities/roles in (appended with fresh ids).
-  const copyActivitiesFrom = (sourceId: string) => {
-    const source = data!.teachers.find((t) => t.id === sourceId);
-    if (!source) return;
-    setDraft((d) => ({
-      ...d,
-      activities: [...d.activities, ...source.activities.map((a) => ({ ...a, id: crypto.randomUUID() }))],
-    }));
-  };
+  // Copy another teacher's roles in (appended with fresh ids).
   const copyRolesFrom = (sourceId: string) => {
     const source = data!.teachers.find((t) => t.id === sourceId);
     if (!source) return;
@@ -318,15 +310,14 @@ function TeacherDetail({
       ],
     }));
   };
-  const teachersWithActivities = data.teachers.filter(
-    (t) => !t.archived && t.id !== draft.id && t.activities.length > 0,
-  );
   const teachersWithRoles = data.teachers.filter(
     (t) => !t.archived && t.id !== draft.id && t.roles.length > 0,
   );
 
-  const dupActivityNames = duplicateNames(draft.activities.map((a) => a.name));
   const dupRoleNames = duplicateNames(draft.roles.map((r) => r.name));
+  // Catalog activities offered for selection (the reserved ad-hoc "Other" is
+  // always available in Generate, so it isn't listed per-teacher).
+  const selectableActivities = data.activities.filter((a) => a.id !== RESERVED_OTHER_ID);
 
   async function handleSave() {
     const problem = validateTeacherName(data!.teachers, draft);
@@ -336,12 +327,9 @@ function TeacherDetail({
     }
     setSaving(true);
     setError(null);
-    // Drop blank activity/role rows on save.
+    // Drop blank role rows on save.
     const cleaned: Teacher = {
       ...draft,
-      activities: draft.activities
-        .map((a) => ({ ...a, name: a.name.trim() }))
-        .filter((a) => a.name !== ""),
       roles: draft.roles
         .map((r) => ({ ...r, name: r.name.trim(), phrase: r.phrase.trim() }))
         .filter((r) => r.name !== ""),
@@ -478,48 +466,36 @@ function TeacherDetail({
       </div>
 
       <div className="card" style={{ marginBottom: "1rem" }}>
-        <SectionHeader
-          title="Regular mode · activities"
-          onAdd={addActivity}
-          addLabel="Add activity"
-          extra={<CopyFromSelect teachers={teachersWithActivities} onCopy={copyActivitiesFrom} />}
-        />
-        {draft.activities.length === 0 ? (
-          <p style={{ fontSize: 13, color: "var(--color-text-tertiary)" }}>No activities yet.</p>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "baseline",
+            marginBottom: 10,
+          }}
+        >
+          <h3 className="card__title" style={{ margin: 0 }}>
+            Regular mode · activities
+          </h3>
+          <button className="button button--small" onClick={() => onNavigate("activities")}>
+            Manage catalog
+          </button>
+        </div>
+        {selectableActivities.length === 0 ? (
+          <p style={{ fontSize: 13, color: "var(--color-text-tertiary)" }}>
+            No activities in the catalog yet. Add some in the Activities tab.
+          </p>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {draft.activities.map((activity) => (
-              <div key={activity.id} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <input
-                    className="input"
-                    style={{ flex: 1, height: 32 }}
-                    placeholder="Activity name"
-                    value={activity.name}
-                    onChange={(e) => updateActivity(activity.id, { name: e.target.value })}
-                  />
-                  <RemoveButton title="Remove activity" onClick={() => removeActivity(activity.id)} />
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 16, fontSize: 13 }}>
-                  <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <input
-                      type="checkbox"
-                      checked={!!activity.hasSegmentName}
-                      onChange={(e) => updateActivity(activity.id, { hasSegmentName: e.target.checked })}
-                    />
-                    Segment name
-                  </label>
-                  <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <input
-                      type="checkbox"
-                      checked={!!activity.freeText}
-                      onChange={(e) => updateActivity(activity.id, { freeText: e.target.checked })}
-                    />
-                    Free text
-                  </label>
-                  {dupActivityNames.has(activity.name.trim().toLowerCase()) && <AlreadyUsed />}
-                </div>
-              </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 16px", fontSize: 13 }}>
+            {selectableActivities.map((a) => (
+              <label key={a.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <input
+                  type="checkbox"
+                  checked={draft.activityIds.includes(a.id)}
+                  onChange={(e) => toggleActivity(a.id, e.target.checked)}
+                />
+                {a.name}
+              </label>
             ))}
           </div>
         )}
@@ -849,7 +825,7 @@ function cloneTeacher(t: Teacher): Teacher {
   return {
     ...t,
     modes: [...t.modes],
-    activities: t.activities.map((a) => ({ ...a })),
+    activityIds: [...t.activityIds],
     roles: t.roles.map((r) => ({ ...r, fields: [...r.fields] })),
     sessionCaptures: (t.sessionCaptures ?? []).map((c) => ({ ...c })),
   };
@@ -861,7 +837,7 @@ function blankTeacher(): Teacher {
     name: "",
     color: "purple",
     modes: ["regular"],
-    activities: [],
+    activityIds: [],
     roles: [],
     sessionCaptures: [],
     archived: false,

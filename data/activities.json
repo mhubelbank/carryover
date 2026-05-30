@@ -1,0 +1,40 @@
+[
+  {
+    "id": "a_news",
+    "name": "Dragon News broadcast",
+    "requiresSegmentName": true
+  },
+  {
+    "id": "a_read",
+    "name": "Shared reading"
+  },
+  {
+    "id": "a_circle",
+    "name": "Circle time",
+    "freeText": true
+  },
+  {
+    "id": "a_cook",
+    "name": "Cooking group"
+  },
+  {
+    "id": "a_story",
+    "name": "Story retell"
+  },
+  {
+    "id": "a_play",
+    "name": "Play skills group"
+  },
+  {
+    "id": "a_journal",
+    "name": "Completed a journal entry",
+    "descriptionTemplate": "Completed a journal entry during a lesson led by the collaborative teacher, with SLP support. Glued in a picture illustrating today's National Day and {student.journalMethod} a comment about it.",
+    "requiresAttribute": "journalMethod"
+  },
+  {
+    "id": "other",
+    "name": "Other",
+    "freeText": true,
+    "freeTextIsDescription": true
+  }
+]

@@ -7,16 +7,9 @@
       "regular",
       "filming-day"
     ],
-    "activities": [
-      {
-        "id": "a_news",
-        "name": "Dragon News broadcast",
-        "hasSegmentName": true
-      },
-      {
-        "id": "a_read",
-        "name": "Shared reading"
-      }
+    "activityIds": [
+      "a_news",
+      "a_read"
     ],
     "roles": [
       {
@@ -47,17 +40,8 @@
     "modes": [
       "regular"
     ],
-    "activities": [
-      {
-        "id": "a_circle",
-        "name": "Circle time",
-        "hasSegmentName": false,
-        "freeText": true
-      },
-      {
-        "id": "36c2b738-4faf-415b-8339-eb96eae93e79",
-        "name": "Foo bar"
-      }
+    "activityIds": [
+      "a_circle"
     ],
     "roles": [],
     "sessionCaptures": [
@@ -93,11 +77,8 @@
     "modes": [
       "regular"
     ],
-    "activities": [
-      {
-        "id": "a_cook",
-        "name": "Cooking group"
-      }
+    "activityIds": [
+      "a_cook"
     ],
     "roles": [],
     "sessionCaptures": [],
@@ -111,11 +92,8 @@
       "regular",
       "filming-day"
     ],
-    "activities": [
-      {
-        "id": "a_story",
-        "name": "Story retell"
-      }
+    "activityIds": [
+      "a_story"
     ],
     "roles": [
       {
@@ -137,15 +115,9 @@
     "modes": [
       "regular"
     ],
-    "activities": [
-      {
-        "id": "a_play",
-        "name": "Play skills group"
-      },
-      {
-        "id": "a_journal",
-        "name": "Completed a journal entry"
-      }
+    "activityIds": [
+      "a_play",
+      "a_journal"
     ],
     "roles": [],
     "sessionCaptures": [
@@ -156,11 +128,6 @@
           "when": "student.needsSpanish",
           "appendToFinalNote": " All interactions occurred in both Spanish and English with teacher or paraprofessional translation support as needed."
         }
-      },
-      {
-        "name": "journal",
-        "showIf": "student.journalMethod && activity.name startsWith \"Completed a journal entry\"",
-        "activityDescriptionTemplate": "Completed a journal entry during a lesson led by the collaborative teacher, with SLP support. Glued in a picture illustrating today's National Day and {student.journalMethod} a comment about it."
       }
     ],
     "archived": false

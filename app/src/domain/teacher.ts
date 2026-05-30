@@ -40,11 +40,25 @@ export function teacherColor(key: string | undefined): TeacherColor {
   return TEACHER_COLORS.blue;
 }
 
+// A shared-catalog activity (data/activities.json), referenced by teachers via
+// `activityIds`. The news-production curriculum is shared across teachers, so it
+// lives in one catalog rather than duplicated per teacher.
 export interface Activity {
   id: string;
   name: string;
-  hasSegmentName?: boolean;
+  // Surfaces a "Segment name" input next to the activity in the Generate form.
+  requiresSegmentName?: boolean;
+  // Surfaces an "Additional info" free-text input.
   freeText?: boolean;
+  // For the reserved "other" entry: the free text REPLACES the name as the
+  // activity description (instead of `name + " " + info`).
+  freeTextIsDescription?: boolean;
+  // Overrides the description when building the prompt. Interpolates
+  // `{student.<attr>}` via renderCaptureTemplate (e.g. the journal entry's
+  // "{student.journalMethod}"). Applied only when `requiresAttribute` is absent
+  // or the student has that attribute; otherwise the plain `name` is used.
+  descriptionTemplate?: string;
+  requiresAttribute?: string;
 }
 
 export interface Role {
@@ -104,7 +118,8 @@ export interface Teacher {
   name: string;
   color: ColorKey;
   modes: Mode[];
-  activities: Activity[];
+  // Ids into the shared activity catalog (data/activities.json).
+  activityIds: string[];
   roles: Role[];
   sessionCaptures: SessionCapture[];
   // Archived teachers stay in the file (their students' history still

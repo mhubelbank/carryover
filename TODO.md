@@ -70,6 +70,15 @@ pieces aren't:
 
 ## Repo / deployment cleanup (deferred — user explicitly said "fix later")
 
+- **Sync the activity-catalog migration to the `data` branch.** The code now reads
+  a shared catalog (`data/activities.json`) and teachers reference `activityIds`
+  (was an embedded `activities` array). The canonical migrated files are in the
+  working tree (`data/activities.json` + the rewritten `data/teachers.json`, with
+  Nina's journal `sessionCapture` folded onto the `a_journal` catalog entry). Sync
+  both to the **`data` branch** via the worktree flow **with/after** the new code
+  deploys — until then the running app (old code reading `teacher.activities`)
+  shows empty activity menus. `toTeacher` defaults `activityIds` to `[]`, so the
+  pre-sync window is degraded, not crashing.
 - **Relocate live session files on the `data` branch.** The code now reads/writes
   `data/sessions/` (was `sessions/`; `SESSIONS_DIR` in `app/src/domain/data.ts`).
   The `main`-side move (constant + tracked files + docs) is done, but the live
