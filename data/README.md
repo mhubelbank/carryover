@@ -21,5 +21,5 @@ data/
     └── {studentId}.jsonl   Append-only log of IEP reviews per student
 ```
 
-Generated session notes live in `/sessions/YYYY-MM-DD-teacher.json` (one
-per generated session), separate from this folder.
+Generated session notes live in `sessions/YYYY-MM-DD-teacher.json` (one
+per generated session), inside this folder.

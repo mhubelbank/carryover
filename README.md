@@ -28,12 +28,12 @@ Student data is FERPA-protected. With this setup:
 ```
 mhubelbank/emily-sesis     (private)
 ├── app/                    Vite + React + TypeScript app source
-├── data/                   Emily's roster, goals, schedule, prompts (live data)
-└── sessions/               Append-only generated note history
+└── data/                   Emily's roster, goals, schedule, prompts (live data)
+    └── sessions/           Append-only generated note history
 ```
 
 - `data/` is the source of truth, edited through the app
-- `sessions/` accumulates generated notes — append-only
+- `data/sessions/` accumulates generated notes — append-only
 
 ## First-time setup (developer, one-time)
 
@@ -69,7 +69,7 @@ workflow file needed.
 To skip rebuilds on pure-data commits, configure the Cloudflare build to
 only trigger when files in `app/` change. Cloudflare's UI doesn't expose
 this directly, but you can set the build to check the latest commit and
-exit early if it only touches `data/` or `sessions/`. (Or accept the cost
+exit early if it only touches `data/`. (Or accept the cost
 of a build per data commit — they're fast and free on the Pages tier.)
 
 ### 4. Grant Emily repo access
