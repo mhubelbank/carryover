@@ -1463,10 +1463,18 @@ function sameStudents(template: Set<string> | undefined, week: string[]): boolea
 const EMPTY_SET: Set<string> = new Set();
 
 // Order-independent fingerprint of the schedule for dirty detection.
+// Order-independent across cells, but order-SENSITIVE within a cell: each
+// entry carries its position within its (day, slot) so reordering students in a
+// cell (the ↑/↓ controls) registers as a real change for dirty detection.
 function normalize(entries: ScheduleEntry[]): string {
-  return JSON.stringify(
-    entries.map((e) => `${e.dayOfWeek}|${e.timeSlot}|${e.studentId}|${e.teacherId}`).sort(),
-  );
+  const pos = new Map<string, number>();
+  const keyed = entries.map((e) => {
+    const cell = `${e.dayOfWeek}|${e.timeSlot}`;
+    const p = pos.get(cell) ?? 0;
+    pos.set(cell, p + 1);
+    return `${cell}|${p}|${e.studentId}|${e.teacherId}`;
+  });
+  return JSON.stringify(keyed.sort());
 }
 
 function cloneEntry(e: ScheduleEntry): ScheduleEntry {
