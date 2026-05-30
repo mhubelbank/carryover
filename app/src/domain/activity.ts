@@ -19,9 +19,11 @@ export function catalogById(catalog: Activity[]): Map<string, Activity> {
 
 // A teacher's activities, resolved from the shared catalog. Dangling ids (an
 // activity deleted from the catalog while still referenced) are dropped.
+// Resolved in CATALOG order (not the teacher's id order), so reordering the
+// Activities catalog drives the order shown in Generate. Dangling ids drop out.
 export function resolveActivities(teacher: Teacher, catalog: Activity[]): Activity[] {
-  const byId = catalogById(catalog);
-  return teacher.activityIds.map((id) => byId.get(id)).filter((a): a is Activity => a != null);
+  const ids = new Set(teacher.activityIds);
+  return catalog.filter((a) => ids.has(a.id));
 }
 
 // The activity options offered in the Generate form: the teacher's resolved

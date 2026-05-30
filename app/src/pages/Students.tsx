@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Icon } from "../components/Icon";
 import { Nav, type NavPage } from "../components/Nav";
+import { SaveBar } from "../components/SaveBar";
 import { useTerm } from "../context/TermContext";
 import { loadIepHistory } from "../domain/data";
 import { formatShort, parseDate } from "../domain/dates";
@@ -263,6 +264,7 @@ function StudentsList({
           border: "0.5px solid var(--color-border-tertiary)",
           borderRadius: "var(--border-radius-md)",
           overflow: "hidden",
+          background: "var(--color-background-secondary)",
         }}
       >
         <table
@@ -783,38 +785,15 @@ function StudentDetail({
       )}
 
       {(dirty || isNew) && (
-        <div
-          style={{
-            marginTop: "1.25rem",
-            padding: "12px 16px",
-            background: "var(--color-background-secondary)",
-            borderRadius: "var(--border-radius-md)",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: 12,
-          }}
-        >
-          <p style={{ margin: 0, fontSize: 13, color: "var(--color-text-secondary)" }}>
-            {isNew ? "New student — not saved yet" : "Unsaved changes"}
-          </p>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button
-              className="button button--small"
-              onClick={isNew ? onBack : () => setDraft(cloneStudent(baseline))}
-              disabled={saving}
-            >
-              {isNew ? "Cancel" : "Discard"}
-            </button>
-            <button
-              className="button button--small button--primary"
-              onClick={handleSave}
-              disabled={saving || sameTeacherDupe}
-            >
-              {saving ? "Saving…" : isNew ? "Create student" : "Save"}
-            </button>
-          </div>
-        </div>
+        <SaveBar
+          message={isNew ? "New student — not saved yet" : "Unsaved changes"}
+          discardLabel={isNew ? "Cancel" : "Discard"}
+          saveLabel={isNew ? "Create student" : "Save"}
+          saving={saving}
+          saveDisabled={sameTeacherDupe}
+          onDiscard={isNew ? onBack : () => setDraft(cloneStudent(baseline))}
+          onSave={handleSave}
+        />
       )}
     </div>
   );

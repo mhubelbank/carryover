@@ -34,6 +34,7 @@ import {
 } from "../domain/notes";
 import {
   activeCapturesFor,
+  activityCapturesFor,
   applyActivityRewrite,
   buildAdditionalContext,
   buildPostProcess,
@@ -48,7 +49,7 @@ import { resolveRoles } from "../domain/role";
 import type { Goal } from "../domain/goal";
 import type { SessionMetadata } from "../domain/session";
 import { displayName, fullName, studentContext, type Student } from "../domain/student";
-import type { Activity, Mode, Role, Teacher } from "../domain/teacher";
+import type { Activity, Mode, Role, SessionCapture, Teacher } from "../domain/teacher";
 
 interface Props {
   onNavigate: (page: NavPage) => void;
@@ -92,6 +93,7 @@ function blankRegularInput(): ActivityInput {
     redirection: [],
     response: [],
     additionalNotes: "",
+    captures: {},
   };
 }
 
@@ -209,6 +211,27 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
       const cur = prev[id]!;
       const regular = cur.regular.slice();
       regular[idx] = { ...regular[idx]!, ...patch };
+      return { ...prev, [id]: { ...cur, regular } };
+    });
+  }
+
+  function setActivityCapture(
+    id: string,
+    idx: number,
+    capName: string,
+    fieldName: string,
+    value: string | boolean | string[],
+  ) {
+    setStudentState((prev) => {
+      const cur = prev[id]!;
+      const regular = cur.regular.slice();
+      const input = regular[idx]!;
+      const caps = input.captures ?? {};
+      const cap = caps[capName] ?? {};
+      regular[idx] = {
+        ...input,
+        captures: { ...caps, [capName]: { ...cap, [fieldName]: value } },
+      };
       return { ...prev, [id]: { ...cur, regular } };
     });
   }
@@ -557,9 +580,13 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
                 <RegularStudentCard
                   activities={activities}
                   options={activityOptions}
+                  teacher={teacher}
                   inputs={st.regular}
                   studentGoals={studentGoals}
                   onChange={(idx, patch) => setRegularInput(student.id, idx, patch)}
+                  onCaptureChange={(idx, capName, fieldName, value) =>
+                    setActivityCapture(student.id, idx, capName, fieldName, value)
+                  }
                 />
               )}
 
@@ -827,26 +854,107 @@ function CapturePanel({
   );
 }
 
+// Renders the form fields for any session captures bound to a specific activity
+// (e.g. José's pragmatic-skills multiselect), shown on that activity's card.
+function ActivityCaptureFields({
+  captures,
+  state,
+  onChange,
+}: {
+  captures: SessionCapture[];
+  state: Record<string, Record<string, string | boolean | string[]>>;
+  onChange: (capName: string, fieldName: string, value: string | boolean | string[]) => void;
+}) {
+  return (
+    <div style={{ marginBottom: 8 }}>
+      {captures.map((cap) => {
+        const fieldState = state[cap.name] ?? {};
+        return (cap.fields ?? []).map((field) => {
+          if (field.showIf && !evalCondition(field.showIf, { capture: fieldState })) return null;
+          const value = fieldState[field.name];
+          const key = `${cap.name}.${field.name}`;
+          if (field.type === "multiselect") {
+            return (
+              <CheckGroup
+                key={key}
+                label={field.label ?? field.name}
+                options={(field.options ?? []).map((o) => ({ value: o, label: o }))}
+                selected={Array.isArray(value) ? value : []}
+                onChange={(v) => onChange(cap.name, field.name, v)}
+              />
+            );
+          }
+          if (field.type === "bool") {
+            return (
+              <label
+                key={key}
+                style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, margin: "6px 0" }}
+              >
+                <input
+                  type="checkbox"
+                  checked={value === true}
+                  onChange={(e) => onChange(cap.name, field.name, e.target.checked)}
+                />
+                {field.label ?? field.name}
+              </label>
+            );
+          }
+          return (
+            <div key={key} style={{ marginBottom: 8 }}>
+              {field.label && <label className="label">{field.label}</label>}
+              <input
+                className="input"
+                value={typeof value === "string" ? value : ""}
+                placeholder={field.placeholder ?? ""}
+                onChange={(e) => onChange(cap.name, field.name, e.target.value)}
+              />
+            </div>
+          );
+        });
+      })}
+    </div>
+  );
+}
+
 function RegularStudentCard({
   activities,
   options,
+  teacher,
   inputs,
   studentGoals,
   onChange,
+  onCaptureChange,
 }: {
   activities: ActivityDef[];
   options: Activity[];
+  teacher: Teacher;
   inputs: ActivityInput[];
   studentGoals: Goal[];
   onChange: (idx: number, patch: Partial<ActivityInput>) => void;
+  onCaptureChange: (
+    idx: number,
+    capName: string,
+    fieldName: string,
+    value: string | boolean | string[],
+  ) => void;
 }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      {activities.map((a, i) => (
+      {activities.map((a, i) => {
+        const def = options.find((o) => o.id === a.activityId);
+        const caps = def ? activityCapturesFor(teacher, { id: def.id, name: def.name }) : [];
+        return (
         <div key={i} style={{ borderTop: i > 0 ? "0.5px solid var(--color-border-tertiary)" : undefined, paddingTop: i > 0 ? 10 : 0 }}>
           <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 6 }}>
-            {options.find((o) => o.id === a.activityId)?.name || `Activity ${i + 1}`}
+            {def?.name || `Activity ${i + 1}`}
           </div>
+          {caps.length > 0 && (
+            <ActivityCaptureFields
+              captures={caps}
+              state={inputs[i]?.captures ?? {}}
+              onChange={(capName, fieldName, value) => onCaptureChange(i, capName, fieldName, value)}
+            />
+          )}
           <CheckGroup
             label="Goals"
             options={studentGoals.map((g) => ({ value: g.id, label: g.shortName }))}
@@ -886,7 +994,8 @@ function RegularStudentCard({
             />
           </div>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -1354,11 +1463,14 @@ function buildContext(
   // rewrite (e.g. José's pragmatic skills), falling back to the default. A
   // dangling id (catalog entry deleted) yields "" and is dropped downstream.
   const byId = catalogById(activityOptionsForGenerate(teacher, catalog));
-  const activityArr = buildRegularActivities(activities, resolvedInputs, (def) => {
+  const activityArr = buildRegularActivities(activities, resolvedInputs, (def, i) => {
     const activity = byId.get(def.activityId);
     if (!activity) return "";
     const fallback = defaultDescription(activity, def.additionalInfo);
-    return applyActivityRewrite(teacher, student, activity, def.additionalInfo, st.captures, fallback);
+    // Student-level captures (e.g. Bengali) plus this activity's own captures
+    // (e.g. pragmatic skills) feed the rewrite.
+    const caps = { ...st.captures, ...(st.regular[i]?.captures ?? {}) };
+    return applyActivityRewrite(teacher, student, activity, def.additionalInfo, caps, fallback);
   });
   return regularContext({
     studentName: student.firstName,

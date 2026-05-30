@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Nav, type NavPage } from "../components/Nav";
+import { SaveBar } from "../components/SaveBar";
 import { useTerm } from "../context/TermContext";
 import {
   RESERVED_OTHER_ID,
@@ -9,7 +10,17 @@ import {
 } from "../domain/activity";
 import { roleRefCounts } from "../domain/role";
 import { isValidFieldKey, studentFieldRefCounts, type StudentField } from "../domain/studentField";
-import type { Activity, Role } from "../domain/teacher";
+import { teacherColor, type Activity, type Role, type Teacher } from "../domain/teacher";
+
+interface Pill {
+  label: string;
+  bg: string;
+  text: string;
+}
+interface UsedBy {
+  pills: Pill[];
+  emptyText: string;
+}
 
 interface Props {
   onNavigate: (page: NavPage) => void;
@@ -93,12 +104,28 @@ export function Activities({ onNavigate }: Props) {
     setActs((d) => d.map((a) => (a.id === id ? { ...a, ...patch } : a)));
   const addAct = () => {
     const id = `act_${crypto.randomUUID()}`;
-    setActs((d) => [...d, { id, name: "" }]);
+    setActs((d) => {
+      const i = d.findIndex((a) => a.id === RESERVED_OTHER_ID);
+      const act = { id, name: "" };
+      return i === -1 ? [...d, act] : [...d.slice(0, i), act, ...d.slice(i)];
+    });
     setView({ kind: "detail", cat: "activity", id });
   };
+  // Reorder activities (catalog order drives the Generate dropdown). "Other"
+  // stays pinned at the bottom and isn't movable.
+  const moveActivity = (id: string, dir: -1 | 1) =>
+    setActs((d) => {
+      const i = d.findIndex((a) => a.id === id);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= d.length || d[j]!.id === RESERVED_OTHER_ID) return d;
+      const next = d.slice();
+      [next[i], next[j]] = [next[j]!, next[i]!];
+      return next;
+    });
   const removeAct = (id: string): boolean => {
-    if (!confirmDelete(actRefs.get(id) ?? 0)) return false;
-    setActs((d) => d.filter((a) => a.id !== id));
+    const a = acts.find((x) => x.id === id);
+    if (!confirmDelete("activity", a?.name ?? "", actRefs.get(id) ?? 0, "teacher")) return false;
+    setActs((d) => d.filter((x) => x.id !== id));
     return true;
   };
 
@@ -110,8 +137,9 @@ export function Activities({ onNavigate }: Props) {
     setView({ kind: "detail", cat: "role", id });
   };
   const removeRole = (id: string): boolean => {
-    if (!confirmDelete(roleRefs.get(id) ?? 0)) return false;
-    setRoles((d) => d.filter((r) => r.id !== id));
+    const r = roles.find((x) => x.id === id);
+    if (!confirmDelete("filming role", r?.name ?? "", roleRefs.get(id) ?? 0, "teacher")) return false;
+    setRoles((d) => d.filter((x) => x.id !== id));
     return true;
   };
   const toggleRoleField = (id: string, fk: string, on: boolean) =>
@@ -130,27 +158,43 @@ export function Activities({ onNavigate }: Props) {
     setView({ kind: "detail", cat: "field", idx: sf.length });
   };
   const removeField = (i: number, key: string): boolean => {
-    if (!confirmDelete(sfRefs.get(key) ?? 0, "reference")) return false;
+    const label = sf[i]?.label || key;
+    if (!confirmDelete("student field", label, sfRefs.get(key) ?? 0, "reference")) return false;
     setSf((d) => d.filter((_, j) => j !== i));
     return true;
   };
 
   async function handleSave() {
     setError(null);
-    const cleanedActs = acts.map((a) => ({ ...a, name: a.name.trim() })).filter((a) => a.name !== "");
-    const cleanedRoles = roles
-      .map((r) => ({ ...r, name: r.name.trim(), phrase: r.phrase.trim() }))
-      .filter((r) => r.name !== "");
-    const cleanedFields: StudentField[] = sf
-      .map((f) => ({
-        key: f.key.trim(),
-        label: f.label.trim(),
+    const cleanedActs = acts.map((a) => ({ ...a, name: a.name.trim() }));
+    const cleanedRoles = roles.map((r) => ({ ...r, name: r.name.trim(), phrase: r.phrase.trim() }));
+    const cleanedFields: StudentField[] = sf.map((f) => {
+      const label = f.label.trim();
+      // Derive the key from the label when left blank, so typing only a label
+      // is enough to save a new field.
+      const key = f.key.trim() || slugKey(label);
+      return {
+        key,
+        label,
         type: f.type,
         ...(f.type === "select"
           ? { options: (f.options ?? []).map((o) => o.trim()).filter(Boolean) }
           : {}),
-      }))
-      .filter((f) => f.key !== "");
+      };
+    });
+    // Block the save on any unnamed item rather than silently dropping it.
+    if (cleanedActs.some((a) => a.name === "")) {
+      setError("Every activity needs a name.");
+      return;
+    }
+    if (cleanedRoles.some((r) => r.name === "")) {
+      setError("Every filming role needs a name.");
+      return;
+    }
+    if (cleanedFields.some((f) => f.label === "")) {
+      setError("Every student field needs a name.");
+      return;
+    }
     for (const f of cleanedFields) {
       if (!isValidFieldKey(f.key)) {
         setError(
@@ -189,22 +233,33 @@ export function Activities({ onNavigate }: Props) {
     setEditNonce((n) => n + 1);
   }
 
-  // "Used by" text per catalog item.
-  const activityUsers = (a: Activity): { text: string; muted: boolean } => {
-    if (a.id === RESERVED_OTHER_ID) return { text: "Always available (ad-hoc)", muted: true };
-    const names = teachers.filter((t) => t.activityIds.includes(a.id)).map((t) => t.name);
-    return names.length ? { text: names.join(", "), muted: false } : { text: "Unused", muted: true };
+  // "Used by" pills per catalog item: teachers color-coded, students neutral.
+  const teacherPills = (ts: Teacher[]): Pill[] =>
+    ts.map((t) => {
+      const c = teacherColor(t.color);
+      return { label: t.name, bg: c.bg, text: c.text };
+    });
+  const activityUsers = (a: Activity): UsedBy => {
+    if (a.id === RESERVED_OTHER_ID) return { pills: [], emptyText: "Always available" };
+    return {
+      pills: teacherPills(teachers.filter((t) => t.activityIds.includes(a.id))),
+      emptyText: "Unused",
+    };
   };
-  const roleUsers = (r: Role): { text: string; muted: boolean } => {
-    const names = teachers.filter((t) => t.filmingRoleIds.includes(r.id)).map((t) => t.name);
-    return names.length ? { text: names.join(", "), muted: false } : { text: "Unused", muted: true };
-  };
-  const fieldUsers = (f: StudentField): { text: string; muted: boolean } => {
-    if (!f.key) return { text: "Unused", muted: true };
-    const names = students
+  const roleUsers = (r: Role): UsedBy => ({
+    pills: teacherPills(teachers.filter((t) => t.filmingRoleIds.includes(r.id))),
+    emptyText: "Unused",
+  });
+  const fieldUsers = (f: StudentField): UsedBy => {
+    if (!f.key) return { pills: [], emptyText: "Unused" };
+    const pills = students
       .filter((s) => !s.archived && hasFieldValue(s.fields[f.key]))
-      .map((s) => s.firstName || s.id);
-    return names.length ? { text: names.join(", "), muted: false } : { text: "Unused", muted: true };
+      .map((s) => ({
+        label: s.firstName || s.id,
+        bg: "var(--color-background-tertiary)",
+        text: "var(--color-text-secondary)",
+      }));
+    return { pills, emptyText: "Unused" };
   };
 
   const backBar = (
@@ -234,36 +289,55 @@ export function Activities({ onNavigate }: Props) {
           addLabel="Add activity"
           onAdd={addAct}
           usedHeader="Used by teachers"
-          rows={acts.map((a) => ({
-            id: a.id,
-            name: a.name,
-            ...activityUsers(a),
-            onClick: () => setView({ kind: "detail", cat: "activity", id: a.id }),
-          }))}
+          onMove={moveActivity}
+          rows={[
+            ...acts
+              .filter((a) => a.id !== RESERVED_OTHER_ID)
+              .map((a) => ({
+                id: a.id,
+                name: a.name,
+                ...activityUsers(a),
+                onClick: () => setView({ kind: "detail", cat: "activity", id: a.id }),
+              })),
+            ...acts
+              .filter((a) => a.id === RESERVED_OTHER_ID)
+              .map((a) => ({
+                id: a.id,
+                name: a.name,
+                ...activityUsers(a),
+                pinned: true,
+                bg: "var(--color-background-tertiary)",
+                onClick: () => setView({ kind: "detail", cat: "activity", id: a.id }),
+              })),
+          ]}
         />
         <CatalogTable
           title="Filming roles"
           addLabel="Add role"
           onAdd={addRole}
           usedHeader="Used by teachers"
-          rows={roles.map((r) => ({
-            id: r.id,
-            name: r.name,
-            ...roleUsers(r),
-            onClick: () => setView({ kind: "detail", cat: "role", id: r.id }),
-          }))}
+          rows={roles
+            .map((r) => ({
+              id: r.id,
+              name: r.name,
+              ...roleUsers(r),
+              onClick: () => setView({ kind: "detail", cat: "role", id: r.id }),
+            }))
+            .sort((x, y) => x.name.localeCompare(y.name))}
         />
         <CatalogTable
           title="Student fields"
           addLabel="Add field"
           onAdd={addField}
           usedHeader="Set for students"
-          rows={sf.map((f, i) => ({
-            id: `field-${i}`,
-            name: f.label || f.key,
-            ...fieldUsers(f),
-            onClick: () => setView({ kind: "detail", cat: "field", idx: i }),
-          }))}
+          rows={sf
+            .map((f, i) => ({
+              id: `field-${i}`,
+              name: f.label || f.key,
+              ...fieldUsers(f),
+              onClick: () => setView({ kind: "detail", cat: "field", idx: i }),
+            }))
+            .sort((x, y) => x.name.localeCompare(y.name))}
         />
       </>
     );
@@ -277,7 +351,6 @@ export function Activities({ onNavigate }: Props) {
             activity={a}
             fields={sf}
             editNonce={editNonce}
-            used={actRefs.get(a.id) ?? 0}
             dup={a.name.trim() !== "" && dupActNames.has(a.name.trim().toLowerCase())}
             onChange={(patch) => updateAct(a.id, patch)}
             onDelete={() => {
@@ -297,7 +370,6 @@ export function Activities({ onNavigate }: Props) {
         {r ? (
           <RoleDetail
             role={r}
-            used={roleRefs.get(r.id) ?? 0}
             dup={r.name.trim() !== "" && dupRoleNames.has(r.name.trim().toLowerCase())}
             onChange={(patch) => updateRole(r.id, patch)}
             onToggleField={(fk, on) => toggleRoleField(r.id, fk, on)}
@@ -320,7 +392,6 @@ export function Activities({ onNavigate }: Props) {
           <StudentFieldDetail
             field={f}
             keyEditable={!sfBaseKeys.has(f.key)}
-            used={sfRefs.get(f.key) ?? 0}
             onChange={(patch) => updateField(idx, patch)}
             onDelete={() => {
               if (removeField(idx, f.key)) setView({ kind: "list" });
@@ -345,37 +416,7 @@ export function Activities({ onNavigate }: Props) {
       )}
 
       {dirty && (
-        <div
-          style={{
-            position: "sticky",
-            bottom: 16,
-            marginTop: 16,
-            padding: "10px 14px",
-            background: "var(--color-background-secondary)",
-            border: "0.5px solid var(--color-border-tertiary)",
-            borderRadius: "var(--border-radius-md)",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: 12,
-          }}
-        >
-          <p style={{ margin: 0, fontSize: 13, color: "var(--color-text-secondary)" }}>
-            Unsaved changes
-          </p>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button className="button button--small" onClick={discard} disabled={saving}>
-              Discard
-            </button>
-            <button
-              className="button button--small button--primary"
-              onClick={handleSave}
-              disabled={saving}
-            >
-              {saving ? "Saving…" : "Save"}
-            </button>
-          </div>
-        </div>
+        <SaveBar message="Unsaved changes" saving={saving} onDiscard={discard} onSave={handleSave} />
       )}
     </div>
   );
@@ -388,9 +429,39 @@ export function Activities({ onNavigate }: Props) {
 interface CatalogRow {
   id: string;
   name: string;
-  text: string;
-  muted: boolean;
+  pills: Pill[];
+  emptyText: string;
+  pinned?: boolean;
+  bg?: string;
   onClick: () => void;
+}
+
+function ReorderBtn({
+  label,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        border: "none",
+        background: "transparent",
+        cursor: disabled ? "default" : "pointer",
+        color: "var(--color-text-secondary)",
+        opacity: disabled ? 0.25 : 1,
+        padding: "0 3px",
+        fontSize: 13,
+      }}
+    >
+      {label}
+    </button>
+  );
 }
 
 function CatalogTable({
@@ -399,13 +470,17 @@ function CatalogTable({
   onAdd,
   usedHeader,
   rows,
+  onMove,
 }: {
   title: string;
   addLabel: string;
   onAdd: () => void;
   usedHeader: string;
   rows: CatalogRow[];
+  onMove?: (id: string, dir: -1 | 1) => void;
 }) {
+  // Movable rows come first; pinned rows (e.g. "Other") sit at the bottom.
+  const movableCount = rows.filter((r) => !r.pinned).length;
   return (
     <section style={SECTION_BOX}>
       <SectionHeader title={title} onAdd={onAdd} addLabel={addLabel} />
@@ -415,33 +490,65 @@ function CatalogTable({
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
             <tr style={{ textAlign: "left", color: "var(--color-text-tertiary)", fontSize: 12 }}>
-              <th style={{ padding: "2px 8px", width: "38%", fontWeight: 400 }}>Name</th>
-              <th style={{ padding: "2px 8px", fontWeight: 400 }}>{usedHeader}</th>
+              {onMove && <th style={{ width: 1 }} />}
+              <th style={{ padding: "2px 8px", width: "100%", fontWeight: 400 }}>Name</th>
+              <th style={{ padding: "2px 8px", fontWeight: 400, whiteSpace: "nowrap" }}>
+                {usedHeader}
+              </th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
+            {rows.map((r, i) => (
               <tr
                 key={r.id}
                 onClick={r.onClick}
                 style={{
                   cursor: "pointer",
                   borderTop: "0.5px solid var(--color-border-tertiary)",
-                  background: "var(--color-background-primary)",
+                  background: r.bg,
                 }}
               >
+                {onMove && (
+                  <td
+                    style={{ padding: "0 2px 0 6px", whiteSpace: "nowrap" }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {!r.pinned && (
+                      <span style={{ display: "inline-flex" }}>
+                        <ReorderBtn label="↑" disabled={i === 0} onClick={() => onMove(r.id, -1)} />
+                        <ReorderBtn
+                          label="↓"
+                          disabled={i === movableCount - 1}
+                          onClick={() => onMove(r.id, 1)}
+                        />
+                      </span>
+                    )}
+                  </td>
+                )}
                 <td style={{ padding: "8px", fontWeight: 500 }}>
                   {r.name || <span style={{ color: "var(--color-text-tertiary)" }}>(unnamed)</span>}
                 </td>
-                <td
-                  style={{
-                    padding: "8px",
-                    color: r.muted
-                      ? "var(--color-text-tertiary)"
-                      : "var(--color-text-secondary)",
-                  }}
-                >
-                  {r.text}
+                <td style={{ padding: "8px", whiteSpace: "nowrap" }}>
+                  {r.pills.length === 0 ? (
+                    <span style={{ color: "var(--color-text-tertiary)" }}>{r.emptyText}</span>
+                  ) : (
+                    <span style={{ display: "inline-flex", gap: 4 }}>
+                      {r.pills.map((p, i) => (
+                        <span
+                          key={i}
+                          style={{
+                            background: p.bg,
+                            color: p.text,
+                            borderRadius: 10,
+                            padding: "1px 9px",
+                            fontSize: 12,
+                          }}
+                        >
+                          {p.label}
+                        </span>
+                      ))}
+                    </span>
+                  )}
                 </td>
               </tr>
             ))}
@@ -460,7 +567,6 @@ function ActivityDetail({
   activity,
   fields,
   editNonce,
-  used,
   dup,
   onChange,
   onDelete,
@@ -468,7 +574,6 @@ function ActivityDetail({
   activity: Activity;
   fields: StudentField[];
   editNonce: number;
-  used: number;
   dup: boolean;
   onChange: (patch: Partial<Activity>) => void;
   onDelete: () => void;
@@ -495,14 +600,14 @@ function ActivityDetail({
         </p>
       ) : (
         <>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, fontSize: 13 }}>
             <Check
-              label="Show a “Segment name” field on the Generate form"
+              label="Segment-name field"
               checked={!!activity.requiresSegmentName}
               onChange={(v) => onChange({ requiresSegmentName: v })}
             />
             <Check
-              label="Show an “Additional info” field (appended to the activity wording)"
+              label="Additional-info field"
               checked={!!activity.freeText}
               onChange={(v) => onChange({ freeText: v })}
             />
@@ -517,7 +622,7 @@ function ActivityDetail({
             />
           </div>
           <div>
-            <DeleteButton used={used} onClick={onDelete} />
+            <DeleteButton onClick={onDelete} />
           </div>
         </>
       )}
@@ -527,14 +632,12 @@ function ActivityDetail({
 
 function RoleDetail({
   role,
-  used,
   dup,
   onChange,
   onToggleField,
   onDelete,
 }: {
   role: Role;
-  used: number;
   dup: boolean;
   onChange: (patch: Partial<Role>) => void;
   onToggleField: (fk: string, on: boolean) => void;
@@ -578,7 +681,7 @@ function RoleDetail({
         </div>
       </div>
       <div>
-        <DeleteButton used={used} onClick={onDelete} />
+        <DeleteButton onClick={onDelete} />
       </div>
     </div>
   );
@@ -587,13 +690,11 @@ function RoleDetail({
 function StudentFieldDetail({
   field,
   keyEditable,
-  used,
   onChange,
   onDelete,
 }: {
   field: StudentField;
   keyEditable: boolean;
-  used: number;
   onChange: (patch: Partial<StudentField>) => void;
   onDelete: () => void;
 }) {
@@ -654,7 +755,7 @@ function StudentFieldDetail({
         <OptionsEditor options={field.options ?? []} onChange={(options) => onChange({ options })} />
       )}
       <div>
-        <DeleteButton used={used} noun="reference" onClick={onDelete} />
+        <DeleteButton onClick={onDelete} />
       </div>
     </div>
   );
@@ -716,22 +817,10 @@ function Check({
   );
 }
 
-function DeleteButton({
-  used,
-  onClick,
-  noun = "teacher",
-}: {
-  used: number;
-  onClick: () => void;
-  noun?: string;
-}) {
+function DeleteButton({ onClick }: { onClick: () => void }) {
   return (
-    <button
-      className="button button--small button--danger-text"
-      onClick={onClick}
-      title={used > 0 ? `Used by ${used} ${noun}${used === 1 ? "" : "s"}` : "Delete"}
-    >
-      Delete{used > 0 ? ` (${used})` : ""}
+    <button className="button button--small button--danger-text" onClick={onClick}>
+      Delete
     </button>
   );
 }
@@ -763,11 +852,11 @@ function MadlibEditor({
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       <p style={{ margin: 0, fontSize: 12, color: "var(--color-text-tertiary)" }}>
         Use this when you want this activity worded the same way in every note it appears in. Pick a
-        student attribute to swap in a per-student word (e.g. journal method → “traced” / “wrote”),
+        student field to swap in a per-student word (e.g. journal method → “traced” / “wrote”),
         or leave it on “Same for all students” for identical wording every time.
       </p>
       <div>
-        <label className="label">Per-student word</label>
+        <label className="label">Student field</label>
         <select
           className="select"
           value={attr}
@@ -884,17 +973,26 @@ function OptionsEditor({
   );
 }
 
-function confirmDelete(used: number, noun = "teacher"): boolean {
-  if (used === 0) return true;
-  return window.confirm(
-    `This is used by ${used} ${noun}${used === 1 ? "" : "s"}. Delete anyway? ` +
-      "Existing values are kept in the data but it stops being offered.",
-  );
+function confirmDelete(kind: string, name: string, used: number, noun: string): boolean {
+  const usage =
+    used > 0 ? ` It's used by ${used} ${noun}${used === 1 ? "" : "s"} — existing data is kept.` : "";
+  return window.confirm(`Confirm delete: ${kind} “${name || "(unnamed)"}”.${usage}`);
 }
 
 function countLabel(n: number, singular: string, plural: string): string {
   if (n === 0) return `No ${plural}`;
   return `${n} ${n === 1 ? singular : plural}`;
+}
+
+// Derive a safe camelCase field key from a label (e.g. "AAC device" → "aacDevice").
+function slugKey(label: string): string {
+  const words = label.trim().split(/[^A-Za-z0-9]+/).filter(Boolean);
+  if (words.length === 0) return "";
+  let key = words
+    .map((w, i) => (i === 0 ? w.toLowerCase() : w[0]!.toUpperCase() + w.slice(1).toLowerCase()))
+    .join("");
+  if (!/^[A-Za-z]/.test(key)) key = `f${key}`;
+  return key;
 }
 
 function hasFieldValue(v: string | boolean | string[] | undefined): boolean {

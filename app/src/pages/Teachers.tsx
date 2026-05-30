@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Icon } from "../components/Icon";
 import { Nav, type NavPage } from "../components/Nav";
+import { SaveBar } from "../components/SaveBar";
 import { useTerm } from "../context/TermContext";
 import {
   COLOR_KEYS,
@@ -159,6 +160,7 @@ function TeacherList({
           border: "0.5px solid var(--color-border-tertiary)",
           borderRadius: "var(--border-radius-md)",
           overflow: "hidden",
+          background: "var(--color-background-secondary)",
         }}
       >
         {pool.map((teacher, i) => {
@@ -539,34 +541,14 @@ function TeacherDetail({
       )}
 
       {(dirty || isNew) && (
-        <div
-          style={{
-            marginTop: "1.25rem",
-            padding: "12px 16px",
-            background: "var(--color-background-secondary)",
-            borderRadius: "var(--border-radius-md)",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: 12,
-          }}
-        >
-          <p style={{ margin: 0, fontSize: 13, color: "var(--color-text-secondary)" }}>
-            {isNew ? "New teacher — not saved yet" : "Unsaved changes"}
-          </p>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button
-              className="button button--small"
-              onClick={isNew ? onBack : () => setDraft(cloneTeacher(baseline))}
-              disabled={saving}
-            >
-              {isNew ? "Cancel" : "Discard"}
-            </button>
-            <button className="button button--small button--primary" onClick={handleSave} disabled={saving}>
-              {saving ? "Saving…" : isNew ? "Create teacher" : "Save"}
-            </button>
-          </div>
-        </div>
+        <SaveBar
+          message={isNew ? "New teacher — not saved yet" : "Unsaved changes"}
+          discardLabel={isNew ? "Cancel" : "Discard"}
+          saveLabel={isNew ? "Create teacher" : "Save"}
+          saving={saving}
+          onDiscard={isNew ? onBack : () => setDraft(cloneTeacher(baseline))}
+          onSave={handleSave}
+        />
       )}
 
       {colorOpen && (
