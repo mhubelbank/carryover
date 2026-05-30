@@ -32,7 +32,7 @@ const emptyBoxStyle: CSSProperties = {
 };
 
 export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate }: Props) {
-  const { state, client, teacherById, studentById, saveTerm } = useTerm();
+  const { state, client, teacherById, studentById, saveStudents, saveTerm } = useTerm();
   const [selected, setSelected] = useState<Date>(() => toWeekday(startOfDay(new Date())));
   const [busy, setBusy] = useState(false);
   // The deviation file for the selected date's week, if one exists; otherwise we
@@ -80,8 +80,17 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate }: 
   }
 
   const lastDay = parseDate(term.lastDay);
+  // Banner appears on the term's last day and stays until she sets up the next
+  // term. She rarely has the next term's schedule before the new term starts,
+  // so notifying earlier just creates dismissal fatigue.
   const daysToEnd = lastDay ? daysBetween(now, lastDay) : null;
-  const termEnding = daysToEnd != null && daysToEnd >= 0 && daysToEnd <= 14;
+  const termOver = daysToEnd != null && daysToEnd <= 0;
+
+  async function saveIepDate(studentId: string, nextIepReview: string | null) {
+    await saveStudents(
+      students.map((s) => (s.id === studentId ? { ...s, nextIepReview } : s)),
+    );
+  }
 
   // Skip students who are archived OR outside their enrollment window for the
   // selected date. The schedule.csv may still list them, but they don't appear
@@ -153,7 +162,7 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate }: 
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: "1.25rem" }}>
-        {termEnding && (
+        {termOver && (
           <Banner
             variant="warning"
             icon="calendar-plus"
@@ -163,7 +172,7 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate }: 
               </button>
             }
           >
-            {term.label} ends {lastDay ? formatShort(lastDay) : ""}
+            {term.label} is over — time to prepare the next term.
           </Banner>
         )}
         {overdueStudents.map((student) => (
@@ -171,20 +180,34 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate }: 
             key={student.id}
             variant="danger"
             action={
-              <button
-                className="button button--small"
-                onClick={() => onOpenStudent(student.id, "goals")}
-              >
-                Review goals →
-              </button>
+              <div style={{ display: "flex", gap: 6 }}>
+                <IepDateChanger
+                  current={student.nextIepReview}
+                  onSave={(d) => saveIepDate(student.id, d)}
+                />
+                <button
+                  className="button button--small"
+                  onClick={() => onOpenStudent(student.id, "goals")}
+                >
+                  Review goals →
+                </button>
+              </div>
             }
           >
-            {fullName(student)}'s IEP review was {formatShort(parseDate(student.nextIepReview) ?? now)} — goal
-            update needed before generating notes
+            {fullName(student)}'s IEP review was {formatShort(parseDate(student.nextIepReview) ?? now)}.
           </Banner>
         ))}
         {tomorrowStudents.map((student) => (
-          <Banner key={student.id} variant="info">
+          <Banner
+            key={student.id}
+            variant="info"
+            action={
+              <IepDateChanger
+                current={student.nextIepReview}
+                onSave={(d) => saveIepDate(student.id, d)}
+              />
+            }
+          >
             {fullName(student)}'s IEP review is tomorrow
           </Banner>
         ))}
@@ -223,7 +246,6 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate }: 
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {sessions.map((session) => {
-            const blocked = session.studentIds.some((id) => overdue.has(id));
             const teacher = teacherById.get(session.teacherId);
             const color = teacherColor(teacher?.color);
             return (
@@ -234,8 +256,6 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate }: 
                   borderTop: `4px solid ${color.bg}`,
                   borderRadius: "var(--border-radius-md)",
                   padding: "14px 16px",
-                  background: blocked ? "var(--color-background-secondary)" : undefined,
-                  opacity: blocked ? 0.85 : 1,
                 }}
               >
                 <div
@@ -270,14 +290,11 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate }: 
                     </button>
                   </div>
                   <button
-                    className={blocked ? "button button--small" : "button button--small button--primary"}
-                    disabled={blocked}
+                    className="button button--small button--primary"
                     onClick={() => onGenerate(selectedIso, session.teacherId, session.studentIds)}
-                    title={blocked ? "Resolve the overdue IEP first" : undefined}
                   >
-                    {blocked
-                      ? "Blocked — review goals"
-                      : `Generate ${session.studentIds.length} note${session.studentIds.length === 1 ? "" : "s"}`}
+                    Generate {session.studentIds.length} note
+                    {session.studentIds.length === 1 ? "" : "s"}
                   </button>
                 </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
@@ -319,6 +336,70 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate }: 
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+// Inline IEP-date editor inside a banner action. Collapsed by default to a
+// "Change IEP date" button; expanding reveals a date input + save/cancel. On
+// successful save, the parent updates the student record and the surrounding
+// banner naturally re-evaluates (the student may drop out of overdue/tomorrow).
+function IepDateChanger({
+  current,
+  onSave,
+}: {
+  current: string | null;
+  onSave: (next: string | null) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(current ?? "");
+  const [saving, setSaving] = useState(false);
+
+  if (!editing) {
+    return (
+      <button
+        className="button button--small"
+        onClick={() => {
+          setValue(current ?? "");
+          setEditing(true);
+        }}
+      >
+        Change IEP date
+      </button>
+    );
+  }
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+      <input
+        className="input"
+        type="date"
+        autoFocus
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        style={{ height: 28, fontSize: 13, padding: "2px 6px" }}
+      />
+      <button
+        className="button button--small button--primary"
+        disabled={saving || !value}
+        onClick={async () => {
+          setSaving(true);
+          try {
+            await onSave(value || null);
+            setEditing(false);
+          } finally {
+            setSaving(false);
+          }
+        }}
+      >
+        {saving ? "…" : "Save"}
+      </button>
+      <button
+        className="button button--small"
+        onClick={() => setEditing(false)}
+        disabled={saving}
+      >
+        Cancel
+      </button>
     </div>
   );
 }
