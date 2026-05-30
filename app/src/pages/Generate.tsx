@@ -263,7 +263,15 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
     setActivities((a) => a.map((x, i) => (i === idx ? { ...x, ...patch } : x)));
   }
 
-  const includedStudents = caseload.filter((s) => studentState[s.id]?.included);
+  // When Today deep-linked us in, `pinnedStudentIds` carries the schedule's
+  // saved order for that slot — preserve it so the all-notes paste order
+  // matches what she set in the Schedule editor. Outside that path, fall back
+  // to caseload order.
+  const includedStudents = pinnedStudentIds
+    ? pinnedStudentIds
+        .map((id) => caseload.find((s) => s.id === id))
+        .filter((s): s is Student => s != null && (studentState[s.id]?.included ?? false))
+    : caseload.filter((s) => studentState[s.id]?.included);
   const canGenerate =
     teacher !== undefined &&
     includedStudents.length > 0 &&
