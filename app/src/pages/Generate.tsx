@@ -318,6 +318,17 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
 
   async function handleGenerate() {
     if (!teacher || !client || !keys?.anthropicApiKey) return;
+    // Date and at least one activity are required (matching SESIS) — raise a
+    // clear error rather than generating a dateless or activity-less note. The
+    // activity requirement is regular-mode only; filming day uses roles instead.
+    if (!date) {
+      setError("Pick a session date.");
+      return;
+    }
+    if (mode === "regular" && !activities.some((a) => a.activityId)) {
+      setError("Select at least one activity.");
+      return;
+    }
     setPhase("running");
     setError(null);
     // Initialize result rows so the UI can show per-student progress.
