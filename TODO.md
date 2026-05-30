@@ -20,25 +20,39 @@ pieces aren't:
 - **`data/feedback-rules.md` loading + draft-only append.** The engine accepts
   `opts.feedbackRules` (`app/src/domain/notes.ts`) and the rules belong on the
   **draft** pass only (per `data/prompts/README.md`). Not yet wired in
-  `handleGenerate` — load the file (via `client.readFile`) and pass it through.
-- **Per-teacher quirk handlers:**
-  - **Joanne Bengali `additionalContext`.** Read `student.fields.needsBengali`
-    plus a per-session `bengaliUsed` toggle in the form; emit
-    `\nBengali language support: ${bengaliDetails || "Bengali translations were provided when needed"}`
-    and pass into the template's `{{additionalContext}}` slot.
-  - **Nina journal method.** When an activity starts with
-    `"Completed a journal entry"`, rewrite its description to interpolate
-    `student.journalMethod` (`"traced" | "wrote"`) per `data/prompts/README.md`.
-  - **Nina Spanish post-streamline append.** If `student.fields.needsSpanish`,
-    append the literal Spanish-support sentence after the streamline pass via
-    `opts.postProcess`. Engine already supports the hook.
-- **José `draftAppend` override.** The literal addendum is in
-  `data/prompts/README.md` ("Per-teacher overrides"). Needs to land on his
-  `teachers.json` `promptOverrides.draftAppend`; templates already read
-  `{{teacher.draftAppend}}` (flattened by `teacherPromptContext`). Requires
-  either (a) a "Prompt overrides" UI in the Teachers page (the requirements
-  already list this as advanced/disclosed but it's unbuilt), or (b) hand-edit
-  the JSON for now.
+  `handleGenerate`. Deliberately deferred to **Slice 6**: nothing populates
+  `data/feedback-rules.md` until the regenerate-with-feedback "save as a rule"
+  flow exists, so wiring the load now would be a no-op. Wire it *with* that flow
+  — load the file (via `client.readFile`) and pass it through.
+- **Per-teacher quirk handlers — DONE (verified live + harness).** All run
+  through the declarative `sessionCaptures` system (`app/src/domain/captures.ts`),
+  not bespoke code:
+  - ✅ **Joanne Bengali** — `bengali` capture (`bengaliUsed`/`bengaliDetails`
+    fields → `promptInjection` into `{{additionalContext}}`). Confirmed live.
+  - ✅ **Nina Spanish** — `spanish` capture `postProcess.appendToFinalNote`.
+    Confirmed live.
+  - ✅ **Nina journal** — `journal` capture `activityDescriptionTemplate` with
+    `{student.journalMethod}`. Confirmed live.
+- **Captures schema extended for José-class quirks — wiring DONE, data
+  deferred.** The schema + connection now supports a per-session multiselect that
+  rewrites an activity description:
+  - `SessionCaptureField.type` adds `"multiselect"` (+ `options[]`); the
+    Generate capture panel renders it as a checkbox group.
+  - `applyActivityRewrite` threads the capture's field state into the template
+    context, so `activityDescriptionTemplate` can interpolate session input.
+  - `renderCaptureTemplate` gained a `join` filter (`{skills | join: ", "}`),
+    with `default` firing after an empty join.
+  - `promptOverrides` (draft/review/streamline appends) path verified end-to-end.
+  All five paths exercised against the real functions (esbuild harness, all pass).
+  **Remaining = DATA only, deferred (ask Emily):** José's `teachers.json` record
+  currently lists a single activity "Cooking group" and no `promptOverrides` —
+  his original `jose.tsx` pragmatic-language activity + 9-option skills list +
+  the draft/review/streamline CRITICAL rules (`originals/jose.tsx:470,520-521,621`)
+  are unported. Whether "Cooking group" is intentional or placeholder is unknown;
+  don't recreate his original activities without confirming his current caseload.
+  - *Design note:* a capture gated on `activity.name` cannot also feed
+    `additionalContext` — that path (`activeCapturesFor`) is student-scoped and
+    has no activity in context. Gate injection captures on student/capture state.
 - **Regenerate-with-feedback modal.** A plain "Regenerate" button is wired; the
   feedback modal + quick-fix chips + "save as a rule" opt-in are Slice 6 per the
   spec.
@@ -56,6 +70,13 @@ pieces aren't:
 
 ## Repo / deployment cleanup (deferred — user explicitly said "fix later")
 
+- **Relocate live session files on the `data` branch.** The code now reads/writes
+  `data/sessions/` (was `sessions/`; `SESSIONS_DIR` in `app/src/domain/data.ts`).
+  The `main`-side move (constant + tracked files + docs) is done, but the live
+  session JSONs on the **`data` branch** still sit at `sessions/`. Move them to
+  `data/sessions/` via the worktree-sync flow **with/after** the new code deploys
+  — until then the running app would read an empty sessions dir (goal-usage counts
+  show 0). Files to move on `data`: the five `sessions/*.json` + `sessions/README.md`.
 - **Pre-cutover data commits on `main`.** Roughly a dozen `Update schedule` /
   `Update term` / `Update teachers` commits landed on `main` before we cut over
   to the `data` branch + `data:` prefix. Acceptable for now; the `data` branch

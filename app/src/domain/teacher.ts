@@ -59,9 +59,13 @@ export interface Role {
 // Generate form when the capture is active for the student.
 export interface SessionCaptureField {
   name: string;
-  type: "bool" | "text";
+  type: "bool" | "text" | "multiselect";
   label?: string;
   placeholder?: string;
+  // For `multiselect`: the selectable values, rendered as a checkbox group.
+  // The field's state is the chosen subset as a string[]; render it into a
+  // template with a join filter, e.g. `{skills | join: ", "}`.
+  options?: string[];
   // Condition controlling whether this field renders. Bare names resolve
   // against the current capture's field values; dotted paths (e.g.
   // `student.needsBengali`) resolve against the wider context.

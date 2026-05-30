@@ -71,8 +71,15 @@ export function renderCaptureTemplate(template: string, ctx: EvalContext): strin
     const [path, ...filters] = raw.split("|").map((s) => s.trim());
     let v = resolvePath(path!, ctx);
     for (const f of filters) {
-      const m = /^default\s*:\s*["'](.+?)["']\s*$/.exec(f);
-      if (m && (v == null || v === "")) v = m[1];
+      const joinM = /^join\s*:\s*["'](.*?)["']\s*$/.exec(f);
+      if (joinM && Array.isArray(v)) {
+        v = v.join(joinM[1]);
+        continue;
+      }
+      const defM = /^default\s*:\s*["'](.+?)["']\s*$/.exec(f);
+      if (defM && (v == null || v === "" || (Array.isArray(v) && v.length === 0))) {
+        v = defM[1];
+      }
     }
     return v == null ? "" : String(v);
   });
@@ -129,16 +136,19 @@ export function buildPostProcess(
 
 // If an active capture's activityDescriptionTemplate matches this activity
 // (via the capture's `showIf` with the activity in scope), return the rendered
-// description; otherwise return the default.
+// description; otherwise return the default. The capture's own field state is
+// threaded in as `capture` so the rewrite can interpolate per-session input
+// (e.g. a multiselect of skills: `{skills | join: ", "}`).
 export function applyActivityRewrite(
   teacher: Teacher,
   student: Student,
   activity: { name: string; additionalInfo?: string },
+  captureState: Record<string, Record<string, unknown>>,
   defaultDescription: string,
 ): string {
   for (const cap of teacher.sessionCaptures ?? []) {
     if (!cap.activityDescriptionTemplate) continue;
-    const ctx: EvalContext = { student, activity };
+    const ctx: EvalContext = { student, activity, capture: captureState[cap.name] ?? {} };
     if (!evalCondition(cap.showIf, ctx)) continue;
     return renderCaptureTemplate(cap.activityDescriptionTemplate, ctx);
   }

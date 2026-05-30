@@ -38,7 +38,7 @@ const PATHS = {
   schedule: "data/schedule.csv",
 } as const;
 
-const SESSIONS_DIR = "sessions";
+const SESSIONS_DIR = "data/sessions";
 
 // students.csv columns, in order. Legacy `name` and old per-teacher quirk
 // columns are read at load (see toStudent) but no longer written.
