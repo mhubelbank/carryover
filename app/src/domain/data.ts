@@ -461,6 +461,13 @@ function toActivity(raw: unknown): Activity {
     freeTextIsDescription: a.freeTextIsDescription === true,
     descriptionTemplate: a.descriptionTemplate,
     requiresAttribute: a.requiresAttribute,
+    perStudentOptions: a.perStudentOptions
+      ? {
+          label: a.perStudentOptions.label ?? "",
+          options: Array.isArray(a.perStudentOptions.options) ? a.perStudentOptions.options : [],
+          template: a.perStudentOptions.template ?? "",
+        }
+      : undefined,
   };
 }
 

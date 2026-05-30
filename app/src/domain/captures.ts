@@ -96,6 +96,9 @@ export function renderCaptureTemplate(template: string, ctx: EvalContext): strin
         v = defM[1];
       }
     }
+    // A bare array (e.g. `{options}` with no explicit join filter) reads as a
+    // comma-separated list rather than the default JS "a,b" stringification.
+    if (Array.isArray(v)) return v.join(", ");
     return v == null ? "" : String(v);
   });
 }
@@ -181,10 +184,24 @@ export function applyActivityRewrite(
   additionalInfo: string,
   captureState: Record<string, Record<string, unknown>>,
   defaultDescription: string,
+  selectedOptions: string[] = [],
 ): string {
   // Eval/template context exposes the activity's id + name + per-session info.
   const actx = { id: activity.id, name: activity.name, additionalInfo };
   const s = studentContext(student);
+
+  // Activity-native per-student options (e.g. pragmatic skills). Only rewrites
+  // when the student actually picked something — an empty selection falls
+  // through to the default description (avoids "…by  while …").
+  const pso = activity.perStudentOptions;
+  if (pso?.template && selectedOptions.length > 0) {
+    const ctx: EvalContext = {
+      student: s,
+      activity: actx,
+      capture: { options: selectedOptions, info: additionalInfo, name: activity.name },
+    };
+    return renderCaptureTemplate(pso.template, ctx);
+  }
 
   if (activity.descriptionTemplate && attributeSatisfied(activity, student)) {
     return renderCaptureTemplate(activity.descriptionTemplate, { student: s, activity: actx });

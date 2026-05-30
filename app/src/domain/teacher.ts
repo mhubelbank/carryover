@@ -59,6 +59,16 @@ export interface Activity {
   // or the student has that attribute; otherwise the plain `name` is used.
   descriptionTemplate?: string;
   requiresAttribute?: string;
+  // A per-student multiselect rendered on each student's card in Generate (e.g.
+  // the pragmatic-skills checklist). Each student picks their own subset; the
+  // chosen values rewrite this activity's description via `template`, where
+  // `{options}` is the comma-joined selection and `{info}` the Additional-info
+  // text. When nothing is selected, the default description is used.
+  perStudentOptions?: {
+    label: string;
+    options: string[];
+    template: string;
+  };
 }
 
 // A shared-catalog filming-day role (data/filming-roles.json), referenced by
