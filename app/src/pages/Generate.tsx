@@ -118,15 +118,15 @@ interface ResultRow {
   showDrafts?: boolean;
 }
 
-// Seeds prompting/redirection/response from the student's session defaults (a
-// fresh copy per input so edits don't alias the student record).
-function blankRegularInput(student?: Student): ActivityInput {
+// Activity inputs start empty; the student's session defaults are applied only
+// when she clicks "Use" in the form (opt-in, not auto-populated).
+function blankRegularInput(): ActivityInput {
   return {
     goals: [],
-    promptingLevel: [...(student?.defaultPromptingLevel ?? [])],
-    promptingType: [...(student?.defaultPromptingType ?? [])],
-    redirection: [...(student?.defaultRedirection ?? [])],
-    response: [...(student?.defaultResponse ?? [])],
+    promptingLevel: [],
+    promptingType: [],
+    redirection: [],
+    response: [],
     additionalNotes: "",
     captures: {},
     options: [],
@@ -281,7 +281,7 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
       const next: Record<string, StudentState> = {};
       for (const s of caseload) {
         const old = prev[s.id];
-        const regular = activities.map((_, i) => old?.regular[i] ?? blankRegularInput(s));
+        const regular = activities.map((_, i) => old?.regular[i] ?? blankRegularInput());
         if (old && !sessionChanged) {
           next[s.id] = { ...old, regular };
         } else {
@@ -586,6 +586,7 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
     return (
       <ResultsView
         date={date}
+        timeSlot={timeSlot}
         results={results}
         error={error}
         onBack={() => setPhase("form")}
@@ -738,7 +739,7 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <span style={{ fontSize: 15, fontWeight: 500 }}>{fullName(student)}</span>
+                  <span style={{ fontSize: 16, fontWeight: 600, color: "var(--color-text-primary)" }}>{fullName(student)}</span>
                   <span style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>
                     {student.pronouns}
                   </span>
@@ -779,6 +780,7 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
                   activities={activities}
                   options={activityOptions}
                   teacher={teacher}
+                  student={student}
                   inputs={st.regular}
                   studentGoals={studentGoals}
                   onChange={(idx, patch) => setRegularInput(student.id, idx, patch)}
@@ -1160,6 +1162,7 @@ function RegularStudentCard({
   activities,
   options,
   teacher,
+  student,
   inputs,
   studentGoals,
   onChange,
@@ -1168,6 +1171,7 @@ function RegularStudentCard({
   activities: ActivityDef[];
   options: Activity[];
   teacher: Teacher;
+  student: Student;
   inputs: ActivityInput[];
   studentGoals: Goal[];
   onChange: (idx: number, patch: Partial<ActivityInput>) => void;
@@ -1178,14 +1182,53 @@ function RegularStudentCard({
     value: string | boolean | string[],
   ) => void;
 }) {
+  // The student's saved session defaults — offered as one-click "use" / "clear"
+  // across every activity row (the prompting fields are per-activity).
+  const defaults = {
+    promptingLevel: student.defaultPromptingLevel,
+    promptingType: student.defaultPromptingType,
+    redirection: student.defaultRedirection,
+    response: student.defaultResponse,
+  };
+  const hasDefaults = Object.values(defaults).some((v) => v.length > 0);
+  const applyToAll = (patch: Partial<ActivityInput>) =>
+    activities.forEach((_, i) => onChange(i, patch));
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      {hasDefaults && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+          <span style={{ color: "var(--color-text-tertiary)" }}>Session defaults:</span>
+          <button
+            className="button button--small"
+            style={{ padding: "2px 8px" }}
+            onClick={() =>
+              applyToAll({
+                promptingLevel: [...defaults.promptingLevel],
+                promptingType: [...defaults.promptingType],
+                redirection: [...defaults.redirection],
+                response: [...defaults.response],
+              })
+            }
+          >
+            Use
+          </button>
+          <button
+            className="button button--small button--danger-text"
+            style={{ padding: "2px 8px" }}
+            onClick={() =>
+              applyToAll({ promptingLevel: [], promptingType: [], redirection: [], response: [] })
+            }
+          >
+            Clear
+          </button>
+        </div>
+      )}
       {activities.map((a, i) => {
         const def = options.find((o) => o.id === a.activityId);
         const caps = def ? activityCapturesFor(teacher, { id: def.id, name: def.name }) : [];
         return (
         <div key={i} style={{ borderTop: i > 0 ? "0.5px solid var(--color-border-tertiary)" : undefined, paddingTop: i > 0 ? 10 : 0 }}>
-          <div style={{ fontSize: 15, fontWeight: 600, color: "var(--color-text-primary)", marginBottom: 6 }}>
+          <div style={{ fontSize: 15, fontWeight: 400, color: "var(--color-text-primary)", marginBottom: 6 }}>
             {def?.name || `Activity ${i + 1}`}
           </div>
           {caps.length > 0 && (
@@ -1525,6 +1568,7 @@ function CheckGroup({
 
 function ResultsView({
   date,
+  timeSlot,
   results,
   error,
   onBack,
@@ -1533,6 +1577,7 @@ function ResultsView({
   onToggleDrafts,
 }: {
   date: string;
+  timeSlot: string;
   results: ResultRow[];
   error: string | null;
   onBack: () => void;
@@ -1541,11 +1586,10 @@ function ResultsView({
   onToggleDrafts: (id: string) => void;
 }) {
   const parsed = parseDate(date);
-  const allNotes = useMemo(() => buildAllNotes(parsed ? formatLong(parsed) : date, results), [
-    parsed,
-    date,
-    results,
-  ]);
+  const allNotes = useMemo(
+    () => buildAllNotes(parsed ? formatLong(parsed) : date, timeSlot, results),
+    [parsed, date, timeSlot, results],
+  );
   // The student ids being regenerated-with-feedback (modal open when non-null);
   // a single id for a per-note Regenerate, many for a bulk selection.
   const [regenTargets, setRegenTargets] = useState<string[] | null>(null);
@@ -1981,12 +2025,13 @@ function RegenerateModal({
 // Helpers
 // ---------------------------------------------------------------------------
 
-function buildAllNotes(dateLabel: string, results: ResultRow[]): string {
+function buildAllNotes(dateLabel: string, timeSlot: string, results: ResultRow[]): string {
   const body = results
     .filter((r) => r.result)
     .map((r) => `${r.name}:\n${r.result!.final}`)
     .join("\n\n");
-  return `${dateLabel}\n\n${body}`;
+  const header = timeSlot ? `${dateLabel}\n\n${timeSlot}` : dateLabel;
+  return `${header}\n\n${body}`;
 }
 
 function buildContext(
