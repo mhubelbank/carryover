@@ -108,7 +108,7 @@ function Pages() {
         />
       );
     case "activities":
-      return <Activities onNavigate={nav} />;
+      return <Activities onNavigate={nav} onOpenStudent={openStudent} />;
     case "schedule":
       return <Schedule onNavigate={nav} onOpenStudent={openStudent} />;
     case "generate":

@@ -11,6 +11,7 @@ import {
 import { roleRefCounts } from "../domain/role";
 import { isValidFieldKey, studentFieldRefCounts, type StudentField } from "../domain/studentField";
 import { teacherColor, type Activity, type Role, type Teacher } from "../domain/teacher";
+import { fullName, type Student } from "../domain/student";
 
 interface Pill {
   label: string;
@@ -24,6 +25,9 @@ interface UsedBy {
 
 interface Props {
   onNavigate: (page: NavPage) => void;
+  // Opens a student's detail editor — used to set a multi-select field's value,
+  // which can't be assigned inline from here.
+  onOpenStudent: (id: string) => void;
 }
 
 // Filming field-component keys, with display labels, that a role can enable.
@@ -56,8 +60,9 @@ type View =
 // The shared catalogs (activities, filming roles, student fields). Teachers/
 // students reference these; here Emily edits the catalogs. Each catalog is a
 // compact table (name + who uses it); clicking a row opens its detail editor.
-export function Activities({ onNavigate }: Props) {
-  const { state, saveActivities, saveFilmingRoles, saveStudentFields } = useTerm();
+export function Activities({ onNavigate, onOpenStudent }: Props) {
+  const { state, saveActivities, saveFilmingRoles, saveStudentFields, saveTeachers, saveStudents } =
+    useTerm();
   const [acts, setActs] = useState<Activity[]>(() =>
     state.status === "ready" ? state.data.activities.map(cloneActivity) : [],
   );
@@ -76,6 +81,20 @@ export function Activities({ onNavigate }: Props) {
   const [sfBase, setSfBase] = useState<StudentField[]>(() =>
     state.status === "ready" ? state.data.studentFields.map(cloneField) : [],
   );
+  // Teachers/students are edited here too — assigning who uses each catalog item
+  // means flipping ids on their records. Saved alongside the catalogs.
+  const [teachers, setTeachers] = useState<Teacher[]>(() =>
+    state.status === "ready" ? state.data.teachers.map(cloneTeacher) : [],
+  );
+  const [teachersBase, setTeachersBase] = useState<Teacher[]>(() =>
+    state.status === "ready" ? state.data.teachers.map(cloneTeacher) : [],
+  );
+  const [students, setStudents] = useState<Student[]>(() =>
+    state.status === "ready" ? state.data.students.map(cloneStudent) : [],
+  );
+  const [studentsBase, setStudentsBase] = useState<Student[]>(() =>
+    state.status === "ready" ? state.data.students.map(cloneStudent) : [],
+  );
   const [view, setView] = useState<View>({ kind: "list" });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -88,7 +107,6 @@ export function Activities({ onNavigate }: Props) {
   useEffect(() => setError(null), [view]);
 
   if (state.status !== "ready") return null;
-  const { teachers, students } = state.data;
   const actRefs = activityRefCounts(teachers);
   const roleRefs = roleRefCounts(teachers);
   const sfRefs = studentFieldRefCounts(
@@ -100,9 +118,19 @@ export function Activities({ onNavigate }: Props) {
   const actsDirty = JSON.stringify(acts) !== JSON.stringify(actsBase);
   const rolesDirty = JSON.stringify(roles) !== JSON.stringify(rolesBase);
   const sfDirty = JSON.stringify(sf) !== JSON.stringify(sfBase);
-  const dirty = actsDirty || rolesDirty || sfDirty;
+  const teachersDirty = JSON.stringify(teachers) !== JSON.stringify(teachersBase);
+  const studentsDirty = JSON.stringify(students) !== JSON.stringify(studentsBase);
+  const dirty = actsDirty || rolesDirty || sfDirty || teachersDirty || studentsDirty;
   const dupActNames = duplicateNames(acts.map((a) => a.name));
   const dupRoleNames = duplicateNames(roles.map((r) => r.name));
+  // Active people, name-sorted — the assignable candidates in each detail's
+  // "used by" editor.
+  const activeTeachersByName = teachers
+    .filter((t) => !t.archived)
+    .sort((x, y) => x.name.localeCompare(y.name));
+  const activeStudentsByName = students
+    .filter((s) => !s.archived)
+    .sort((x, y) => fullName(x).localeCompare(fullName(y)));
 
   const updateAct = (id: string, patch: Partial<Activity>) =>
     setActs((d) => d.map((a) => (a.id === id ? { ...a, ...patch } : a)));
@@ -167,6 +195,44 @@ export function Activities({ onNavigate }: Props) {
     setSf((d) => d.filter((_, j) => j !== i));
     return true;
   };
+
+  // Membership: assigning who uses a catalog item edits the *people's* records.
+  const toggleActivityTeacher = (activityId: string, teacherId: string, on: boolean) =>
+    setTeachers((ts) =>
+      ts.map((t) =>
+        t.id === teacherId
+          ? {
+              ...t,
+              activityIds: on
+                ? [...new Set([...t.activityIds, activityId])]
+                : t.activityIds.filter((id) => id !== activityId),
+            }
+          : t,
+      ),
+    );
+  const toggleRoleTeacher = (roleId: string, teacherId: string, on: boolean) =>
+    setTeachers((ts) =>
+      ts.map((t) =>
+        t.id === teacherId
+          ? {
+              ...t,
+              filmingRoleIds: on
+                ? [...new Set([...t.filmingRoleIds, roleId])]
+                : t.filmingRoleIds.filter((id) => id !== roleId),
+            }
+          : t,
+      ),
+    );
+  // For toggle fields, set the boolean directly; for select fields, only removal
+  // (value → []) happens here — adding a value opens the student (no inline UI).
+  const setStudentFieldValue = (
+    key: string,
+    studentId: string,
+    value: boolean | string[],
+  ) =>
+    setStudents((ss) =>
+      ss.map((s) => (s.id === studentId ? { ...s, fields: { ...s.fields, [key]: value } } : s)),
+    );
 
   async function handleSave() {
     setError(null);
@@ -265,12 +331,16 @@ export function Activities({ onNavigate }: Props) {
       if (actsDirty) await saveActivities(cleanedActs);
       if (rolesDirty) await saveFilmingRoles(cleanedRoles);
       if (sfDirty) await saveStudentFields(cleanedFields);
+      if (teachersDirty) await saveTeachers(teachers);
+      if (studentsDirty) await saveStudents(students);
       setActs(cleanedActs.map(cloneActivity));
       setActsBase(cleanedActs.map(cloneActivity));
       setRoles(cleanedRoles.map(cloneRole));
       setRolesBase(cleanedRoles.map(cloneRole));
       setSf(cleanedFields.map(cloneField));
       setSfBase(cleanedFields.map(cloneField));
+      setTeachersBase(teachers.map(cloneTeacher));
+      setStudentsBase(students.map(cloneStudent));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Save failed");
     } finally {
@@ -282,6 +352,8 @@ export function Activities({ onNavigate }: Props) {
     setActs(actsBase.map(cloneActivity));
     setRoles(rolesBase.map(cloneRole));
     setSf(sfBase.map(cloneField));
+    setTeachers(teachersBase.map(cloneTeacher));
+    setStudents(studentsBase.map(cloneStudent));
     setEditNonce((n) => n + 1);
   }
 
@@ -320,7 +392,7 @@ export function Activities({ onNavigate }: Props) {
       onClick={() => setView({ kind: "list" })}
       style={{ padding: 0, color: "var(--color-text-secondary)", marginBottom: 14 }}
     >
-      ← Back to catalogs
+      ← Back to activity catalog
     </button>
   );
 
@@ -417,6 +489,26 @@ export function Activities({ onNavigate }: Props) {
             fields={sf}
             editNonce={editNonce}
             dup={a.name.trim() !== "" && dupActNames.has(a.name.trim().toLowerCase())}
+            members={
+              a.id === RESERVED_OTHER_ID ? null : (
+                <MembersPicker
+                  title="Teachers using this activity"
+                  addLabel="+ Add a teacher…"
+                  candidates={activeTeachersByName.map((t) => {
+                    const c = teacherColor(t.color);
+                    return {
+                      id: t.id,
+                      name: t.name,
+                      member: t.activityIds.includes(a.id),
+                      bg: c.bg,
+                      text: c.text,
+                    };
+                  })}
+                  onAdd={(tid) => toggleActivityTeacher(a.id, tid, true)}
+                  onRemove={(tid) => toggleActivityTeacher(a.id, tid, false)}
+                />
+              )
+            }
             onChange={(patch) => updateAct(a.id, patch)}
             onDelete={() => {
               if (removeAct(a.id)) setView({ kind: "list" });
@@ -436,6 +528,24 @@ export function Activities({ onNavigate }: Props) {
           <RoleDetail
             role={r}
             dup={r.name.trim() !== "" && dupRoleNames.has(r.name.trim().toLowerCase())}
+            members={
+              <MembersPicker
+                title="Teachers using this role"
+                addLabel="+ Add a teacher…"
+                candidates={activeTeachersByName.map((t) => {
+                  const c = teacherColor(t.color);
+                  return {
+                    id: t.id,
+                    name: t.name,
+                    member: t.filmingRoleIds.includes(r.id),
+                    bg: c.bg,
+                    text: c.text,
+                  };
+                })}
+                onAdd={(tid) => toggleRoleTeacher(r.id, tid, true)}
+                onRemove={(tid) => toggleRoleTeacher(r.id, tid, false)}
+              />
+            }
             onChange={(patch) => updateRole(r.id, patch)}
             onToggleField={(fk, on) => toggleRoleField(r.id, fk, on)}
             onDelete={() => {
@@ -457,6 +567,39 @@ export function Activities({ onNavigate }: Props) {
           <StudentFieldDetail
             field={f}
             keyEditable={!sfBaseKeys.has(f.key)}
+            members={
+              !f.key ? (
+                <p style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>
+                  Name this field and save it to assign students.
+                </p>
+              ) : f.type === "toggle" ? (
+                <MembersPicker
+                  title="Students with this on"
+                  addLabel="+ Add a student…"
+                  candidates={activeStudentsByName.map((s) => ({
+                    id: s.id,
+                    name: fullName(s),
+                    member: s.fields[f.key] === true,
+                  }))}
+                  onAdd={(sid) => setStudentFieldValue(f.key, sid, true)}
+                  onRemove={(sid) => setStudentFieldValue(f.key, sid, false)}
+                  onOpen={onOpenStudent}
+                />
+              ) : (
+                <MembersPicker
+                  title="Students with this field set"
+                  addLabel="+ Add a student…"
+                  candidates={activeStudentsByName.map((s) => ({
+                    id: s.id,
+                    name: fullName(s),
+                    member: hasFieldValue(s.fields[f.key]),
+                  }))}
+                  onAdd={(sid) => onOpenStudent(sid)}
+                  onRemove={(sid) => setStudentFieldValue(f.key, sid, [])}
+                  onOpen={onOpenStudent}
+                />
+              )
+            }
             onChange={(patch) => updateField(idx, patch)}
             onDelete={() => {
               if (removeField(idx, f.key)) setView({ kind: "list" });
@@ -633,6 +776,7 @@ function ActivityDetail({
   fields,
   editNonce,
   dup,
+  members,
   onChange,
   onDelete,
 }: {
@@ -640,6 +784,7 @@ function ActivityDetail({
   fields: StudentField[];
   editNonce: number;
   dup: boolean;
+  members?: ReactNode;
   onChange: (patch: Partial<Activity>) => void;
   onDelete: () => void;
 }) {
@@ -751,6 +896,7 @@ function ActivityDetail({
             />
           </div>
           */}
+          {members}
           <div>
             <DeleteButton onClick={onDelete} />
           </div>
@@ -763,12 +909,14 @@ function ActivityDetail({
 function RoleDetail({
   role,
   dup,
+  members,
   onChange,
   onToggleField,
   onDelete,
 }: {
   role: Role;
   dup: boolean;
+  members?: ReactNode;
   onChange: (patch: Partial<Role>) => void;
   onToggleField: (fk: string, on: boolean) => void;
   onDelete: () => void;
@@ -810,6 +958,7 @@ function RoleDetail({
           ))}
         </div>
       </div>
+      {members}
       <div>
         <DeleteButton onClick={onDelete} />
       </div>
@@ -820,11 +969,13 @@ function RoleDetail({
 function StudentFieldDetail({
   field,
   keyEditable,
+  members,
   onChange,
   onDelete,
 }: {
   field: StudentField;
   keyEditable: boolean;
+  members?: ReactNode;
   onChange: (patch: Partial<StudentField>) => void;
   onDelete: () => void;
 }) {
@@ -884,9 +1035,96 @@ function StudentFieldDetail({
       {field.type === "select" && (
         <OptionsEditor options={field.options ?? []} onChange={(options) => onChange({ options })} />
       )}
+      {members}
       <div>
         <DeleteButton onClick={onDelete} />
       </div>
+    </div>
+  );
+}
+
+// Assign/unassign who uses a catalog item: current members show as removable
+// pills, and an "add" dropdown lists everyone not yet assigned. `onAdd` either
+// toggles membership directly (teachers, toggle fields) or opens the person to
+// set a value (multi-select fields). `onOpen` makes a member pill's name a link.
+function MembersPicker({
+  title,
+  addLabel,
+  candidates,
+  onAdd,
+  onRemove,
+  onOpen,
+}: {
+  title: string;
+  addLabel: string;
+  candidates: { id: string; name: string; member: boolean; bg?: string; text?: string }[];
+  onAdd: (id: string) => void;
+  onRemove: (id: string) => void;
+  onOpen?: (id: string) => void;
+}) {
+  const members = candidates.filter((c) => c.member);
+  const nonMembers = candidates.filter((c) => !c.member);
+  return (
+    <div>
+      <label className="label">{title}</label>
+      {members.length > 0 ? (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, margin: "0 0 8px 0" }}>
+          {members.map((m) => (
+            <span
+              key={m.id}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                background: m.bg ?? "var(--color-background-tertiary)",
+                color: m.text ?? "var(--color-text-secondary)",
+                padding: "2px 6px 2px 10px",
+                borderRadius: 999,
+                fontSize: 12,
+                fontWeight: 500,
+              }}
+            >
+              {onOpen ? (
+                <button
+                  onClick={() => onOpen(m.id)}
+                  title="Open"
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "inherit", padding: 0, font: "inherit" }}
+                >
+                  {m.name}
+                </button>
+              ) : (
+                <span>{m.name}</span>
+              )}
+              <button
+                onClick={() => onRemove(m.id)}
+                title="Remove"
+                style={{ background: "none", border: "none", cursor: "pointer", color: "inherit", opacity: 0.65, padding: 0, lineHeight: 1, fontSize: 14 }}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p style={{ fontSize: 12, color: "var(--color-text-tertiary)", margin: "0 0 8px 0" }}>
+          No one yet.
+        </p>
+      )}
+      <select
+        className="select"
+        style={{ maxWidth: 240 }}
+        value=""
+        onChange={(e) => {
+          if (e.target.value) onAdd(e.target.value);
+        }}
+      >
+        <option value="">{addLabel}</option>
+        {nonMembers.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.name}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }
@@ -1141,6 +1379,20 @@ function cloneRole(r: Role): Role {
 
 function cloneField(f: StudentField): StudentField {
   return { ...f, ...(f.options ? { options: [...f.options] } : {}) };
+}
+
+function cloneTeacher(t: Teacher): Teacher {
+  return {
+    ...t,
+    modes: [...t.modes],
+    activityIds: [...t.activityIds],
+    filmingRoleIds: [...t.filmingRoleIds],
+    sessionCaptures: (t.sessionCaptures ?? []).map((c) => ({ ...c })),
+  };
+}
+
+function cloneStudent(s: Student): Student {
+  return { ...s, fields: { ...s.fields } };
 }
 
 function duplicateNames(names: string[]): Set<string> {
