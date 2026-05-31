@@ -3,22 +3,54 @@ import { Icon } from "../components/Icon";
 import { Nav, type NavPage } from "../components/Nav";
 import { useTerm } from "../context/TermContext";
 import { termLabel, type TermType } from "../domain/term";
+import type { Teacher } from "../domain/teacher";
 
 interface Props {
   onNavigate: (page: NavPage) => void;
+  // Present when launched over existing data (from Settings); closes the wizard.
+  // Absent for the first-run/empty case, where finishing reloads into the app.
+  onClose?: () => void;
 }
 
 const STEPS = ["Year", "Teachers", "Students", "Schedule", "Goals"] as const;
 
+function blankTeacher(): Teacher {
+  return {
+    id: `t_${crypto.randomUUID()}`,
+    name: "",
+    color: "purple",
+    modes: ["regular"],
+    activityIds: [],
+    filmingRoleIds: [],
+    sessionCaptures: [],
+    archived: false,
+  };
+}
+
+function cloneTeacher(t: Teacher): Teacher {
+  return {
+    ...t,
+    modes: [...t.modes],
+    activityIds: [...t.activityIds],
+    filmingRoleIds: [...t.filmingRoleIds],
+    sessionCaptures: (t.sessionCaptures ?? []).map((c) => ({ ...c })),
+  };
+}
+
 // The new-term setup wizard (replaces the empty-state placeholder). Step 1
-// (Year) creates the term; steps 2–5 carry forward / edit teachers, students,
-// schedule, and goals (built out incrementally — placeholders for now).
-export function NewTermWizard({ onNavigate }: Props) {
-  const { saveTerm, reload } = useTerm();
+// (Year) creates the term, step 2 reviews the teacher roster; steps 3–5 (students,
+// schedule, goals) are built out incrementally — placeholders for now.
+export function NewTermWizard({ onNavigate, onClose }: Props) {
+  const { state, saveTerm, saveTeachers, reload } = useTerm();
   const [step, setStep] = useState(1);
   const [termType, setTermType] = useState<TermType>("school-year");
   const [firstDay, setFirstDay] = useState("");
   const [lastDay, setLastDay] = useState("");
+  // Teacher roster carried forward (or empty on first run); editable here.
+  const [teachers, setTeachers] = useState<Teacher[]>(() =>
+    state.status === "ready" ? state.data.teachers.filter((t) => !t.archived).map(cloneTeacher) : [],
+  );
+  const [teachersBase] = useState(() => JSON.stringify(teachers));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,8 +67,12 @@ export function NewTermWizard({ onNavigate }: Props) {
     setError(null);
     try {
       await saveTerm({ termType, firstDay, lastDay, label: termLabel(termType, firstDay, lastDay) });
+      // Persist the reviewed roster only if it changed (drop blank-name rows).
+      const cleaned = teachers.map((t) => ({ ...t, name: t.name.trim() })).filter((t) => t.name);
+      if (JSON.stringify(cleaned) !== teachersBase) await saveTeachers(cleaned);
       // Term now exists → the app reloads into its normal (ready) state.
       reload();
+      onClose?.();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't create the term.");
       setSaving(false);
@@ -65,6 +101,8 @@ export function NewTermWizard({ onNavigate }: Props) {
             onFirstDay={setFirstDay}
             onLastDay={setLastDay}
           />
+        ) : step === 2 ? (
+          <TeachersStep teachers={teachers} onChange={setTeachers} />
         ) : (
           <PlaceholderStep name={STEPS[step - 1]!} />
         )}
@@ -85,6 +123,11 @@ export function NewTermWizard({ onNavigate }: Props) {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          {step === 1 && onClose && (
+            <button className="button" onClick={onClose}>
+              Cancel setup
+            </button>
+          )}
           {step > 1 && (
             <button className="button" onClick={() => setStep((s) => s - 1)}>
               ← Back
@@ -239,6 +282,80 @@ function YearStep({
         </p>
       )}
     </>
+  );
+}
+
+const TEACHER_MODES = [
+  { id: "regular", label: "Regular" },
+  { id: "filming-day", label: "Filming day" },
+] as const;
+
+function TeachersStep({
+  teachers,
+  onChange,
+}: {
+  teachers: Teacher[];
+  onChange: (next: Teacher[]) => void;
+}) {
+  const setName = (id: string, name: string) =>
+    onChange(teachers.map((t) => (t.id === id ? { ...t, name } : t)));
+  const toggleMode = (id: string, mode: Teacher["modes"][number], on: boolean) =>
+    onChange(
+      teachers.map((t) =>
+        t.id === id
+          ? { ...t, modes: on ? [...new Set([...t.modes, mode])] : t.modes.filter((m) => m !== mode) }
+          : t,
+      ),
+    );
+  const remove = (id: string) => onChange(teachers.filter((t) => t.id !== id));
+  return (
+    <div>
+      <p style={{ margin: "0 0 14px 0", fontSize: 13, color: "var(--color-text-secondary)" }}>
+        Your teachers carry forward. Review the roster — rename, adjust modes, remove anyone who left,
+        or add a new teacher. (Activities, roles, and special fields stay as configured.)
+      </p>
+      {teachers.length === 0 ? (
+        <p style={{ fontSize: 13, color: "var(--color-text-tertiary)", margin: "0 0 12px 0" }}>
+          No teachers yet — add one below.
+        </p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
+          {teachers.map((t) => (
+            <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 14 }}>
+              <input
+                className="input"
+                style={{ flex: 1, maxWidth: 240 }}
+                placeholder="Teacher name"
+                value={t.name}
+                onChange={(e) => setName(t.id, e.target.value)}
+              />
+              <div style={{ display: "flex", gap: 14, fontSize: 13 }}>
+                {TEACHER_MODES.map((m) => (
+                  <label key={m.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <input
+                      type="checkbox"
+                      checked={t.modes.includes(m.id)}
+                      onChange={(e) => toggleMode(t.id, m.id, e.target.checked)}
+                    />
+                    {m.label}
+                  </label>
+                ))}
+              </div>
+              <button
+                className="button button--small button--danger-text"
+                style={{ marginLeft: "auto", padding: "2px 8px" }}
+                onClick={() => remove(t.id)}
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <button className="button button--small" onClick={() => onChange([...teachers, blankTeacher()])}>
+        <Icon name="plus" size={13} /> Add a teacher
+      </button>
+    </div>
   );
 }
 

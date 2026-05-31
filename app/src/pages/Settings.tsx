@@ -7,9 +7,10 @@ import { formatShort, parseDate } from "../domain/dates";
 
 interface SettingsProps {
   onNavigate: (page: NavPage) => void;
+  onStartNewTerm: () => void;
 }
 
-export function Settings({ onNavigate }: SettingsProps) {
+export function Settings({ onNavigate, onStartNewTerm }: SettingsProps) {
   const { signOut, enterTestMode } = useAuth();
 
   return (
@@ -21,7 +22,7 @@ export function Settings({ onNavigate }: SettingsProps) {
         Manage keys, export data, and reset.
       </p>
 
-      <TermSection />
+      <TermSection onStartNewTerm={onStartNewTerm} />
       <KeysSection />
       <ExportSection />
       <ResetSection onSignOut={signOut} onTestMode={enterTestMode} />
@@ -29,7 +30,7 @@ export function Settings({ onNavigate }: SettingsProps) {
   );
 }
 
-function TermSection() {
+function TermSection({ onStartNewTerm }: { onStartNewTerm: () => void }) {
   const { state } = useTerm();
 
   let body: ReactNode;
@@ -76,11 +77,11 @@ function TermSection() {
         <div style={{ flex: 1 }}>{body}</div>
         <button
           className="button button--small"
-          disabled
-          title="The setup wizard arrives in a later slice"
+          onClick={onStartNewTerm}
+          disabled={state.status !== "ready"}
         >
           <Icon name="plus" size={14} />
-          Prepare new term
+          Start a new term
         </button>
       </div>
     </div>

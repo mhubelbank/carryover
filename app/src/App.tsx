@@ -36,6 +36,9 @@ function Pages() {
   const [generateTarget, setGenerateTarget] = useState<
     { date: string; teacherId: string; studentIds: string[]; timeSlot?: string } | null
   >(null);
+  // When true, the new-term wizard is open over the normal app (launched from
+  // Settings with existing data). The empty/first-run case renders it directly.
+  const [newTerm, setNewTerm] = useState(false);
   const { state } = useTerm();
 
   // All navigation goes through `nav` so an editor with unsaved changes can
@@ -72,7 +75,8 @@ function Pages() {
   );
 
   // Settings is reachable regardless of how data loading went.
-  if (page === "settings") return <Settings onNavigate={nav} />;
+  if (page === "settings")
+    return <Settings onNavigate={nav} onStartNewTerm={() => setNewTerm(true)} />;
 
   if (state.status === "loading") {
     return <StatusScreen page={page} onNavigate={nav} variant="info" message="Loading your data…" />;
@@ -88,6 +92,16 @@ function Pages() {
     );
   }
   if (state.status === "empty") return <NewTermWizard onNavigate={nav} />;
+  if (newTerm && state.status === "ready")
+    return (
+      <NewTermWizard
+        onNavigate={(p) => {
+          setNewTerm(false);
+          nav(p);
+        }}
+        onClose={() => setNewTerm(false)}
+      />
+    );
 
   switch (page) {
     case "students":
