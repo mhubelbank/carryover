@@ -438,7 +438,7 @@ function TeacherDetail({
             No activities in the catalog yet. Add some in the Activities tab.
           </p>
         ) : (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 16px", fontSize: 13 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 13 }}>
             {selectableActivities.map((a) => (
               <label key={a.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <input
@@ -555,6 +555,9 @@ function TeacherDetail({
         <ColorPicker
           current={draft.color}
           name={draft.name}
+          others={data.teachers
+            .filter((t) => !t.archived && t.id !== draft.id)
+            .map((t) => ({ name: t.name, color: t.color }))}
           onPick={(c) => {
             set({ color: c });
             setColorOpen(false);
@@ -566,17 +569,44 @@ function TeacherDetail({
   );
 }
 
+function TeacherPill({ name, color, highlight }: { name: string; color: ColorKey; highlight?: boolean }) {
+  const c = TEACHER_COLORS[color];
+  return (
+    <span
+      style={{
+        background: c.bg,
+        color: c.text,
+        padding: "2px 10px",
+        borderRadius: 999,
+        fontSize: 12,
+        fontWeight: 500,
+        whiteSpace: "nowrap",
+        outline: highlight ? "2px solid var(--color-border-info)" : undefined,
+        outlineOffset: 1,
+      }}
+    >
+      {name}
+    </span>
+  );
+}
+
 function ColorPicker({
   current,
   name,
+  others,
   onPick,
   onClose,
 }: {
   current: ColorKey;
   name: string;
+  others: { name: string; color: ColorKey }[];
   onPick: (color: ColorKey) => void;
   onClose: () => void;
 }) {
+  // Hovering a swatch previews this teacher's pill in that color, live, next to
+  // the others — so she can pick something that reads as distinct.
+  const [preview, setPreview] = useState<ColorKey | null>(null);
+  const liveColor = preview ?? current;
   return (
     <div
       style={{
@@ -603,7 +633,18 @@ function ColorPicker({
             <Icon name="x" size={18} />
           </button>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8 }}>
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+            {others.map((t, i) => (
+              <TeacherPill key={i} name={t.name.trim() || "Teacher"} color={t.color} />
+            ))}
+            <TeacherPill name={name.trim() || "This teacher"} color={liveColor} highlight />
+          </div>
+        </div>
+        <div
+          style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8 }}
+          onMouseLeave={() => setPreview(null)}
+        >
           {COLOR_KEYS.map((key) => {
             const c = TEACHER_COLORS[key];
             const selected = key === current;
@@ -612,6 +653,7 @@ function ColorPicker({
                 key={key}
                 title={c.label}
                 onClick={() => onPick(key)}
+                onMouseEnter={() => setPreview(key)}
                 style={{
                   width: "100%",
                   aspectRatio: "1",
