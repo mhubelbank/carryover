@@ -16,6 +16,12 @@ import {
   type Student,
 } from "../domain/student";
 import type { StudentField } from "../domain/studentField";
+import {
+  PROMPTING_LEVELS,
+  PROMPTING_TYPES,
+  REDIRECTION_LEVELS,
+  RESPONSE_TYPES,
+} from "../domain/generate";
 import { StudentGoals } from "./Goals";
 
 interface Props {
@@ -725,6 +731,61 @@ function StudentDetail({
             ))}
           </div>
         )}
+
+        <Divider />
+        <div
+          style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}
+        >
+          <h3 style={{ fontSize: 14, fontWeight: 500, margin: 0 }}>Session defaults</h3>
+          {(draft.defaultPromptingLevel.length > 0 ||
+            draft.defaultPromptingType.length > 0 ||
+            draft.defaultRedirection.length > 0 ||
+            draft.defaultResponse.length > 0) && (
+            <button
+              className="button button--small button--danger-text"
+              onClick={() =>
+                set({
+                  defaultPromptingLevel: [],
+                  defaultPromptingType: [],
+                  defaultRedirection: [],
+                  defaultResponse: [],
+                })
+              }
+            >
+              Clear all
+            </button>
+          )}
+        </div>
+        <p style={{ fontSize: 12, color: "var(--color-text-tertiary)", margin: "0 0 12px 0" }}>
+          Pre-fills each activity's prompting / redirection / response in Generate. Editable per
+          session.
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <DefaultMultiSelect
+            label="Prompting level"
+            options={PROMPTING_LEVELS}
+            selected={draft.defaultPromptingLevel}
+            onChange={(v) => set({ defaultPromptingLevel: v })}
+          />
+          <DefaultMultiSelect
+            label="Prompting type"
+            options={PROMPTING_TYPES}
+            selected={draft.defaultPromptingType}
+            onChange={(v) => set({ defaultPromptingType: v })}
+          />
+          <DefaultMultiSelect
+            label="Redirection"
+            options={REDIRECTION_LEVELS}
+            selected={draft.defaultRedirection}
+            onChange={(v) => set({ defaultRedirection: v })}
+          />
+          <DefaultMultiSelect
+            label="Response"
+            options={RESPONSE_TYPES}
+            selected={draft.defaultResponse}
+            onChange={(v) => set({ defaultResponse: v })}
+          />
+        </div>
       </div>
 
       {!isNew && (
@@ -885,6 +946,39 @@ function countActiveGoals(goals: Goal[]): Map<string, number> {
   return counts;
 }
 
+// A multi-select checkbox row for a session-default field (prompting, etc.).
+function DefaultMultiSelect({
+  label,
+  options,
+  selected,
+  onChange,
+}: {
+  label: string;
+  options: readonly string[];
+  selected: string[];
+  onChange: (v: string[]) => void;
+}) {
+  const toggle = (opt: string, on: boolean) =>
+    onChange(on ? [...selected, opt] : selected.filter((x) => x !== opt));
+  return (
+    <div>
+      <label className="label">{label}</label>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 14px", fontSize: 13 }}>
+        {options.map((opt) => (
+          <label key={opt} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <input
+              type="checkbox"
+              checked={selected.includes(opt)}
+              onChange={(e) => toggle(opt, e.target.checked)}
+            />
+            {opt}
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // Renders one configurable student field: a toggle as a checkbox, a select as a
 // multi-select checkbox group. A stored value not in the current options is
 // still shown (marked) so it isn't silently dropped on the next save.
@@ -941,7 +1035,14 @@ function cloneStudent(s: Student): Student {
   // the baseline, which would break the JSON.stringify dirty check.
   const fields: Record<string, string | boolean | string[]> = {};
   for (const [k, v] of Object.entries(s.fields)) fields[k] = Array.isArray(v) ? [...v] : v;
-  return { ...s, fields };
+  return {
+    ...s,
+    fields,
+    defaultPromptingLevel: [...s.defaultPromptingLevel],
+    defaultPromptingType: [...s.defaultPromptingType],
+    defaultRedirection: [...s.defaultRedirection],
+    defaultResponse: [...s.defaultResponse],
+  };
 }
 
 function blankStudent(): Student {
@@ -961,6 +1062,10 @@ function blankStudent(): Student {
     lastDay: null,
     archived: false,
     fields: {},
+    defaultPromptingLevel: [],
+    defaultPromptingType: [],
+    defaultRedirection: [],
+    defaultResponse: [],
   };
 }
 

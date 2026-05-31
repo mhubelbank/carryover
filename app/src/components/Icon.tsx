@@ -9,6 +9,7 @@ const ICONS = {
     "<circle cx='12' cy='12' r='9'/><line x1='12' y1='8' x2='12' y2='12'/><line x1='12' y1='16' x2='12.01' y2='16'/>",
   "calendar-plus":
     "<path d='M12.5 21h-6.5a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v6.5'/><line x1='16' y1='3' x2='16' y2='7'/><line x1='8' y1='3' x2='8' y2='7'/><line x1='4' y1='11' x2='20' y2='11'/><line x1='16' y1='19' x2='22' y2='19'/><line x1='19' y1='16' x2='19' y2='22'/>",
+  bulb: "<path d='M3 12h1m8 -9v1m8 8h1m-15.4 -6.4l.7 .7m12.1 -.7l-.7 .7'/><path d='M9 16a5 5 0 1 1 6 0a3.5 3.5 0 0 0 -1 3a2 2 0 0 1 -4 0a3.5 3.5 0 0 0 -1 -3'/><line x1='9.7' y1='17' x2='14.3' y2='17'/>",
   check: "<polyline points='5 12 10 17 20 7'/>",
   "chevron-left": "<polyline points='15 6 9 12 15 18'/>",
   "chevron-right": "<polyline points='9 6 15 12 9 18'/>",

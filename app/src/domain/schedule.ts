@@ -59,3 +59,30 @@ export function sortedTimeSlots(entries: ScheduleEntry[]): string[] {
   const slots = [...new Set(entries.map((e) => e.timeSlot))];
   return slots.sort((a, b) => slotStartMinutes(a) - slotStartMinutes(b));
 }
+
+// Replace the roster of one (teacher, day, slot) cell within a full week's
+// entries. Other cells are untouched; the named cell becomes exactly
+// `studentIds` (order preserved). Used to diverge a week from the usual template
+// when notes are generated for an adjusted roster.
+export function setCellRoster(
+  entries: ScheduleEntry[],
+  teacherId: string,
+  dayOfWeek: Weekday,
+  timeSlot: string,
+  studentIds: string[],
+): ScheduleEntry[] {
+  const others = entries.filter(
+    (e) => !(e.teacherId === teacherId && e.dayOfWeek === dayOfWeek && e.timeSlot === timeSlot),
+  );
+  const cell = studentIds.map((studentId) => ({ teacherId, dayOfWeek, timeSlot, studentId }));
+  return [...others, ...cell];
+}
+
+// Order-independent fingerprint for comparing two schedules (a week vs. the
+// usual template) for divergence/convergence.
+export function scheduleFingerprint(entries: ScheduleEntry[]): string {
+  return entries
+    .map((e) => `${e.teacherId}|${e.dayOfWeek}|${e.timeSlot}|${e.studentId}`)
+    .sort()
+    .join("\n");
+}
