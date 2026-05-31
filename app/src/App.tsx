@@ -74,6 +74,19 @@ function Pages() {
     [],
   );
 
+  // The new-term wizard takes over the whole view when open (checked before the
+  // page routes, including Settings, which is where it's launched from).
+  if (newTerm && state.status === "ready")
+    return (
+      <NewTermWizard
+        onNavigate={(p) => {
+          setNewTerm(false);
+          nav(p);
+        }}
+        onClose={() => setNewTerm(false)}
+      />
+    );
+
   // Settings is reachable regardless of how data loading went.
   if (page === "settings")
     return <Settings onNavigate={nav} onStartNewTerm={() => setNewTerm(true)} />;
@@ -92,16 +105,6 @@ function Pages() {
     );
   }
   if (state.status === "empty") return <NewTermWizard onNavigate={nav} />;
-  if (newTerm && state.status === "ready")
-    return (
-      <NewTermWizard
-        onNavigate={(p) => {
-          setNewTerm(false);
-          nav(p);
-        }}
-        onClose={() => setNewTerm(false)}
-      />
-    );
 
   switch (page) {
     case "students":
