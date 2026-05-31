@@ -34,7 +34,7 @@ function Pages() {
   >(null);
   const [openTeacherId, setOpenTeacherId] = useState<string | null>(null);
   const [generateTarget, setGenerateTarget] = useState<
-    { date: string; teacherId: string; studentIds: string[] } | null
+    { date: string; teacherId: string; studentIds: string[]; timeSlot?: string } | null
   >(null);
   const { state } = useTerm();
 
@@ -63,9 +63,9 @@ function Pages() {
   }, []);
   const clearGenerateTarget = useCallback(() => setGenerateTarget(null), []);
   const openGenerate = useCallback(
-    (date: string, teacherId: string, studentIds: string[]) => {
+    (date: string, teacherId: string, studentIds: string[], timeSlot?: string) => {
       if (!confirmNavAway()) return;
-      setGenerateTarget({ date, teacherId, studentIds });
+      setGenerateTarget({ date, teacherId, studentIds, timeSlot });
       setPage("generate");
     },
     [],
