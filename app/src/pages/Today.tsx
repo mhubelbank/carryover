@@ -4,7 +4,7 @@ import { Icon } from "../components/Icon";
 import { Nav, type NavPage } from "../components/Nav";
 import { useTerm } from "../context/TermContext";
 import { daysBetween, formatLong, formatShort, mondayOf, parseDate, startOfDay, stepWeekday, toISODate, toWeekday, weekdayName } from "../domain/dates";
-import { loadWeekSchedule } from "../domain/data";
+import { loadSessions, loadWeekSchedule } from "../domain/data";
 import { slotStartMinutes, type ScheduleEntry } from "../domain/schedule";
 import { teacherColor } from "../domain/teacher";
 import { fullName, isActiveOn, type Student } from "../domain/student";
@@ -13,7 +13,7 @@ interface Props {
   onNavigate: (page: NavPage) => void;
   onOpenStudent: (studentId: string, view?: "detail" | "goals") => void;
   onOpenTeacher: (teacherId: string) => void;
-  onGenerate: (date: string, teacherId: string, studentIds: string[]) => void;
+  onGenerate: (date: string, teacherId: string, studentIds: string[], timeSlot?: string) => void;
 }
 
 interface Session {
@@ -57,6 +57,29 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate }: 
       cancelled = true;
     };
   }, [client, weekKey]);
+  // Which students already have a stored (generated) session, keyed
+  // `${date}|${teacherId}`. Loaded once; Today remounts on return from Generate,
+  // so it refreshes after she generates notes.
+  const [generatedByKey, setGeneratedByKey] = useState<Map<string, Set<string>>>(() => new Map());
+  useEffect(() => {
+    if (!client) return;
+    let cancelled = false;
+    loadSessions(client)
+      .then((all) => {
+        if (cancelled) return;
+        const m = new Map<string, Set<string>>();
+        for (const s of all) {
+          m.set(`${s.date}|${s.teacherId}`, new Set(s.students.map((e) => e.studentId)));
+        }
+        setGeneratedByKey(m);
+      })
+      .catch(() => {
+        if (!cancelled) setGeneratedByKey(new Map());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client]);
   if (state.status !== "ready") return null;
   const { term, schedule, students } = state.data;
   const effectiveSchedule = weekSchedule ?? schedule;
@@ -250,6 +273,9 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate }: 
           {sessions.map((session) => {
             const teacher = teacherById.get(session.teacherId);
             const color = teacherColor(teacher?.color);
+            const generatedSet = generatedByKey.get(`${selectedIso}|${session.teacherId}`);
+            const allGenerated =
+              !!generatedSet && session.studentIds.every((id) => generatedSet.has(id));
             return (
               <div
                 key={`${session.timeSlot}|${session.teacherId}`}
@@ -291,12 +317,32 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate }: 
                     >
                       {teacher?.name ?? "Unknown"}
                     </button>
+                    {allGenerated && (
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 4,
+                          fontSize: 12,
+                          color: "var(--color-text-success)",
+                          background: "var(--color-background-success)",
+                          padding: "2px 8px",
+                          borderRadius: 999,
+                        }}
+                        title="Notes generated for this session"
+                      >
+                        <Icon name="check" size={12} /> Generated
+                      </span>
+                    )}
                   </div>
                   <button
                     className="button button--small button--primary"
-                    onClick={() => onGenerate(selectedIso, session.teacherId, session.studentIds)}
+                    onClick={() =>
+                      onGenerate(selectedIso, session.teacherId, session.studentIds, session.timeSlot)
+                    }
                   >
-                    Generate {session.studentIds.length} note
+                    {allGenerated ? "Regenerate " : "Generate "}
+                    {session.studentIds.length} note
                     {session.studentIds.length === 1 ? "" : "s"}
                   </button>
                 </div>
@@ -304,6 +350,7 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate }: 
                   {session.studentIds.map((id, i) => {
                     const student = studentById.get(id);
                     const isOverdue = overdue.has(id);
+                    const isGenerated = !!generatedSet?.has(id);
                     return (
                       <button
                         key={`${id}-${i}`}
@@ -327,7 +374,15 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate }: 
                             : "var(--color-text-primary)",
                         }}
                       >
-                        {isOverdue && <Icon name="alert-circle" size={13} />}
+                        {isOverdue ? (
+                          <Icon name="alert-circle" size={13} />
+                        ) : (
+                          isGenerated && (
+                            <span style={{ color: "var(--color-text-success)", lineHeight: 0 }}>
+                              <Icon name="check" size={13} />
+                            </span>
+                          )
+                        )}
                         {student ? fullName(student) : "Unknown"}
                       </button>
                     );
