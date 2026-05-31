@@ -12,7 +12,7 @@ import { Teachers } from "./pages/Teachers";
 import { Activities } from "./pages/Activities";
 import { Schedule } from "./pages/Schedule";
 import { Generate } from "./pages/Generate";
-import { FirstTermSetup } from "./pages/FirstTermSetup";
+import { NewTermWizard } from "./pages/NewTermWizard";
 
 function Router() {
   const { keys } = useAuth();
@@ -87,7 +87,7 @@ function Pages() {
       />
     );
   }
-  if (state.status === "empty") return <FirstTermSetup onNavigate={nav} />;
+  if (state.status === "empty") return <NewTermWizard onNavigate={nav} />;
 
   switch (page) {
     case "students":
