@@ -392,7 +392,7 @@ export function Activities({ onNavigate, onOpenStudent }: Props) {
       onClick={() => setView({ kind: "list" })}
       style={{ padding: 0, color: "var(--color-text-secondary)", marginBottom: 14 }}
     >
-      ← Back to activity catalog
+      ← Activity catalog
     </button>
   );
 
