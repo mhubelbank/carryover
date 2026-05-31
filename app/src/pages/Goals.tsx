@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Icon } from "../components/Icon";
+import { useUnsavedGuard } from "../hooks/useUnsavedGuard";
 import { Nav, type NavPage } from "../components/Nav";
 import { useAuth } from "../context/AuthContext";
 import { useTerm } from "../context/TermContext";
@@ -783,6 +784,8 @@ function SaveBar({
   onDiscard: () => void;
   onSave: () => void;
 }) {
+  // Mounted only while there are unsaved goal edits — warn on leaving.
+  useUnsavedGuard();
   return (
     <div
       style={{

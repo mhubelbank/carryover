@@ -31,6 +31,7 @@ import {
   generateNote,
   loadPromptSet,
   type NoteResult,
+  type Pass,
 } from "../domain/notes";
 import {
   activeCapturesFor,
@@ -50,6 +51,13 @@ import type { Goal } from "../domain/goal";
 import type { SessionMetadata } from "../domain/session";
 import { displayName, fullName, studentContext, type Student } from "../domain/student";
 import type { Activity, Mode, Role, SessionCapture, Teacher } from "../domain/teacher";
+
+// Human-readable label for each generation pass, shown in the progress status.
+const PASS_LABEL: Record<Pass, string> = {
+  draft: "Drafting",
+  review: "Reviewing",
+  streamline: "Streamlining",
+};
 
 interface Props {
   onNavigate: (page: NavPage) => void;
@@ -124,6 +132,10 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
   const [phase, setPhase] = useState<"form" | "running" | "results">("form");
   const [results, setResults] = useState<ResultRow[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // While generating: which note (1-based) and which pipeline pass is in flight.
+  const [progress, setProgress] = useState<{ current: number; total: number; pass: Pass } | null>(
+    null,
+  );
   // When set, fresh student-state entries default `included` to membership in
   // this list (deep-link from Today). Sticks across re-seeds, but existing
   // entries' `included` is preserved if she toggles them after arrival.
@@ -352,9 +364,11 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
     }
 
     const apiKey = keys.anthropicApiKey;
+    const total = includedStudents.length;
     // Run students sequentially to keep the API call cadence gentle; failures
     // per student show on their card without aborting the batch.
-    for (const student of includedStudents) {
+    for (let i = 0; i < includedStudents.length; i++) {
+      const student = includedStudents[i]!;
       const st = studentState[student.id]!;
       if (st.absent) {
         updateResult(student.id, {
@@ -371,12 +385,14 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
         const result = await generateNote(apiKey, prompts, ctx, {
           maxTokens: MAX_TOKENS_BY_MODE[mode],
           postProcess: buildPostProcess(teacher, student),
+          onPhase: (pass) => setProgress({ current: i + 1, total, pass }),
         });
         updateResult(student.id, { result });
       } catch (e) {
         updateResult(student.id, { error: e instanceof Error ? e.message : "Failed" });
       }
     }
+    setProgress(null);
 
     // Persist session metadata (goalIds per student, mode). Note text is never stored.
     try {
@@ -623,7 +639,12 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
         </p>
       )}
 
-      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
+      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 12, marginTop: 16 }}>
+        {phase === "running" && progress && (
+          <span role="status" style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>
+            Note {progress.current} of {progress.total} · {PASS_LABEL[progress.pass]}…
+          </span>
+        )}
         <button
           className="button button--primary"
           onClick={handleGenerate}

@@ -52,7 +52,7 @@ const USUAL_LOOKBACK_WEEKS = 4;
 const EVENT_LINE_PX = 22;
 
 interface CalendarEvent {
-  kind: "iep" | "first-day" | "last-day";
+  kind: "iep" | "first-day" | "last-day" | "birthday";
   studentId: string;
   firstName: string;
 }
@@ -273,6 +273,9 @@ export function Schedule({ onNavigate, onOpenStudent }: Props) {
       if (s.nextIepReview === iso) events.push({ kind: "iep", studentId: s.id, firstName: s.firstName });
       if (s.firstDay === iso) events.push({ kind: "first-day", studentId: s.id, firstName: s.firstName });
       if (s.lastDay === iso) events.push({ kind: "last-day", studentId: s.id, firstName: s.firstName });
+      // Birthdays recur yearly — match on month-day, ignoring the birth year.
+      if (s.birthday && s.birthday.slice(5) === iso.slice(5))
+        events.push({ kind: "birthday", studentId: s.id, firstName: s.firstName });
     }
     return events;
   });
@@ -1392,11 +1395,17 @@ function EventChip({ event, onClick }: { event: CalendarEvent; onClick: () => vo
             color: "var(--color-text-success)",
             label: "First day",
           }
-        : {
-            bg: "var(--color-background-warning)",
-            color: "var(--color-text-warning)",
-            label: "Last day",
-          };
+        : event.kind === "birthday"
+          ? {
+              bg: "#efe6fb",
+              color: "#6b3fa0",
+              label: "🎂 Birthday",
+            }
+          : {
+              bg: "var(--color-background-warning)",
+              color: "var(--color-text-warning)",
+              label: "Last day",
+            };
   return (
     <button
       onClick={onClick}

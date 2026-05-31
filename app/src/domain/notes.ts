@@ -218,6 +218,8 @@ export interface GenerateOptions {
   // Deterministic per-teacher post-processing applied to the final note text
   // (e.g. Nina's Spanish-support sentence). No API call.
   postProcess?: (finalNote: string) => string;
+  // Fired before each pass starts, so callers can show generation progress.
+  onPhase?: (pass: Pass) => void;
 }
 
 const BACKOFF_MS = [1000, 3000, 10000];
@@ -266,8 +268,10 @@ export async function generateNote(
   if (opts.feedbackRules && opts.feedbackRules.trim() !== "") {
     draftPrompt += `\n\nAdditional rules from prior feedback:\n${opts.feedbackRules.trim()}`;
   }
+  opts.onPhase?.("draft");
   const draft = await callPass(apiKey, "draft", model, maxTokens, draftPrompt);
 
+  opts.onPhase?.("review");
   const reviewed = await callPass(
     apiKey,
     "review",
@@ -276,6 +280,7 @@ export async function generateNote(
     renderTemplate(prompts.review, { ...ctx, draftNote: draft }),
   );
 
+  opts.onPhase?.("streamline");
   let final = await callPass(
     apiKey,
     "streamline",

@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { confirmNavAway } from "./hooks/useUnsavedGuard";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { TermProvider, useTerm } from "./context/TermContext";
 import { Banner } from "./components/Banner";
@@ -37,19 +38,33 @@ function Pages() {
   >(null);
   const { state } = useTerm();
 
+  // All navigation goes through `nav` so an editor with unsaved changes can
+  // prompt before the page switches out from under it (the SaveBar's mount
+  // state drives the guard; see useUnsavedGuard).
+  const nav = useCallback(
+    (p: NavPage) => {
+      if (p === page) return; // re-clicking the current tab shouldn't prompt
+      if (confirmNavAway()) setPage(p);
+    },
+    [page],
+  );
+
   const clearStudentTarget = useCallback(() => setStudentTarget(null), []);
   const openStudent = useCallback((id: string, view: "detail" | "goals" = "detail") => {
+    if (!confirmNavAway()) return;
     setStudentTarget({ id, view });
     setPage("students");
   }, []);
   const clearOpenTeacher = useCallback(() => setOpenTeacherId(null), []);
   const openTeacher = useCallback((id: string) => {
+    if (!confirmNavAway()) return;
     setOpenTeacherId(id);
     setPage("teachers");
   }, []);
   const clearGenerateTarget = useCallback(() => setGenerateTarget(null), []);
   const openGenerate = useCallback(
     (date: string, teacherId: string, studentIds: string[]) => {
+      if (!confirmNavAway()) return;
       setGenerateTarget({ date, teacherId, studentIds });
       setPage("generate");
     },
@@ -57,28 +72,28 @@ function Pages() {
   );
 
   // Settings is reachable regardless of how data loading went.
-  if (page === "settings") return <Settings onNavigate={setPage} />;
+  if (page === "settings") return <Settings onNavigate={nav} />;
 
   if (state.status === "loading") {
-    return <StatusScreen page={page} onNavigate={setPage} variant="info" message="Loading your data…" />;
+    return <StatusScreen page={page} onNavigate={nav} variant="info" message="Loading your data…" />;
   }
   if (state.status === "error") {
     return (
       <StatusScreen
         page={page}
-        onNavigate={setPage}
+        onNavigate={nav}
         variant="danger"
         message={`Couldn't load your data: ${state.message}`}
       />
     );
   }
-  if (state.status === "empty") return <FirstTermSetup onNavigate={setPage} />;
+  if (state.status === "empty") return <FirstTermSetup onNavigate={nav} />;
 
   switch (page) {
     case "students":
       return (
         <Students
-          onNavigate={setPage}
+          onNavigate={nav}
           target={studentTarget}
           onTargetConsumed={clearStudentTarget}
         />
@@ -86,20 +101,20 @@ function Pages() {
     case "teachers":
       return (
         <Teachers
-          onNavigate={setPage}
+          onNavigate={nav}
           openTeacherId={openTeacherId}
           onOpenConsumed={clearOpenTeacher}
           onOpenStudent={openStudent}
         />
       );
     case "activities":
-      return <Activities onNavigate={setPage} />;
+      return <Activities onNavigate={nav} />;
     case "schedule":
-      return <Schedule onNavigate={setPage} onOpenStudent={openStudent} />;
+      return <Schedule onNavigate={nav} onOpenStudent={openStudent} />;
     case "generate":
       return (
         <Generate
-          onNavigate={setPage}
+          onNavigate={nav}
           target={generateTarget}
           onTargetConsumed={clearGenerateTarget}
         />
@@ -107,7 +122,7 @@ function Pages() {
     default:
       return (
         <Today
-          onNavigate={setPage}
+          onNavigate={nav}
           onOpenStudent={openStudent}
           onOpenTeacher={openTeacher}
           onGenerate={openGenerate}
