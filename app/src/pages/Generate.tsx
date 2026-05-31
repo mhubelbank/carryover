@@ -1,10 +1,33 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "../components/Icon";
 import { Nav, type NavPage } from "../components/Nav";
 import { useAuth } from "../context/AuthContext";
 import { useTerm } from "../context/TermContext";
-import { loadSession, writeSessionMetadata } from "../domain/data";
-import { formatLong, parseDate, startOfDay, toISODate, toWeekday } from "../domain/dates";
+import {
+  appendFeedbackRule,
+  deleteWeekSchedule,
+  loadFeedbackRules,
+  loadSession,
+  loadWeekSchedule,
+  writeSessionMetadata,
+  writeWeekSchedule,
+} from "../domain/data";
+import {
+  formatLong,
+  mondayOf,
+  parseDate,
+  startOfDay,
+  toISODate,
+  toWeekday,
+  weekdayName,
+} from "../domain/dates";
+import {
+  scheduleFingerprint,
+  setCellRoster,
+  sortedTimeSlots,
+  type ScheduleEntry,
+  type Weekday,
+} from "../domain/schedule";
 import {
   DOMAINS,
   FILMING_PROMPT_LEVELS,
@@ -49,7 +72,7 @@ import {
 import { resolveRoles } from "../domain/role";
 import type { Goal } from "../domain/goal";
 import type { SessionMetadata } from "../domain/session";
-import { displayName, fullName, studentContext, type Student } from "../domain/student";
+import { displayName, fullName, isActiveOn, studentContext, type Student } from "../domain/student";
 import type { Activity, Mode, Role, SessionCapture, Teacher } from "../domain/teacher";
 
 // Human-readable label for each generation pass, shown in the progress status.
@@ -63,7 +86,7 @@ interface Props {
   onNavigate: (page: NavPage) => void;
   // Prefill date/teacher and pin the included student list (deep-link from
   // Today's per-session "Generate N notes" button). Consumed once on arrival.
-  target?: { date: string; teacherId: string; studentIds: string[] } | null;
+  target?: { date: string; teacherId: string; studentIds: string[]; timeSlot?: string } | null;
   onTargetConsumed?: () => void;
 }
 
@@ -90,16 +113,20 @@ interface ResultRow {
   result?: NoteResult;
   error?: string;
   regenerating?: boolean;
+  // Which pass is in flight while regenerating, for the inline progress label.
+  regenPhase?: Pass;
   showDrafts?: boolean;
 }
 
-function blankRegularInput(): ActivityInput {
+// Seeds prompting/redirection/response from the student's session defaults (a
+// fresh copy per input so edits don't alias the student record).
+function blankRegularInput(student?: Student): ActivityInput {
   return {
     goals: [],
-    promptingLevel: [],
-    promptingType: [],
-    redirection: [],
-    response: [],
+    promptingLevel: [...(student?.defaultPromptingLevel ?? [])],
+    promptingType: [...(student?.defaultPromptingType ?? [])],
+    redirection: [...(student?.defaultRedirection ?? [])],
+    response: [...(student?.defaultResponse ?? [])],
     additionalNotes: "",
     captures: {},
     options: [],
@@ -136,17 +163,18 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
   const [progress, setProgress] = useState<{ current: number; total: number; pass: Pass } | null>(
     null,
   );
-  // When set, fresh student-state entries default `included` to membership in
-  // this list (deep-link from Today). Sticks across re-seeds, but existing
-  // entries' `included` is preserved if she toggles them after arrival.
-  const [pinnedStudentIds, setPinnedStudentIds] = useState<string[] | null>(null);
+  // The schedule slot this session targets. Drives the default roster and the
+  // schedule write-back on generate. Set from the deep-link, or chosen manually.
+  const [timeSlot, setTimeSlot] = useState<string>("");
+  // The selected date's week deviation, if any (else the usual template applies).
+  const [weekSchedule, setWeekSchedule] = useState<ScheduleEntry[] | null>(null);
 
   // Consume a deep-link target on arrival.
   useEffect(() => {
     if (!target) return;
     setDate(target.date);
     setTeacherId(target.teacherId);
-    setPinnedStudentIds(target.studentIds);
+    if (target.timeSlot) setTimeSlot(target.timeSlot);
     onTargetConsumed?.();
   }, [target, onTargetConsumed]);
 
@@ -165,6 +193,63 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
     [state, teacherId],
   );
 
+  // Schedule-driven session: the roster defaults to whoever is scheduled for the
+  // chosen (teacher, weekday, time slot); the same cell is written back on
+  // generate. Uses the week's deviation if one exists, else the usual template.
+  const templateSchedule: ScheduleEntry[] = state.status === "ready" ? state.data.schedule : [];
+  const effectiveSchedule = weekSchedule ?? templateSchedule;
+  const weekKey = useMemo(() => {
+    const d = parseDate(date);
+    return d ? toISODate(mondayOf(d)) : null;
+  }, [date]);
+  const weekday = useMemo<Weekday | null>(() => {
+    const d = parseDate(date);
+    return d ? (weekdayName(d) as Weekday) : null;
+  }, [date]);
+  const timeSlotOptions = useMemo(
+    () =>
+      teacher && weekday
+        ? sortedTimeSlots(
+            effectiveSchedule.filter((e) => e.teacherId === teacher.id && e.dayOfWeek === weekday),
+          )
+        : [],
+    [effectiveSchedule, teacher, weekday],
+  );
+  const sessionStudentIds = useMemo(() => {
+    const d = parseDate(date);
+    if (!teacher || !weekday || !timeSlot || !d) return [];
+    const byId = new Map(caseload.map((s) => [s.id, s] as const));
+    return effectiveSchedule
+      .filter(
+        (e) => e.teacherId === teacher.id && e.dayOfWeek === weekday && e.timeSlot === timeSlot,
+      )
+      .map((e) => e.studentId)
+      .filter((id) => byId.has(id) && isActiveOn(byId.get(id)!, d));
+  }, [effectiveSchedule, teacher, weekday, timeSlot, caseload, date]);
+
+  // Load the selected date's week deviation (falls back to the template).
+  useEffect(() => {
+    setWeekSchedule(null);
+    if (!client || !weekKey) return;
+    let cancelled = false;
+    loadWeekSchedule(client, weekKey)
+      .then((res) => {
+        if (!cancelled) setWeekSchedule(res ? res.entries : null);
+      })
+      .catch(() => {
+        if (!cancelled) setWeekSchedule(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client, weekKey]);
+
+  // Keep the chosen slot valid for the current teacher/day; default to the first.
+  useEffect(() => {
+    if (timeSlotOptions.length === 0) return;
+    if (!timeSlotOptions.includes(timeSlot)) setTimeSlot(timeSlotOptions[0]!);
+  }, [timeSlotOptions, timeSlot]);
+
   // Default teacher to the first one once data is ready — but defer to a
   // pending deep-link target so the two setters don't race in the same commit
   // (last-setter-wins would otherwise clobber the target's teacher).
@@ -181,29 +266,39 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
     if (teacher && !teacher.modes.includes(mode)) setMode(teacher.modes[0] ?? "regular");
   }, [teacher, mode]);
 
-  // Ensure every caseload student has a state entry, sized to current activity count.
+  // Ensure every caseload student has a state entry sized to the activity count,
+  // and (re)seed `included` from the schedule whenever the session changes
+  // (teacher / date / slot / scheduled set). Manual add/remove within a session
+  // is preserved, since those don't change the session signature.
+  const sessionSig = `${teacherId}|${date}|${timeSlot}|${sessionStudentIds.join(",")}`;
+  const seededSig = useRef<string | null>(null);
   useEffect(() => {
     if (caseload.length === 0) return;
+    const sessionChanged = seededSig.current !== sessionSig;
+    seededSig.current = sessionSig;
+    const inSession = new Set(sessionStudentIds);
     setStudentState((prev) => {
       const next: Record<string, StudentState> = {};
       for (const s of caseload) {
         const old = prev[s.id];
-        const regular = activities.map((_, i) => old?.regular[i] ?? blankRegularInput());
-        next[s.id] = old
-          ? { ...old, regular }
-          : {
-              included: pinnedStudentIds ? pinnedStudentIds.includes(s.id) : true,
-              absent: false,
-              regular,
-              roleId: "",
-              filming: blankFilming(),
-              filmingGoalIds: [],
-              captures: {},
-            };
+        const regular = activities.map((_, i) => old?.regular[i] ?? blankRegularInput(s));
+        if (old && !sessionChanged) {
+          next[s.id] = { ...old, regular };
+        } else {
+          next[s.id] = {
+            roleId: old?.roleId ?? "",
+            filming: old?.filming ?? blankFilming(),
+            filmingGoalIds: old?.filmingGoalIds ?? [],
+            captures: old?.captures ?? {},
+            absent: old?.absent ?? false,
+            included: inSession.has(s.id),
+            regular,
+          };
+        }
       }
       return next;
     });
-  }, [caseload, activities.length, pinnedStudentIds]);
+  }, [caseload, activities.length, sessionSig]);
 
   if (state.status !== "ready") return null;
   const { students, goals } = state.data;
@@ -313,15 +408,17 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
     setActivities((a) => a.map((x, i) => (i === idx ? { ...x, ...patch } : x)));
   }
 
-  // When Today deep-linked us in, `pinnedStudentIds` carries the schedule's
-  // saved order for that slot — preserve it so the all-notes paste order
-  // matches what she set in the Schedule editor. Outside that path, fall back
-  // to caseload order.
-  const includedStudents = pinnedStudentIds
-    ? pinnedStudentIds
-        .map((id) => caseload.find((s) => s.id === id))
-        .filter((s): s is Student => s != null && (studentState[s.id]?.included ?? false))
-    : caseload.filter((s) => studentState[s.id]?.included);
+  // Scheduled students first, in the schedule's saved order (so the all-notes
+  // paste order matches the Schedule editor), then anyone added via "Add
+  // students" (included, not on the schedule for this slot).
+  const includedStudents = [
+    ...sessionStudentIds
+      .map((id) => caseload.find((s) => s.id === id))
+      .filter((s): s is Student => s != null && (studentState[s.id]?.included ?? false)),
+    ...caseload.filter(
+      (s) => !sessionStudentIds.includes(s.id) && (studentState[s.id]?.included ?? false),
+    ),
+  ];
   const canGenerate =
     teacher !== undefined &&
     includedStudents.length > 0 &&
@@ -362,6 +459,9 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
       setPhase("form");
       return;
     }
+    // Emily's accumulated note corrections, applied to every draft. Non-fatal if
+    // the file doesn't exist yet.
+    const feedbackRules = await loadFeedbackRules(client).catch(() => "");
 
     const apiKey = keys.anthropicApiKey;
     const total = includedStudents.length;
@@ -385,6 +485,7 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
         const result = await generateNote(apiKey, prompts, ctx, {
           maxTokens: MAX_TOKENS_BY_MODE[mode],
           postProcess: buildPostProcess(teacher, student),
+          feedbackRules,
           onPhase: (pass) => setProgress({ current: i + 1, total, pass }),
         });
         updateResult(student.id, { result });
@@ -405,6 +506,32 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
       setError(`Notes generated, but saving session metadata failed: ${e instanceof Error ? e.message : ""}`);
     }
 
+    // Write the final roster back to this session's schedule cell, diverging the
+    // week from the usual template (or reverting the deviation if it converges
+    // back). Skipped when there's no slot (e.g. teacher has none that day).
+    const day = parseDate(date);
+    if (timeSlot && day) {
+      try {
+        const wk = toISODate(mondayOf(day));
+        const wd = weekdayName(day) as Weekday;
+        const rosterIds = includedStudents.map((s) => s.id);
+        const existing = await loadWeekSchedule(client, wk);
+        const base = existing?.entries ?? templateSchedule;
+        const next = setCellRoster(base, teacher.id, wd, timeSlot, rosterIds);
+        const nextFp = scheduleFingerprint(next);
+        const changed = !existing || nextFp !== scheduleFingerprint(existing.entries);
+        if (changed) {
+          if (nextFp === scheduleFingerprint(templateSchedule)) {
+            if (existing) await deleteWeekSchedule(client, wk, existing.sha);
+          } else {
+            await writeWeekSchedule(client, wk, next, existing?.sha);
+          }
+        }
+      } catch (e) {
+        setError(`Notes generated, but updating the schedule failed: ${e instanceof Error ? e.message : ""}`);
+      }
+    }
+
     setPhase("results");
   }
 
@@ -412,27 +539,47 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
     setResults((prev) => prev.map((r) => (r.studentId === studentId ? { ...r, ...patch } : r)));
   }
 
-  async function regenerate(studentId: string) {
-    if (!teacher || !client || !keys?.anthropicApiKey) return;
-    const row = results.find((r) => r.studentId === studentId);
-    const st = studentState[studentId];
-    const student = students.find((s) => s.id === studentId);
-    if (!row || !st || !student || row.absent) return;
-    updateResult(studentId, { regenerating: true, error: undefined });
+  // Regenerate one or more notes with the same feedback. saveAsRule persists the
+  // feedback to feedback-rules.md once (not per note). Notes run sequentially to
+  // keep the API cadence gentle; each row shows its own phase as it goes.
+  async function regenerate(studentIds: string[], feedback = "", saveAsRule = false) {
+    if (!teacher || !client || !keys?.anthropicApiKey || studentIds.length === 0) return;
+    const apiKey = keys.anthropicApiKey;
+    let prompts;
     try {
-      const prompts = await loadPromptSet(client, mode);
-      const ctx = buildContext(mode, teacher, student, st, activities, goals, catalog, roleCatalog);
-      const result = await generateNote(keys.anthropicApiKey, prompts, ctx, {
-        maxTokens: MAX_TOKENS_BY_MODE[mode],
-        postProcess: buildPostProcess(teacher, student),
-      });
-      updateResult(studentId, { result, regenerating: false });
+      prompts = await loadPromptSet(client, mode);
     } catch (e) {
-      updateResult(studentId, {
-        regenerating: false,
-        error: e instanceof Error ? e.message : "Failed",
-      });
+      const msg = e instanceof Error ? e.message : "Failed to load prompts";
+      for (const id of studentIds) updateResult(id, { error: msg });
+      return;
     }
+    const persisted = await loadFeedbackRules(client).catch(() => "");
+    // Persisted rules plus this round's one-off note feed the draft pass.
+    const feedbackRules = [persisted, feedback.trim()].filter(Boolean).join("\n");
+    for (const studentId of studentIds) {
+      const row = results.find((r) => r.studentId === studentId);
+      const st = studentState[studentId];
+      const student = students.find((s) => s.id === studentId);
+      if (!row || !st || !student || row.absent) continue;
+      updateResult(studentId, { regenerating: true, regenPhase: "draft", error: undefined });
+      try {
+        const ctx = buildContext(mode, teacher, student, st, activities, goals, catalog, roleCatalog);
+        const result = await generateNote(apiKey, prompts, ctx, {
+          maxTokens: MAX_TOKENS_BY_MODE[mode],
+          postProcess: buildPostProcess(teacher, student),
+          feedbackRules,
+          onPhase: (pass) => updateResult(studentId, { regenPhase: pass }),
+        });
+        updateResult(studentId, { result, regenerating: false, regenPhase: undefined });
+      } catch (e) {
+        updateResult(studentId, {
+          regenerating: false,
+          regenPhase: undefined,
+          error: e instanceof Error ? e.message : "Failed",
+        });
+      }
+    }
+    if (saveAsRule && feedback.trim()) await appendFeedbackRule(client, feedback);
   }
 
   if (phase === "results") {
@@ -463,9 +610,10 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
         </p>
       </div>
 
-      {/* Top controls */}
+      {/* Top controls — pick the session (date · teacher · time slot) and mode.
+          Deep-linking from Today pre-fills date/teacher/slot. */}
       <div className="card" style={{ marginBottom: "1rem" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "14px 20px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "14px 20px" }}>
           <div>
             <label className="label">Date</label>
             <input
@@ -487,6 +635,25 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
                   {t.name}
                 </option>
               ))}
+            </select>
+          </div>
+          <div>
+            <label className="label">Time slot</label>
+            <select
+              className="select"
+              value={timeSlot}
+              onChange={(e) => setTimeSlot(e.target.value)}
+              disabled={timeSlotOptions.length === 0}
+            >
+              {timeSlotOptions.length === 0 ? (
+                <option value="">No sessions this day</option>
+              ) : (
+                timeSlotOptions.map((slot) => (
+                  <option key={slot} value={slot}>
+                    {slot}
+                  </option>
+                ))
+              )}
             </select>
           </div>
           <div>
@@ -544,9 +711,12 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
         </div>
       )}
 
-      {/* Per-student cards */}
+      {/* Per-student cards — only the session roster (included students). Others
+          are hidden by default and added back via "Add students" below. */}
       {teacher &&
-        caseload.map((student) => {
+        caseload
+          .filter((student) => studentState[student.id]?.included)
+          .map((student) => {
           const st = studentState[student.id];
           if (!st) return null;
           const studentGoals = goals.filter((g) => g.studentId === student.id && !g.archived);
@@ -556,7 +726,6 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
               className="card"
               style={{
                 marginBottom: 10,
-                opacity: st.included ? 1 : 0.5,
                 background: st.absent ? "var(--color-background-secondary)" : undefined,
               }}
             >
@@ -565,24 +734,17 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "space-between",
-                  marginBottom: st.included && !st.absent ? 12 : 0,
+                  marginBottom: !st.absent ? 12 : 0,
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <input
-                    type="checkbox"
-                    checked={st.included}
-                    onChange={(e) => setStudent(student.id, { included: e.target.checked })}
-                  />
                   <span style={{ fontSize: 15, fontWeight: 500 }}>{fullName(student)}</span>
                   <span style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>
                     {student.pronouns}
                   </span>
                 </div>
-                {st.included && (
-                  <label
-                    style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}
-                  >
+                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
                     <input
                       type="checkbox"
                       checked={st.absent}
@@ -590,7 +752,15 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
                     />
                     Absent
                   </label>
-                )}
+                  <button
+                    className="button button--small button--danger-text"
+                    onClick={() => setStudent(student.id, { included: false })}
+                    title="Remove from this session"
+                    style={{ padding: "2px 8px" }}
+                  >
+                    Remove
+                  </button>
+                </div>
               </div>
 
               {st.included && !st.absent && (
@@ -632,6 +802,43 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
             </div>
           );
         })}
+
+      {/* Add a caseload student who isn't in this session's schedule. */}
+      {teacher &&
+        (() => {
+          const addable = caseload.filter((s) => !studentState[s.id]?.included);
+          if (addable.length === 0) return null;
+          return (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                marginBottom: 10,
+                fontSize: 13,
+                color: "var(--color-text-secondary)",
+              }}
+            >
+              <Icon name="plus" size={13} />
+              <span>Add a student not in this session:</span>
+              <select
+                className="select"
+                style={{ maxWidth: 220 }}
+                value=""
+                onChange={(e) => {
+                  if (e.target.value) setStudent(e.target.value, { included: true, absent: false });
+                }}
+              >
+                <option value="">Choose a student…</option>
+                {addable.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {fullName(s)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          );
+        })()}
 
       {error && (
         <p role="alert" style={{ fontSize: 13, color: "var(--color-text-danger)" }}>
@@ -1330,7 +1537,7 @@ function ResultsView({
   error: string | null;
   onBack: () => void;
   onNavigate: (page: NavPage) => void;
-  onRegenerate: (id: string) => void;
+  onRegenerate: (ids: string[], feedback?: string, saveAsRule?: boolean) => void;
   onToggleDrafts: (id: string) => void;
 }) {
   const parsed = parseDate(date);
@@ -1339,6 +1546,22 @@ function ResultsView({
     date,
     results,
   ]);
+  // The student ids being regenerated-with-feedback (modal open when non-null);
+  // a single id for a per-note Regenerate, many for a bulk selection.
+  const [regenTargets, setRegenTargets] = useState<string[] | null>(null);
+  // Notes checked for a bulk regenerate. Absent notes aren't selectable.
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const selectable = results.filter((r) => !r.absent && r.result);
+  const toggleSelected = (id: string, on: boolean) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  const regenRows = regenTargets
+    ? regenTargets.map((id) => results.find((r) => r.studentId === id)).filter((r): r is ResultRow => r != null)
+    : [];
   return (
     <div className="shell">
       <Nav current="generate" onNavigate={onNavigate} />
@@ -1381,12 +1604,59 @@ function ResultsView({
         />
       </div>
 
+      {/* Bulk selection bar — regenerate several notes with one shared correction. */}
+      {selectable.length > 1 && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            padding: "8px 14px",
+            marginBottom: 10,
+            border: "0.5px solid var(--color-border-tertiary)",
+            borderRadius: "var(--border-radius-md)",
+            background: "var(--color-background-secondary)",
+          }}
+        >
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+            <input
+              type="checkbox"
+              checked={selected.size === selectable.length && selectable.length > 0}
+              ref={(el) => {
+                if (el) el.indeterminate = selected.size > 0 && selected.size < selectable.length;
+              }}
+              onChange={(e) =>
+                setSelected(e.target.checked ? new Set(selectable.map((r) => r.studentId)) : new Set())
+              }
+            />
+            {selected.size > 0 ? `${selected.size} selected` : "Select notes"}
+          </label>
+          <button
+            className="button button--small"
+            disabled={selected.size === 0}
+            onClick={() => setRegenTargets([...selected])}
+          >
+            <Icon name="refresh" size={13} /> Regenerate selected
+          </button>
+        </div>
+      )}
+
       {results.map((r) => (
         <div key={r.studentId} className="card" style={{ marginBottom: 10 }}>
           <div
             style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}
           >
-            <span style={{ fontSize: 15, fontWeight: 500 }}>{r.name}</span>
+            <span style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 15, fontWeight: 500 }}>
+              {!r.absent && r.result && (
+                <input
+                  type="checkbox"
+                  checked={selected.has(r.studentId)}
+                  onChange={(e) => toggleSelected(r.studentId, e.target.checked)}
+                />
+              )}
+              {r.name}
+            </span>
             <div style={{ display: "flex", gap: 6 }}>
               <button
                 className="button button--small"
@@ -1405,10 +1675,11 @@ function ResultsView({
                   </button>
                   <button
                     className="button button--small"
-                    onClick={() => onRegenerate(r.studentId)}
+                    onClick={() => setRegenTargets([r.studentId])}
                     disabled={r.regenerating}
+                    style={{ whiteSpace: "nowrap" }}
                   >
-                    {r.regenerating ? "…" : "Regenerate"}
+                    {r.regenerating ? `${PASS_LABEL[r.regenPhase ?? "draft"]}…` : "Regenerate"}
                   </button>
                 </>
               )}
@@ -1422,7 +1693,21 @@ function ResultsView({
             </p>
           ) : (
             <>
-              <p style={{ margin: 0, fontSize: 14, whiteSpace: "pre-wrap" }}>{r.result.final}</p>
+              {r.regenerating && (
+                <p style={{ fontSize: 12, color: "var(--color-text-info)", margin: "0 0 6px 0" }}>
+                  Regenerating · {PASS_LABEL[r.regenPhase ?? "draft"]}…
+                </p>
+              )}
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 14,
+                  whiteSpace: "pre-wrap",
+                  opacity: r.regenerating ? 0.5 : 1,
+                }}
+              >
+                {r.result.final}
+              </p>
               {r.showDrafts && (
                 <div style={{ marginTop: 10, fontSize: 12, color: "var(--color-text-secondary)" }}>
                   <details>
@@ -1443,6 +1728,251 @@ function ResultsView({
           )}
         </div>
       ))}
+
+      {regenRows.length > 0 && (
+        <RegenerateModal
+          targets={regenRows.map((r) => ({ name: r.name, currentNote: r.result?.final ?? "" }))}
+          onClose={() => setRegenTargets(null)}
+          onSubmit={(feedback, saveAsRule) => {
+            onRegenerate(
+              regenRows.map((r) => r.studentId),
+              feedback,
+              saveAsRule,
+            );
+            setRegenTargets(null);
+            setSelected(new Set());
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// Canonical feedback phrases for the one-click "Quick fixes" chips.
+const QUICK_FIXES: { label: string; phrase: string }[] = [
+  { label: "Too long", phrase: "This note is too long — make it more concise." },
+  { label: "Sounds robotic", phrase: "This sounds robotic — make it read more naturally." },
+  { label: "Made up details", phrase: "This includes details I didn't provide — only use what I wrote." },
+  { label: "Wrong tone", phrase: "The tone is off — match a clinical SLP session note." },
+];
+
+// Regenerate one or more notes with optional feedback. Mirrors the
+// SESIS_mocks.html "Regenerate note with feedback" design: current-note preview
+// (or the list of notes, for a bulk selection), free-text + quick-fix chips, and
+// an optional "save as a rule for future notes".
+function RegenerateModal({
+  targets,
+  onSubmit,
+  onClose,
+}: {
+  targets: { name: string; currentNote: string }[];
+  onSubmit: (feedback: string, saveAsRule: boolean) => void;
+  onClose: () => void;
+}) {
+  const [feedback, setFeedback] = useState("");
+  const [saveAsRule, setSaveAsRule] = useState(false);
+  const hasFeedback = feedback.trim() !== "";
+  const single = targets.length === 1;
+  // Bulk mode pages through one full note at a time so she can read each one.
+  const [page, setPage] = useState(0);
+  const current = targets[Math.min(page, targets.length - 1)]!;
+  // Append a quick-fix phrase (once), on its own line.
+  const addQuickFix = (phrase: string) =>
+    setFeedback((prev) => {
+      if (prev.includes(phrase)) return prev;
+      return prev.trim() === "" ? phrase : `${prev.trim()}\n${phrase}`;
+    });
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0, 0, 0, 0.35)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "2rem",
+        zIndex: 10,
+      }}
+    >
+      <div
+        style={{
+          background: "var(--color-background-primary)",
+          borderRadius: "var(--border-radius-lg)",
+          border: "0.5px solid var(--color-border-tertiary)",
+          padding: "1.5rem",
+          width: 660,
+          maxWidth: "100%",
+        }}
+      >
+        <div
+          style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}
+        >
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 500 }}>
+            {single ? `Regenerate ${targets[0]!.name}'s note` : `Regenerate ${targets.length} notes`}
+          </h2>
+          <button
+            onClick={onClose}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-tertiary)", padding: "4px 8px", lineHeight: 0 }}
+          >
+            <Icon name="x" size={18} />
+          </button>
+        </div>
+        <p style={{ margin: "0 0 16px 0", fontSize: 13, color: "var(--color-text-secondary)" }}>
+          {single
+            ? "Tell the AI what to fix and we'll regenerate with that guidance in mind."
+            : "Apply one correction to all selected notes — e.g. a phrase the AI mistranslated."}
+        </p>
+
+        <div
+          style={{
+            background: "var(--color-background-secondary)",
+            borderRadius: "var(--border-radius-md)",
+            padding: "12px 14px",
+            marginBottom: 16,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+            <p style={{ margin: 0, fontSize: 11, color: "var(--color-text-tertiary)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+              {single ? "Current note" : `${current.name} · note ${page + 1} of ${targets.length}`}
+            </p>
+            {!single && (
+              <div style={{ display: "flex", gap: 4 }}>
+                <button
+                  className="button button--small"
+                  disabled={page === 0}
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  style={{ padding: "2px 6px" }}
+                >
+                  <Icon name="chevron-left" size={14} />
+                </button>
+                <button
+                  className="button button--small"
+                  disabled={page >= targets.length - 1}
+                  onClick={() => setPage((p) => Math.min(targets.length - 1, p + 1))}
+                  style={{ padding: "2px 6px" }}
+                >
+                  <Icon name="chevron-right" size={14} />
+                </button>
+              </div>
+            )}
+          </div>
+          <div
+            style={{
+              margin: 0,
+              fontSize: 13,
+              lineHeight: 1.6,
+              color: "var(--color-text-secondary)",
+              whiteSpace: "pre-wrap",
+              height: "calc(1.6em * 4)",
+              minHeight: "calc(1.6em * 2)",
+              overflowY: "auto",
+              resize: "vertical",
+            }}
+          >
+            {current.currentNote}
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ display: "block", fontSize: 13, fontWeight: 500, marginBottom: 6 }}>
+            {single ? "What's wrong with this note?" : "What's wrong with these notes?"}
+          </label>
+          <textarea
+            className="input"
+            autoFocus
+            rows={3}
+            value={feedback}
+            onChange={(e) => setFeedback(e.target.value)}
+            placeholder="e.g., 'don't say he said specific phrases — I didn't write that' or 'too long, make it more concise'"
+            style={{ width: "100%", boxSizing: "border-box", fontSize: 13, minHeight: "calc(1.5em * 3 + 16px)", resize: "vertical" }}
+          />
+        </div>
+
+        <div style={{ marginBottom: 16 }}>
+          <p style={{ margin: "0 0 8px 0", fontSize: 12, color: "var(--color-text-secondary)", fontWeight: 500 }}>
+            Quick fixes
+          </p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {QUICK_FIXES.map((q) => (
+              <button
+                key={q.label}
+                className="button button--small"
+                style={{ fontSize: 12, padding: "5px 10px" }}
+                onClick={() => addQuickFix(q.phrase)}
+              >
+                {q.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div
+          style={{
+            background: "var(--color-background-info)",
+            border: "0.5px solid var(--color-border-info)",
+            borderRadius: "var(--border-radius-md)",
+            padding: "10px 12px",
+            marginBottom: 16,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+            <span style={{ color: "var(--color-text-info)", marginTop: 2, lineHeight: 0 }}>
+              <Icon name="bulb" size={16} />
+            </span>
+            <div>
+              <p style={{ margin: 0, fontSize: 12, color: "var(--color-text-info)", fontWeight: 500 }}>
+                Save as a rule for future notes?
+              </p>
+              <p style={{ margin: "4px 0 0 0", fontSize: 12, color: "var(--color-text-info)" }}>
+                If this is something you correct often, we can add it to the prompt rules so it
+                doesn't happen again.
+              </p>
+              <label
+                style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--color-text-info)", marginTop: 8, cursor: "pointer" }}
+              >
+                <input
+                  type="checkbox"
+                  checked={saveAsRule}
+                  onChange={(e) => setSaveAsRule(e.target.checked)}
+                />
+                Apply this guidance to all future notes
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <button
+            onClick={() => onSubmit("", false)}
+            style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, padding: "6px 12px", color: "var(--color-text-secondary)", whiteSpace: "nowrap" }}
+          >
+            Just regenerate without feedback
+          </button>
+          <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+            <button className="button button--small" onClick={onClose} style={{ fontSize: 14 }}>
+              Cancel
+            </button>
+            <button
+              className="button button--small"
+              disabled={!hasFeedback}
+              onClick={() => onSubmit(feedback, saveAsRule && hasFeedback)}
+              style={{
+                fontSize: 14,
+                whiteSpace: "nowrap",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                background: "var(--color-background-info)",
+                color: "var(--color-text-info)",
+                borderColor: "var(--color-border-info)",
+              }}
+            >
+              <Icon name="sparkles" size={14} /> Regenerate with feedback
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
