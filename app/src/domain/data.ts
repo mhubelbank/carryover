@@ -49,6 +49,7 @@ const PATHS = {
   activities: "data/activities.json",
   filmingRoles: "data/filming-roles.json",
   studentFields: "data/student-fields.json",
+  feedbackRules: "data/feedback-rules.md",
 } as const;
 
 const SESSIONS_DIR = "data/sessions";
@@ -72,6 +73,10 @@ const BASE_STUDENT_COLUMNS = [
   "firstDay",
   "lastDay",
   "archived",
+  "defaultPromptingLevel",
+  "defaultPromptingType",
+  "defaultRedirection",
+  "defaultResponse",
 ];
 
 // Separator for a multi-select field's values inside one CSV cell. A pipe avoids
@@ -179,6 +184,10 @@ export function studentsToCsv(students: Student[], fieldDefs: StudentField[]): s
     s.firstDay ?? "",
     s.lastDay ?? "",
     s.archived ? "true" : "false",
+    s.defaultPromptingLevel.join(FIELD_VALUE_SEP),
+    s.defaultPromptingType.join(FIELD_VALUE_SEP),
+    s.defaultRedirection.join(FIELD_VALUE_SEP),
+    s.defaultResponse.join(FIELD_VALUE_SEP),
     ...allFieldKeys.map((k) => encodeFieldValue(s.fields[k])),
   ]);
   return serializeCsv(header, rows);
@@ -283,6 +292,30 @@ export function writeStudentFields(
     `${JSON.stringify(fields, null, 2)}\n`,
     "data: update student fields",
     sha,
+  );
+}
+
+// data/feedback-rules.md — Emily's accumulated note corrections, appended to
+// every draft prompt. Empty string when the file doesn't exist yet.
+export async function loadFeedbackRules(client: GitHubClient): Promise<string> {
+  const file = await client.readFile(PATHS.feedbackRules);
+  return file?.text ?? "";
+}
+
+// Appends one feedback rule as a markdown bullet (creating the file if needed),
+// so future generations pick it up via loadFeedbackRules.
+export async function appendFeedbackRule(client: GitHubClient, rule: string): Promise<void> {
+  const trimmed = rule.trim();
+  if (!trimmed) return;
+  const existing = await client.readFile(PATHS.feedbackRules);
+  const header =
+    "# Feedback rules\n\nAppended from regenerate-with-feedback. Applied to every note's draft pass.\n";
+  const base = existing?.text?.trim() ? existing.text.replace(/\s*$/, "") : header.trimEnd();
+  await client.writeFile(
+    PATHS.feedbackRules,
+    `${base}\n- ${trimmed}\n`,
+    "data: add feedback rule",
+    existing?.sha,
   );
 }
 
@@ -508,7 +541,19 @@ function toStudent(row: Record<string, string>, fieldDefs: StudentField[]): Stud
     lastDay: blankToNull(row.lastDay),
     archived: isTrue(row.archived),
     fields: parseStudentFields(row, fieldDefs),
+    defaultPromptingLevel: splitList(row.defaultPromptingLevel),
+    defaultPromptingType: splitList(row.defaultPromptingType),
+    defaultRedirection: splitList(row.defaultRedirection),
+    defaultResponse: splitList(row.defaultResponse),
   };
+}
+
+// Splits a pipe-joined CSV cell into a trimmed, non-empty string list.
+function splitList(v: string | undefined): string[] {
+  return (v ?? "")
+    .split(FIELD_VALUE_SEP)
+    .map((s) => s.trim())
+    .filter(Boolean);
 }
 
 const BASE_COLUMN_SET = new Set([...BASE_STUDENT_COLUMNS, "name"]);
