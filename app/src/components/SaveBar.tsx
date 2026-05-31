@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useUnsavedGuard } from "../hooks/useUnsavedGuard";
 
 // Floating "unsaved changes" bar, pinned to the bottom of the viewport with a
 // muted amber tint so it stands out over the cream tables/cards. Shared across
@@ -23,6 +24,8 @@ export function SaveBar({
   saveDisabled?: boolean;
   extra?: ReactNode;
 }) {
+  // Mounted only while there are unsaved changes — warn on leaving.
+  useUnsavedGuard();
   return (
     <div
       style={{
