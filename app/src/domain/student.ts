@@ -28,6 +28,13 @@ export interface Student {
   // value is a boolean; a select value is a string[] (multi-select). Drives
   // teacher session-captures + post-processing in the Generate pipeline.
   fields: Record<string, string | boolean | string[]>;
+  // Explicit session-form defaults that pre-fill each activity's prompting /
+  // redirection / response inputs in Generate. Empty arrays = no default;
+  // editable per session and clearable on the Student page.
+  defaultPromptingLevel: string[];
+  defaultPromptingType: string[];
+  defaultRedirection: string[];
+  defaultResponse: string[];
 }
 
 // The student object flattened for condition/template evaluation: custom field
