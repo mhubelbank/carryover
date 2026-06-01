@@ -19,10 +19,11 @@ export function Settings({ onNavigate, onStartNewTerm }: SettingsProps) {
 
       <h1 style={{ fontSize: 22, marginBottom: 4 }}>Settings</h1>
       <p style={{ color: "var(--color-text-secondary)", fontSize: 14, marginBottom: "1.5rem" }}>
-        Manage keys, export data, and reset.
+        Manage your catalogs, keys, export data, and reset.
       </p>
 
       <TermSection onStartNewTerm={onStartNewTerm} />
+      <CatalogsSection onNavigate={onNavigate} />
       <KeysSection />
       <ExportSection />
       <ResetSection onSignOut={signOut} onTestMode={enterTestMode} />
@@ -82,6 +83,23 @@ function TermSection({ onStartNewTerm }: { onStartNewTerm: () => void }) {
         >
           <Icon name="plus" size={14} />
           Start a new term
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function CatalogsSection({ onNavigate }: { onNavigate: (page: NavPage) => void }) {
+  return (
+    <div className="card" style={{ marginBottom: "1rem" }}>
+      <h3 className="card__title">Catalogs</h3>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14 }}>
+        <p style={{ flex: 1, fontSize: 13, color: "var(--color-text-secondary)" }}>
+          Activities, filming roles, and student fields — the shared building blocks teachers and the
+          note generator draw from.
+        </p>
+        <button className="button button--small" onClick={() => onNavigate("activities")}>
+          Manage catalogs →
         </button>
       </div>
     </div>

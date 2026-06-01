@@ -20,7 +20,6 @@ const TABS: Array<{ id: Exclude<NavPage, "settings">; label: string }> = [
   { id: "schedule", label: "Schedule" },
   { id: "students", label: "Students" },
   { id: "teachers", label: "Teachers" },
-  { id: "activities", label: "Activities" },
 ];
 
 export function Nav({ current, onNavigate }: NavProps) {
