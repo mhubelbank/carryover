@@ -41,7 +41,7 @@ const SUBTLE_DATE: CSSProperties = {
   fontSize: 12,
   color: "var(--color-text-tertiary)",
   padding: 0,
-  width: 102,
+  width: 90,
   cursor: "pointer",
 };
 
@@ -91,7 +91,7 @@ function TermSection({ onStartNewTerm }: { onStartNewTerm: () => void }) {
       {ready && term ? (
         <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <span style={{ fontSize: 14, fontWeight: 500 }}>{term.label}</span>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 2, fontSize: 12, color: "var(--color-text-tertiary)" }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 0, fontSize: 12, color: "var(--color-text-tertiary)" }}>
             <input
               type="date"
               value={term.firstDay}
