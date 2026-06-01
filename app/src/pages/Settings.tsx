@@ -120,42 +120,50 @@ function TermSection({ onStartNewTerm }: { onStartNewTerm: () => void }) {
         </button>
       </div>
 
-      {ready && term ? (
-        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 14, fontWeight: 500 }}>{term.label}</span>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, color: "var(--color-text-tertiary)" }}>
-            <EditableDate value={term.firstDay} onChange={(v) => setDates({ firstDay: v })} />
-            –
-            <EditableDate value={term.lastDay} onChange={(v) => setDates({ lastDay: v })} />
-          </span>
-          <span style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>
-            {ready.students.length} student{ready.students.length === 1 ? "" : "s"} ·{" "}
-            {ready.teachers.length} teacher{ready.teachers.length === 1 ? "" : "s"}
-          </span>
-          {termOver && (
-            <button
-              className="button button--small button--primary"
-              style={{ marginLeft: "auto" }}
-              onClick={onStartNewTerm}
-            >
-              Finish term →
-            </button>
-          )}
-        </div>
-      ) : state.status === "loading" ? (
-        <p style={{ fontSize: 14, color: "var(--color-text-secondary)" }}>Loading…</p>
-      ) : state.status === "error" ? (
-        <p style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>
-          Couldn't load your term: {state.message}
-        </p>
-      ) : (
-        <p style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>
-          No term yet — start one above.
-        </p>
-      )}
+      <div
+        style={{
+          borderTop: "0.5px solid var(--color-border-tertiary)",
+          borderBottom: "0.5px solid var(--color-border-tertiary)",
+          padding: "10px 0",
+        }}
+      >
+        {ready && term ? (
+          <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 14, fontWeight: 500 }}>{term.label}</span>
+            <span style={{ display: "inline-flex", alignItems: "baseline", gap: 4, fontSize: 12, color: "var(--color-text-tertiary)" }}>
+              <EditableDate value={term.firstDay} onChange={(v) => setDates({ firstDay: v })} />
+              –
+              <EditableDate value={term.lastDay} onChange={(v) => setDates({ lastDay: v })} />
+            </span>
+            <span style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>
+              {ready.students.length} student{ready.students.length === 1 ? "" : "s"} ·{" "}
+              {ready.teachers.length} teacher{ready.teachers.length === 1 ? "" : "s"}
+            </span>
+            {termOver && (
+              <button
+                className="button button--small button--primary"
+                style={{ marginLeft: "auto", alignSelf: "center" }}
+                onClick={onStartNewTerm}
+              >
+                Finish term →
+              </button>
+            )}
+          </div>
+        ) : state.status === "loading" ? (
+          <p style={{ fontSize: 14, color: "var(--color-text-secondary)", margin: 0 }}>Loading…</p>
+        ) : state.status === "error" ? (
+          <p style={{ fontSize: 13, color: "var(--color-text-secondary)", margin: 0 }}>
+            Couldn't load your term: {state.message}
+          </p>
+        ) : (
+          <p style={{ fontSize: 13, color: "var(--color-text-secondary)", margin: 0 }}>
+            No term yet — start one above.
+          </p>
+        )}
+      </div>
 
       {history.length > 0 && (
-        <div style={{ marginTop: 14, borderTop: "0.5px solid var(--color-border-tertiary)", paddingTop: 10 }}>
+        <div style={{ marginTop: 12 }}>
           <button
             onClick={() => setShowHistory((v) => !v)}
             style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: "pointer", padding: 0, font: "inherit", fontSize: 13, color: "var(--color-text-secondary)" }}
