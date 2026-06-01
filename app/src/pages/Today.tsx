@@ -84,6 +84,24 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate }: 
   const { term, schedule, students } = state.data;
   const effectiveSchedule = weekSchedule ?? schedule;
 
+  // A student "customized this week" if their presence in a session differs from
+  // the usual template (added this week). When there's no deviation the dot
+  // never shows. Keyed by (teacher|timeSlot) for the selected weekday.
+  const weekday = weekdayName(selected);
+  const templateCells = new Map<string, Set<string>>();
+  for (const e of schedule) {
+    if (e.dayOfWeek !== weekday) continue;
+    const k = `${e.teacherId}|${e.timeSlot}`;
+    let set = templateCells.get(k);
+    if (!set) {
+      set = new Set();
+      templateCells.set(k, set);
+    }
+    set.add(e.studentId);
+  }
+  const isCustomized = (teacherId: string, timeSlot: string, studentId: string) =>
+    weekSchedule !== null && !(templateCells.get(`${teacherId}|${timeSlot}`)?.has(studentId) ?? false);
+
   const now = startOfDay(new Date());
 
   // IEP status is relative to the real current date, not the previewed day.
@@ -168,9 +186,6 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate }: 
           <p style={{ margin: "4px 0 0 0", color: "var(--color-text-secondary)", fontSize: 14 }}>
             {sessions.length} session{sessions.length === 1 ? "" : "s"} · {studentCount} student
             {studentCount === 1 ? "" : "s"}
-            {weekSchedule !== null && (
-              <span style={{ color: "var(--color-text-warning)" }}> · customized this week</span>
-            )}
           </p>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
@@ -351,6 +366,7 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate }: 
                     const student = studentById.get(id);
                     const isOverdue = overdue.has(id);
                     const isGenerated = !!generatedSet?.has(id);
+                    const customized = isCustomized(session.teacherId, session.timeSlot, id);
                     return (
                       <button
                         key={`${id}-${i}`}
@@ -384,6 +400,18 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate }: 
                           )
                         )}
                         {student ? fullName(student) : "Unknown"}
+                        {customized && (
+                          <span
+                            title="Added to this week's schedule (differs from the usual)"
+                            style={{
+                              width: 6,
+                              height: 6,
+                              borderRadius: "50%",
+                              background: "var(--color-text-warning)",
+                              flexShrink: 0,
+                            }}
+                          />
+                        )}
                       </button>
                     );
                   })}
