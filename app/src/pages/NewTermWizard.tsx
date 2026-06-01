@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { Icon } from "../components/Icon";
 import { Nav, type NavPage } from "../components/Nav";
 import { useTerm } from "../context/TermContext";
 import { termLabel, type TermType } from "../domain/term";
 import { teacherColor, type ColorKey, type Teacher } from "../domain/teacher";
+import { ageFlag, computedAge, fullName, type Student } from "../domain/student";
+import type { StudentField } from "../domain/studentField";
 import { ColorPicker } from "./Teachers";
 
 interface Props {
@@ -38,20 +40,66 @@ function cloneTeacher(t: Teacher): Teacher {
   };
 }
 
+function cloneStudent(s: Student): Student {
+  const fields: Student["fields"] = {};
+  for (const [k, v] of Object.entries(s.fields)) fields[k] = Array.isArray(v) ? [...v] : v;
+  return {
+    ...s,
+    fields,
+    defaultPromptingLevel: [...s.defaultPromptingLevel],
+    defaultPromptingType: [...s.defaultPromptingType],
+    defaultRedirection: [...s.defaultRedirection],
+    defaultResponse: [...s.defaultResponse],
+  };
+}
+
+function blankStudent(): Student {
+  return {
+    id: `s_${crypto.randomUUID()}`,
+    firstName: "",
+    middle: "",
+    lastName: "",
+    pronouns: "",
+    teacherId: "",
+    birthday: null,
+    age: null,
+    nextIepReview: null,
+    nextTriennial: null,
+    mandate: null,
+    firstDay: null,
+    lastDay: null,
+    archived: false,
+    fields: {},
+    defaultPromptingLevel: [],
+    defaultPromptingType: [],
+    defaultRedirection: [],
+    defaultResponse: [],
+  };
+}
+
 // The new-term setup wizard (replaces the empty-state placeholder). Step 1
 // (Year) creates the term, step 2 reviews the teacher roster; steps 3–5 (students,
 // schedule, goals) are built out incrementally — placeholders for now.
 export function NewTermWizard({ onNavigate, onClose }: Props) {
-  const { state, saveTerm, saveTeachers, reload } = useTerm();
+  const { state, saveTerm, saveTeachers, saveStudents, reload } = useTerm();
+  const ready = state.status === "ready" ? state.data : null;
   const [step, setStep] = useState(1);
   const [termType, setTermType] = useState<TermType>("school-year");
   const [firstDay, setFirstDay] = useState("");
   const [lastDay, setLastDay] = useState("");
   // Teacher roster carried forward (or empty on first run); editable here.
   const [teachers, setTeachers] = useState<Teacher[]>(() =>
-    state.status === "ready" ? state.data.teachers.filter((t) => !t.archived).map(cloneTeacher) : [],
+    ready ? ready.teachers.filter((t) => !t.archived).map(cloneTeacher) : [],
   );
   const [teachersBase] = useState(() => JSON.stringify(teachers));
+  // Continuing students (active, carried forward) + students added this session.
+  const [continuing, setContinuing] = useState<Student[]>(() =>
+    ready ? ready.students.filter((s) => !s.archived).map(cloneStudent) : [],
+  );
+  const [continuingBase] = useState(() => JSON.stringify(continuing));
+  const [newStudents, setNewStudents] = useState<Student[]>([]);
+  const studentFields = ready?.studentFields ?? [];
+  const archivedPrev = ready?.students.filter((s) => s.archived) ?? [];
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -69,8 +117,16 @@ export function NewTermWizard({ onNavigate, onClose }: Props) {
     try {
       await saveTerm({ termType, firstDay, lastDay, label: termLabel(termType, firstDay, lastDay) });
       // Persist the reviewed roster only if it changed (drop blank-name rows).
-      const cleaned = teachers.map((t) => ({ ...t, name: t.name.trim() })).filter((t) => t.name);
-      if (JSON.stringify(cleaned) !== teachersBase) await saveTeachers(cleaned);
+      const cleanedTeachers = teachers.map((t) => ({ ...t, name: t.name.trim() })).filter((t) => t.name);
+      if (JSON.stringify(cleanedTeachers) !== teachersBase) await saveTeachers(cleanedTeachers);
+      // Roster = previously-archived (untouched) + continuing (edits/removals) +
+      // new (blank-name rows dropped). Only write if anything changed.
+      const cleanedNew = newStudents
+        .map((s) => ({ ...s, firstName: s.firstName.trim() }))
+        .filter((s) => s.firstName);
+      if (cleanedNew.length > 0 || JSON.stringify(continuing) !== continuingBase) {
+        await saveStudents([...archivedPrev, ...continuing, ...cleanedNew]);
+      }
       // Term now exists → the app reloads into its normal (ready) state.
       reload();
       onClose?.();
@@ -104,6 +160,15 @@ export function NewTermWizard({ onNavigate, onClose }: Props) {
           />
         ) : step === 2 ? (
           <TeachersStep teachers={teachers} onChange={setTeachers} />
+        ) : step === 3 ? (
+          <StudentsStep
+            continuing={continuing}
+            newStudents={newStudents}
+            teachers={teachers}
+            studentFields={studentFields}
+            onContinuing={setContinuing}
+            onNew={setNewStudents}
+          />
         ) : (
           <PlaceholderStep name={STEPS[step - 1]!} />
         )}
@@ -390,6 +455,388 @@ function TeachersStep({
         />
       )}
     </div>
+  );
+}
+
+const CELL: CSSProperties = { padding: "4px 6px" };
+const CELL_INPUT: CSSProperties = {
+  width: "100%",
+  boxSizing: "border-box",
+  fontSize: 13,
+  padding: "6px 8px",
+  border: "none",
+  background: "transparent",
+  fontFamily: "inherit",
+};
+
+function aacFieldOf(fields: StudentField[]): StudentField | undefined {
+  return fields.find((f) => f.type === "select" && /aac/i.test(`${f.key} ${f.label}`));
+}
+
+function StudentsStep({
+  continuing,
+  newStudents,
+  teachers,
+  studentFields,
+  onContinuing,
+  onNew,
+}: {
+  continuing: Student[];
+  newStudents: Student[];
+  teachers: Teacher[];
+  studentFields: StudentField[];
+  onContinuing: (next: Student[]) => void;
+  onNew: (next: Student[]) => void;
+}) {
+  const [tab, setTab] = useState<"continuing" | "new">("continuing");
+  const [filter, setFilter] = useState("");
+  const [teacherFilter, setTeacherFilter] = useState("");
+  const [age21, setAge21] = useState(false);
+  const aac = aacFieldOf(studentFields);
+
+  const patchIn = (list: Student[], set: (n: Student[]) => void, id: string, patch: Partial<Student>) =>
+    set(list.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+  const setFieldIn = (
+    list: Student[],
+    set: (n: Student[]) => void,
+    id: string,
+    key: string,
+    value: string[],
+  ) => set(list.map((s) => (s.id === id ? { ...s, fields: { ...s.fields, [key]: value } } : s)));
+
+  const removedCount = continuing.filter((s) => s.archived).length;
+  const continuingCount = continuing.length - removedCount;
+  const newCount = newStudents.filter((s) => s.firstName.trim()).length;
+
+  const visibleContinuing = continuing.filter((s) => {
+    if (filter && !fullName(s).toLowerCase().includes(filter.toLowerCase())) return false;
+    if (teacherFilter && s.teacherId !== teacherFilter) return false;
+    if (age21 && !s.archived) {
+      const a = computedAge(s);
+      if (a == null || a < 21) return false;
+    }
+    return true;
+  });
+
+  async function paste() {
+    try {
+      const text = await navigator.clipboard.readText();
+      const rows = text
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter(Boolean)
+        .map((line) => {
+          const cols = line.split(/\t|,/).map((c) => c.trim());
+          const s = blankStudent();
+          s.firstName = cols[0] ?? "";
+          if (cols[1]) s.pronouns = cols[1];
+          if (cols[2] && /^\d+$/.test(cols[2])) s.age = Number(cols[2]);
+          return s;
+        });
+      if (rows.length) onNew([...newStudents, ...rows]);
+    } catch {
+      // Clipboard read denied — silently ignore.
+    }
+  }
+
+  const colCount = aac ? 7 : 6;
+
+  return (
+    <div>
+      {/* Continuing / New tabs */}
+      <div style={{ display: "flex", gap: 4, marginBottom: "1.25rem" }}>
+        {(["continuing", "new"] as const).map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            style={{
+              padding: "6px 12px",
+              fontSize: 13,
+              border: "none",
+              cursor: "pointer",
+              fontFamily: "inherit",
+              borderRadius: "var(--border-radius-md)",
+              fontWeight: tab === t ? 500 : 400,
+              background: tab === t ? "var(--color-background-secondary)" : "transparent",
+              color: tab === t ? "var(--color-text-primary)" : "var(--color-text-secondary)",
+            }}
+          >
+            {t === "continuing" ? "Continuing" : "New"}
+            <span style={{ color: "var(--color-text-tertiary)", marginLeft: 6 }}>
+              {t === "continuing" ? continuingCount : newCount}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {tab === "continuing" ? (
+        <>
+          <div
+            style={{
+              background: "var(--color-background-info)",
+              border: "0.5px solid var(--color-border-info)",
+              borderRadius: "var(--border-radius-md)",
+              padding: "10px 14px",
+              marginBottom: 14,
+              fontSize: 13,
+              color: "var(--color-text-info)",
+            }}
+          >
+            Ages carry over from last term — update anyone whose birthday has passed. Click × to remove a
+            student from this term (Undo restores them).
+          </div>
+
+          <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center" }}>
+            <input
+              className="input"
+              style={{ flex: 1 }}
+              placeholder="Filter by name…"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+            />
+            <select className="select" style={{ width: 160 }} value={teacherFilter} onChange={(e) => setTeacherFilter(e.target.value)}>
+              <option value="">All teachers</option>
+              {teachers.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name || "(unnamed)"}
+                </option>
+              ))}
+            </select>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, whiteSpace: "nowrap" }}>
+              <input type="checkbox" checked={age21} onChange={(e) => setAge21(e.target.checked)} />
+              Age 21+
+            </label>
+          </div>
+
+          <StudentTable
+            students={visibleContinuing}
+            teachers={teachers}
+            aac={aac}
+            colCount={colCount}
+            emptyText="No matching students."
+            onPatch={(id, patch) => patchIn(continuing, onContinuing, id, patch)}
+            onSetField={(id, key, v) => setFieldIn(continuing, onContinuing, id, key, v)}
+            onToggleRemove={(id) =>
+              patchIn(continuing, onContinuing, id, { archived: !continuing.find((s) => s.id === id)?.archived })
+            }
+          />
+
+          <p style={{ marginTop: 10, fontSize: 13, color: "var(--color-text-secondary)" }}>
+            {continuingCount} continuing · {removedCount} removed
+          </p>
+        </>
+      ) : (
+        <>
+          <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+            <button className="button button--small" onClick={paste}>
+              Paste from clipboard
+            </button>
+            <button className="button button--small" onClick={() => onNew([...newStudents, blankStudent()])}>
+              <Icon name="plus" size={13} /> Add row
+            </button>
+          </div>
+
+          <StudentTable
+            students={newStudents}
+            teachers={teachers}
+            aac={aac}
+            colCount={colCount}
+            emptyText="No new students yet — paste a list or add a row."
+            onPatch={(id, patch) => patchIn(newStudents, onNew, id, patch)}
+            onSetField={(id, key, v) => setFieldIn(newStudents, onNew, id, key, v)}
+            onToggleRemove={(id) => onNew(newStudents.filter((s) => s.id !== id))}
+          />
+
+          <p style={{ margin: "10px 4px 0 4px", fontSize: 12, color: "var(--color-text-tertiary)" }}>
+            Teacher-specific fields can be set later from each student's detail page.
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
+function StudentTable({
+  students,
+  teachers,
+  aac,
+  colCount,
+  emptyText,
+  onPatch,
+  onSetField,
+  onToggleRemove,
+}: {
+  students: Student[];
+  teachers: Teacher[];
+  aac: StudentField | undefined;
+  colCount: number;
+  emptyText: string;
+  onPatch: (id: string, patch: Partial<Student>) => void;
+  onSetField: (id: string, key: string, value: string[]) => void;
+  onToggleRemove: (id: string) => void;
+}) {
+  const th: CSSProperties = {
+    textAlign: "left",
+    padding: "10px 12px",
+    fontWeight: 500,
+    fontSize: 12,
+    color: "var(--color-text-secondary)",
+  };
+  return (
+    <div style={{ border: "0.5px solid var(--color-border-tertiary)", borderRadius: "var(--border-radius-md)", overflow: "hidden" }}>
+      <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse", tableLayout: "fixed" }}>
+        <thead>
+          <tr style={{ background: "var(--color-background-secondary)" }}>
+            <th style={{ ...th, width: "20%" }}>Name</th>
+            <th style={{ ...th, width: "13%" }}>Pronouns</th>
+            <th style={{ ...th, width: "9%" }}>Age</th>
+            <th style={{ ...th, width: "15%" }}>Teacher</th>
+            {aac && <th style={{ ...th, width: "23%" }}>{aac.label}</th>}
+            <th style={{ ...th, width: "14%" }}>Next IEP</th>
+            <th style={{ width: "7%" }} />
+          </tr>
+        </thead>
+        <tbody>
+          {students.length === 0 ? (
+            <tr>
+              <td colSpan={colCount} style={{ padding: "24px 14px", textAlign: "center", color: "var(--color-text-tertiary)", fontSize: 13 }}>
+                {emptyText}
+              </td>
+            </tr>
+          ) : (
+            students.map((s) => (
+              <StudentRow
+                key={s.id}
+                s={s}
+                teachers={teachers}
+                aac={aac}
+                colCount={colCount}
+                onPatch={(patch) => onPatch(s.id, patch)}
+                onSetField={(key, v) => onSetField(s.id, key, v)}
+                onToggleRemove={() => onToggleRemove(s.id)}
+              />
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function StudentRow({
+  s,
+  teachers,
+  aac,
+  colCount,
+  onPatch,
+  onSetField,
+  onToggleRemove,
+}: {
+  s: Student;
+  teachers: Teacher[];
+  aac: StudentField | undefined;
+  colCount: number;
+  onPatch: (patch: Partial<Student>) => void;
+  onSetField: (key: string, value: string[]) => void;
+  onToggleRemove: () => void;
+}) {
+  const border = "0.5px solid var(--color-border-tertiary)";
+  if (s.archived) {
+    return (
+      <tr style={{ borderTop: border, background: "var(--color-background-secondary)", opacity: 0.6 }}>
+        <td style={CELL}>
+          <span style={{ textDecoration: "line-through", color: "var(--color-text-tertiary)", fontSize: 13, padding: "0 8px" }}>
+            {fullName(s) || "(unnamed)"}
+          </span>
+        </td>
+        <td colSpan={colCount - 2} style={{ ...CELL, color: "var(--color-text-tertiary)", fontSize: 12 }}>
+          removed from this term
+        </td>
+        <td style={{ ...CELL, textAlign: "center" }}>
+          <button
+            className="button button--small"
+            style={{ fontSize: 11, padding: "3px 8px" }}
+            onClick={onToggleRemove}
+          >
+            Undo
+          </button>
+        </td>
+      </tr>
+    );
+  }
+  const age = computedAge(s);
+  const flag = ageFlag(age);
+  const ageStyle: CSSProperties =
+    flag === "alert"
+      ? { background: "#FCEBEB", color: "#501313", fontWeight: 500 }
+      : flag === "warn"
+        ? { background: "#FAEEDA", color: "#633806", fontWeight: 500 }
+        : {};
+  const aacValue = aac && Array.isArray(s.fields[aac.key]) ? (s.fields[aac.key] as string[])[0] ?? "" : "";
+  return (
+    <tr style={{ borderTop: border }}>
+      <td style={CELL}>
+        <input style={CELL_INPUT} value={s.firstName} placeholder="Name" onChange={(e) => onPatch({ firstName: e.target.value })} />
+      </td>
+      <td style={CELL}>
+        <input style={CELL_INPUT} value={s.pronouns} placeholder="—" onChange={(e) => onPatch({ pronouns: e.target.value })} />
+      </td>
+      <td style={CELL}>
+        {s.birthday ? (
+          <span style={{ ...CELL_INPUT, ...ageStyle, display: "inline-block", borderRadius: 4 }}>{age ?? "—"}</span>
+        ) : (
+          <input
+            type="number"
+            style={{ ...CELL_INPUT, ...ageStyle }}
+            value={s.age ?? ""}
+            onChange={(e) => onPatch({ age: e.target.value === "" ? null : Number(e.target.value) })}
+          />
+        )}
+      </td>
+      <td style={CELL}>
+        <select style={CELL_INPUT} value={s.teacherId} onChange={(e) => onPatch({ teacherId: e.target.value })}>
+          <option value="">—</option>
+          {teachers.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name || "(unnamed)"}
+            </option>
+          ))}
+        </select>
+      </td>
+      {aac && (
+        <td style={CELL}>
+          <select
+            style={CELL_INPUT}
+            value={aacValue}
+            onChange={(e) => onSetField(aac.key, e.target.value ? [e.target.value] : [])}
+          >
+            <option value="">—</option>
+            {(aac.options ?? []).map((o) => (
+              <option key={o} value={o}>
+                {o}
+              </option>
+            ))}
+          </select>
+        </td>
+      )}
+      <td style={CELL}>
+        <input
+          type="date"
+          style={CELL_INPUT}
+          value={s.nextIepReview ?? ""}
+          onChange={(e) => onPatch({ nextIepReview: e.target.value || null })}
+        />
+      </td>
+      <td style={{ ...CELL, textAlign: "center" }}>
+        <button
+          title="Remove from this term"
+          onClick={onToggleRemove}
+          style={{ border: "none", background: "none", cursor: "pointer", color: "var(--color-text-tertiary)", fontSize: 16, lineHeight: 1 }}
+        >
+          ×
+        </button>
+      </td>
+    </tr>
   );
 }
 
