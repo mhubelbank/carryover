@@ -14,6 +14,7 @@ interface Props {
   onOpenStudent: (studentId: string, view?: "detail" | "goals") => void;
   onOpenTeacher: (teacherId: string) => void;
   onGenerate: (date: string, teacherId: string, studentIds: string[], timeSlot?: string) => void;
+  onStartNewTerm: () => void;
 }
 
 interface Session {
@@ -31,7 +32,7 @@ const emptyBoxStyle: CSSProperties = {
   fontSize: 14,
 };
 
-export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate }: Props) {
+export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate, onStartNewTerm }: Props) {
   const { state, client, teacherById, studentById, saveStudents, saveTerm } = useTerm();
   const [selected, setSelected] = useState<Date>(() => toWeekday(startOfDay(new Date())));
   const [busy, setBusy] = useState(false);
@@ -207,7 +208,7 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate }: 
             variant="warning"
             icon="calendar-plus"
             action={
-              <button className="button button--small" disabled>
+              <button className="button button--small" onClick={onStartNewTerm}>
                 Prepare new term →
               </button>
             }
