@@ -1,9 +1,11 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Icon } from "../components/Icon";
 import { Nav, type NavPage } from "../components/Nav";
 import { useAuth } from "../context/AuthContext";
 import { useTerm } from "../context/TermContext";
+import { loadTermHistory } from "../domain/data";
 import { formatShort, parseDate } from "../domain/dates";
+import type { Term } from "../domain/term";
 
 interface SettingsProps {
   onNavigate: (page: NavPage) => void;
@@ -32,7 +34,22 @@ export function Settings({ onNavigate, onStartNewTerm }: SettingsProps) {
 }
 
 function TermSection({ onStartNewTerm }: { onStartNewTerm: () => void }) {
-  const { state } = useTerm();
+  const { state, client } = useTerm();
+  const [history, setHistory] = useState<Term[]>([]);
+  useEffect(() => {
+    if (!client) return;
+    let cancelled = false;
+    loadTermHistory(client)
+      .then((h) => {
+        if (!cancelled) setHistory(h);
+      })
+      .catch(() => {
+        if (!cancelled) setHistory([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client]);
 
   let body: ReactNode;
   if (state.status === "ready") {
@@ -85,6 +102,28 @@ function TermSection({ onStartNewTerm }: { onStartNewTerm: () => void }) {
           Start a new term
         </button>
       </div>
+
+      {history.length > 0 && (
+        <div style={{ marginTop: 16, borderTop: "0.5px solid var(--color-border-tertiary)", paddingTop: 12 }}>
+          <p style={{ margin: "0 0 8px 0", fontSize: 11, fontWeight: 500, color: "var(--color-text-tertiary)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+            Past terms
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {[...history].reverse().map((t, i) => {
+              const first = parseDate(t.firstDay);
+              const last = parseDate(t.lastDay);
+              return (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 13 }}>
+                  <span>{t.label}</span>
+                  <span style={{ color: "var(--color-text-tertiary)" }}>
+                    {first ? formatShort(first) : t.firstDay} – {last ? formatShort(last) : t.lastDay}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
