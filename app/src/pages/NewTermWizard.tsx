@@ -3,7 +3,8 @@ import { Icon } from "../components/Icon";
 import { Nav, type NavPage } from "../components/Nav";
 import { useTerm } from "../context/TermContext";
 import { termLabel, type TermType } from "../domain/term";
-import type { Teacher } from "../domain/teacher";
+import { teacherColor, type ColorKey, type Teacher } from "../domain/teacher";
+import { ColorPicker } from "./Teachers";
 
 interface Props {
   onNavigate: (page: NavPage) => void;
@@ -297,8 +298,12 @@ function TeachersStep({
   teachers: Teacher[];
   onChange: (next: Teacher[]) => void;
 }) {
+  const [colorFor, setColorFor] = useState<string | null>(null);
+  const colorTarget = teachers.find((t) => t.id === colorFor);
   const setName = (id: string, name: string) =>
     onChange(teachers.map((t) => (t.id === id ? { ...t, name } : t)));
+  const setColor = (id: string, color: ColorKey) =>
+    onChange(teachers.map((t) => (t.id === id ? { ...t, color } : t)));
   const toggleMode = (id: string, mode: Teacher["modes"][number], on: boolean) =>
     onChange(
       teachers.map((t) =>
@@ -322,6 +327,20 @@ function TeachersStep({
         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
           {teachers.map((t) => (
             <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 14 }}>
+              <button
+                type="button"
+                onClick={() => setColorFor(t.id)}
+                title="Schedule color"
+                style={{
+                  width: 24,
+                  height: 24,
+                  flexShrink: 0,
+                  borderRadius: 6,
+                  border: "0.5px solid var(--color-border-secondary)",
+                  background: teacherColor(t.color).bg,
+                  cursor: "pointer",
+                }}
+              />
               <input
                 className="input"
                 style={{ flex: 1, maxWidth: 240 }}
@@ -355,6 +374,21 @@ function TeachersStep({
       <button className="button button--small" onClick={() => onChange([...teachers, blankTeacher()])}>
         <Icon name="plus" size={13} /> Add a teacher
       </button>
+
+      {colorTarget && (
+        <ColorPicker
+          current={colorTarget.color}
+          name={colorTarget.name}
+          others={teachers
+            .filter((x) => x.id !== colorTarget.id)
+            .map((x) => ({ name: x.name, color: x.color }))}
+          onPick={(c) => {
+            setColor(colorTarget.id, c);
+            setColorFor(null);
+          }}
+          onClose={() => setColorFor(null)}
+        />
+      )}
     </div>
   );
 }
