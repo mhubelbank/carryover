@@ -143,6 +143,7 @@ function Pages() {
           onOpenStudent={openStudent}
           onOpenTeacher={openTeacher}
           onGenerate={openGenerate}
+          onStartNewTerm={() => setNewTerm(true)}
         />
       );
   }
