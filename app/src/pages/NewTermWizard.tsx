@@ -2,6 +2,7 @@ import { useState, type CSSProperties } from "react";
 import { Icon } from "../components/Icon";
 import { Nav, type NavPage } from "../components/Nav";
 import { useTerm } from "../context/TermContext";
+import { appendTermToHistory } from "../domain/data";
 import { termLabel, type TermType } from "../domain/term";
 import { teacherColor, type ColorKey, type Teacher } from "../domain/teacher";
 import { ageFlag, computedAge, fullName, type Student } from "../domain/student";
@@ -80,7 +81,7 @@ function blankStudent(): Student {
 // (Year) creates the term, step 2 reviews the teacher roster; steps 3–5 (students,
 // schedule, goals) are built out incrementally — placeholders for now.
 export function NewTermWizard({ onNavigate, onClose }: Props) {
-  const { state, saveTerm, saveTeachers, saveStudents, reload } = useTerm();
+  const { state, client, saveTerm, saveTeachers, saveStudents, reload } = useTerm();
   const ready = state.status === "ready" ? state.data : null;
   const [step, setStep] = useState(1);
   const [termType, setTermType] = useState<TermType>("school-year");
@@ -113,17 +114,26 @@ export function NewTermWizard({ onNavigate, onClose }: Props) {
     setSaving(true);
     setError(null);
     try {
+      // Keep a record of the outgoing term before term.json is overwritten.
+      if (ready && client) await appendTermToHistory(client, ready.term);
       await saveTerm({ termType, firstDay, lastDay, label: termLabel(termType, firstDay, lastDay) });
       // Persist the reviewed roster only if it changed (drop blank-name rows).
       const cleanedTeachers = teachers.map((t) => ({ ...t, name: t.name.trim() })).filter((t) => t.name);
       if (JSON.stringify(cleanedTeachers) !== teachersBase) await saveTeachers(cleanedTeachers);
       // Roster = previously-archived (untouched) + continuing (edits/removals) +
-      // new (blank-name rows dropped). Only write if anything changed.
+      // new (blank-name rows dropped). Students archived this step get their last
+      // day set to the prior term's end; new students start on this term's first
+      // day. Only write if anything changed.
       const cleanedNew = newStudents
         .map((s) => ({ ...s, firstName: s.firstName.trim() }))
         .filter((s) => s.firstName);
       if (cleanedNew.length > 0 || JSON.stringify(continuing) !== continuingBase) {
-        await saveStudents([...archivedPrev, ...continuing, ...cleanedNew]);
+        const priorLastDay = ready?.term.lastDay ?? null;
+        const continuingFinal = continuing.map((s) =>
+          s.archived ? { ...s, lastDay: s.lastDay ?? priorLastDay } : s,
+        );
+        const newFinal = cleanedNew.map((s) => ({ ...s, firstDay: s.firstDay ?? firstDay }));
+        await saveStudents([...archivedPrev, ...continuingFinal, ...newFinal]);
       }
       // Term now exists → the app reloads into its normal (ready) state.
       reload();
@@ -698,7 +708,7 @@ function StudentRow({
           </span>
         </td>
         <td colSpan={4} style={{ ...CELL, color: "var(--color-text-tertiary)", fontSize: 12 }}>
-          removed (archived) from this term
+          removed from this term (archived)
         </td>
         <td style={{ ...CELL, textAlign: "center" }}>
           <button

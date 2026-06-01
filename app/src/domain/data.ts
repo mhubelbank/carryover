@@ -42,6 +42,7 @@ export interface LoadedTerm {
 
 const PATHS = {
   term: "data/term.json",
+  termHistory: "data/term-history.json",
   teachers: "data/teachers.json",
   students: "data/students.csv",
   goals: "data/goals.csv",
@@ -237,6 +238,26 @@ export function writeTerm(
   sha: string | undefined,
 ): Promise<string> {
   return client.writeFile(PATHS.term, `${JSON.stringify(term, null, 2)}\n`, "data: update term", sha);
+}
+
+// data/term-history.json — the record of past terms, appended (oldest → newest)
+// when a new term starts, so the outgoing term isn't lost when term.json is
+// overwritten. Empty/absent until the first roll-over.
+export async function loadTermHistory(client: GitHubClient): Promise<Term[]> {
+  const file = await client.readFile(PATHS.termHistory);
+  return file ? (JSON.parse(file.text) as Term[]) : [];
+}
+
+export async function appendTermToHistory(client: GitHubClient, term: Term): Promise<void> {
+  const existing = await client.readFile(PATHS.termHistory);
+  const history: Term[] = existing ? (JSON.parse(existing.text) as Term[]) : [];
+  history.push(term);
+  await client.writeFile(
+    PATHS.termHistory,
+    `${JSON.stringify(history, null, 2)}\n`,
+    "data: append term to history",
+    existing?.sha,
+  );
 }
 
 // Writes teachers.json; returns the new blob sha for the next safe overwrite.
