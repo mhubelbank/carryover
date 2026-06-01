@@ -590,7 +590,7 @@ function TeacherPill({ name, color, highlight }: { name: string; color: ColorKey
   );
 }
 
-function ColorPicker({
+export function ColorPicker({
   current,
   name,
   others,
