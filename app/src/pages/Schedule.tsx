@@ -539,17 +539,24 @@ export function Schedule({ onNavigate, onOpenStudent }: Props) {
           <>
             <span
               style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
                 fontSize: 12,
                 color: customizedSaved
                   ? "var(--color-text-warning)"
                   : "var(--color-text-tertiary)",
               }}
             >
-              {loadingWeek
-                ? "Loading…"
-                : customizedSaved
-                  ? "Customized this week"
-                  : "Same as usual"}
+              {loadingWeek ? (
+                "Loading…"
+              ) : customizedSaved ? (
+                <>
+                  <Icon name="pencil" size={12} /> Customized this week
+                </>
+              ) : (
+                "Same as usual"
+              )}
             </span>
             {customizedSaved && (
               <button
@@ -776,9 +783,11 @@ export function Schedule({ onNavigate, onOpenStudent }: Props) {
                     if (!s || s.archived) return false;
                     return !columnDate || isActiveOn(s, columnDate);
                   });
-                  const deviates =
-                    weekKey !== null &&
-                    !sameStudents(templateCells.get(`${day}|${slot}`), rawStudentIds);
+                  // A student is customized this week if they're not in the
+                  // usual template's cell (added/moved here this week).
+                  const tplCell = templateCells.get(`${day}|${slot}`);
+                  const isCustomized = (sid: string) =>
+                    weekKey !== null && !(tplCell?.has(sid) ?? false);
                   return (
                     <button
                       key={slot}
@@ -820,18 +829,6 @@ export function Schedule({ onNavigate, onOpenStudent }: Props) {
                           }}
                         >
                           {slot}
-                          {deviates && (
-                            <span
-                              title="Changed from usual"
-                              style={{
-                                width: 6,
-                                height: 6,
-                                borderRadius: "50%",
-                                background: "var(--color-text-warning)",
-                                flexShrink: 0,
-                              }}
-                            />
-                          )}
                         </span>
                         {studentIds.length === 0 ? (
                           <span style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>
@@ -849,6 +846,9 @@ export function Schedule({ onNavigate, onOpenStudent }: Props) {
                                 <span
                                   key={`${studentId}-${i}`}
                                   style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: 3,
                                     fontSize: 11,
                                     padding: "1px 6px",
                                     background: color.bg,
@@ -858,6 +858,9 @@ export function Schedule({ onNavigate, onOpenStudent }: Props) {
                                   }}
                                 >
                                   {student ? fullName(student) : "Unknown"}
+                                  {isCustomized(studentId) && (
+                                    <Icon name="pencil" size={10} label="Customized this week" />
+                                  )}
                                 </span>
                               );
                             })}
@@ -1443,14 +1446,6 @@ function editorStudents(students: Student[], weekDate: Date | null, day: Weekday
   });
 }
 
-function sameStudents(template: Set<string> | undefined, week: string[]): boolean {
-  const tmpl = template ?? EMPTY_SET;
-  if (tmpl.size !== week.length) return false;
-  for (const id of week) if (!tmpl.has(id)) return false;
-  return true;
-}
-
-const EMPTY_SET: Set<string> = new Set();
 
 // Order-independent fingerprint of the schedule for dirty detection.
 // Order-independent across cells, but order-SENSITIVE within a cell: each
