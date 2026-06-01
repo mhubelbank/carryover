@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Icon } from "../components/Icon";
 import { Nav, type NavPage } from "../components/Nav";
 import { useAuth } from "../context/AuthContext";
@@ -33,17 +33,49 @@ export function Settings({ onNavigate, onStartNewTerm }: SettingsProps) {
   );
 }
 
-// Date inputs styled to read as quiet metadata (still click-to-edit).
-const SUBTLE_DATE: CSSProperties = {
-  border: "none",
-  background: "transparent",
-  fontFamily: "inherit",
-  fontSize: 12,
-  color: "var(--color-text-tertiary)",
-  padding: 0,
-  width: 90,
-  cursor: "pointer",
-};
+// A date shown as quiet text that aligns with the line; clicking reveals a
+// date input (avoids the native control's trailing whitespace / odd alignment).
+function EditableDate({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  if (editing) {
+    return (
+      <input
+        type="date"
+        autoFocus
+        defaultValue={value}
+        onBlur={(e) => {
+          const v = e.target.value;
+          if (v && v !== value) onChange(v);
+          setEditing(false);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") e.currentTarget.blur();
+          else if (e.key === "Escape") setEditing(false);
+        }}
+        style={{
+          border: "none",
+          background: "transparent",
+          fontFamily: "inherit",
+          fontSize: 12,
+          color: "var(--color-text-secondary)",
+          padding: 0,
+          width: 124,
+        }}
+      />
+    );
+  }
+  const d = parseDate(value);
+  return (
+    <button
+      type="button"
+      onClick={() => setEditing(true)}
+      title="Click to edit"
+      style={{ border: "none", background: "none", padding: 0, font: "inherit", color: "inherit", cursor: "pointer" }}
+    >
+      {d ? formatShort(d) : value}
+    </button>
+  );
+}
 
 function TermSection({ onStartNewTerm }: { onStartNewTerm: () => void }) {
   const { state, client, saveTerm } = useTerm();
@@ -91,22 +123,10 @@ function TermSection({ onStartNewTerm }: { onStartNewTerm: () => void }) {
       {ready && term ? (
         <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <span style={{ fontSize: 14, fontWeight: 500 }}>{term.label}</span>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 0, fontSize: 12, color: "var(--color-text-tertiary)" }}>
-            <input
-              type="date"
-              value={term.firstDay}
-              title="Click to edit the start date"
-              style={SUBTLE_DATE}
-              onChange={(e) => setDates({ firstDay: e.target.value })}
-            />
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, color: "var(--color-text-tertiary)" }}>
+            <EditableDate value={term.firstDay} onChange={(v) => setDates({ firstDay: v })} />
             –
-            <input
-              type="date"
-              value={term.lastDay}
-              title="Click to edit the end date"
-              style={SUBTLE_DATE}
-              onChange={(e) => setDates({ lastDay: e.target.value })}
-            />
+            <EditableDate value={term.lastDay} onChange={(v) => setDates({ lastDay: v })} />
           </span>
           <span style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>
             {ready.students.length} student{ready.students.length === 1 ? "" : "s"} ·{" "}
