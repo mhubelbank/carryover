@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { Icon } from "../components/Icon";
 import { Nav, type NavPage } from "../components/Nav";
 import { useAuth } from "../context/AuthContext";
@@ -32,6 +32,18 @@ export function Settings({ onNavigate, onStartNewTerm }: SettingsProps) {
     </div>
   );
 }
+
+// Date inputs styled to read as quiet metadata (still click-to-edit).
+const SUBTLE_DATE: CSSProperties = {
+  border: "none",
+  background: "transparent",
+  fontFamily: "inherit",
+  fontSize: 12,
+  color: "var(--color-text-tertiary)",
+  padding: 0,
+  width: 102,
+  cursor: "pointer",
+};
 
 function TermSection({ onStartNewTerm }: { onStartNewTerm: () => void }) {
   const { state, client, saveTerm } = useTerm();
@@ -79,21 +91,23 @@ function TermSection({ onStartNewTerm }: { onStartNewTerm: () => void }) {
       {ready && term ? (
         <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <span style={{ fontSize: 14, fontWeight: 500 }}>{term.label}</span>
-          <input
-            className="input"
-            type="date"
-            value={term.firstDay}
-            style={{ width: 150 }}
-            onChange={(e) => setDates({ firstDay: e.target.value })}
-          />
-          <span style={{ color: "var(--color-text-tertiary)" }}>–</span>
-          <input
-            className="input"
-            type="date"
-            value={term.lastDay}
-            style={{ width: 150 }}
-            onChange={(e) => setDates({ lastDay: e.target.value })}
-          />
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 2, fontSize: 12, color: "var(--color-text-tertiary)" }}>
+            <input
+              type="date"
+              value={term.firstDay}
+              title="Click to edit the start date"
+              style={SUBTLE_DATE}
+              onChange={(e) => setDates({ firstDay: e.target.value })}
+            />
+            –
+            <input
+              type="date"
+              value={term.lastDay}
+              title="Click to edit the end date"
+              style={SUBTLE_DATE}
+              onChange={(e) => setDates({ lastDay: e.target.value })}
+            />
+          </span>
           <span style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>
             {ready.students.length} student{ready.students.length === 1 ? "" : "s"} ·{" "}
             {ready.teachers.length} teacher{ready.teachers.length === 1 ? "" : "s"}
