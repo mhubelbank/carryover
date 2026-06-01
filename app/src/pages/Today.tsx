@@ -402,15 +402,11 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate }: 
                         {student ? fullName(student) : "Unknown"}
                         {customized && (
                           <span
-                            title="Added to this week's schedule (differs from the usual)"
-                            style={{
-                              width: 6,
-                              height: 6,
-                              borderRadius: "50%",
-                              background: "var(--color-text-warning)",
-                              flexShrink: 0,
-                            }}
-                          />
+                            title="Customized this week (differs from the usual schedule)"
+                            style={{ color: "var(--color-text-warning)", lineHeight: 0, flexShrink: 0 }}
+                          >
+                            <Icon name="pencil" size={12} />
+                          </span>
                         )}
                       </button>
                     );
