@@ -142,7 +142,7 @@ function TermSection({ onStartNewTerm }: { onStartNewTerm: () => void }) {
             {termOver && (
               <button
                 className="button button--small button--primary"
-                style={{ marginLeft: "auto", alignSelf: "center" }}
+                style={{ marginLeft: "auto" }}
                 onClick={onStartNewTerm}
               >
                 Finish term →
