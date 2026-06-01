@@ -5,7 +5,6 @@ import { useTerm } from "../context/TermContext";
 import { termLabel, type TermType } from "../domain/term";
 import { teacherColor, type ColorKey, type Teacher } from "../domain/teacher";
 import { ageFlag, computedAge, fullName, type Student } from "../domain/student";
-import type { StudentField } from "../domain/studentField";
 import { ColorPicker } from "./Teachers";
 
 interface Props {
@@ -98,7 +97,6 @@ export function NewTermWizard({ onNavigate, onClose }: Props) {
   );
   const [continuingBase] = useState(() => JSON.stringify(continuing));
   const [newStudents, setNewStudents] = useState<Student[]>([]);
-  const studentFields = ready?.studentFields ?? [];
   const archivedPrev = ready?.students.filter((s) => s.archived) ?? [];
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -165,7 +163,6 @@ export function NewTermWizard({ onNavigate, onClose }: Props) {
             continuing={continuing}
             newStudents={newStudents}
             teachers={teachers}
-            studentFields={studentFields}
             onContinuing={setContinuing}
             onNew={setNewStudents}
           />
@@ -469,22 +466,16 @@ const CELL_INPUT: CSSProperties = {
   fontFamily: "inherit",
 };
 
-function aacFieldOf(fields: StudentField[]): StudentField | undefined {
-  return fields.find((f) => f.type === "select" && /aac/i.test(`${f.key} ${f.label}`));
-}
-
 function StudentsStep({
   continuing,
   newStudents,
   teachers,
-  studentFields,
   onContinuing,
   onNew,
 }: {
   continuing: Student[];
   newStudents: Student[];
   teachers: Teacher[];
-  studentFields: StudentField[];
   onContinuing: (next: Student[]) => void;
   onNew: (next: Student[]) => void;
 }) {
@@ -492,17 +483,9 @@ function StudentsStep({
   const [filter, setFilter] = useState("");
   const [teacherFilter, setTeacherFilter] = useState("");
   const [age21, setAge21] = useState(false);
-  const aac = aacFieldOf(studentFields);
 
   const patchIn = (list: Student[], set: (n: Student[]) => void, id: string, patch: Partial<Student>) =>
     set(list.map((s) => (s.id === id ? { ...s, ...patch } : s)));
-  const setFieldIn = (
-    list: Student[],
-    set: (n: Student[]) => void,
-    id: string,
-    key: string,
-    value: string[],
-  ) => set(list.map((s) => (s.id === id ? { ...s, fields: { ...s.fields, [key]: value } } : s)));
 
   const removedCount = continuing.filter((s) => s.archived).length;
   const continuingCount = continuing.length - removedCount;
@@ -529,8 +512,7 @@ function StudentsStep({
           const cols = line.split(/\t|,/).map((c) => c.trim());
           const s = blankStudent();
           s.firstName = cols[0] ?? "";
-          if (cols[1]) s.pronouns = cols[1];
-          if (cols[2] && /^\d+$/.test(cols[2])) s.age = Number(cols[2]);
+          if (cols[1] && /^\d{4}-\d{2}-\d{2}$/.test(cols[1])) s.birthday = cols[1];
           return s;
         });
       if (rows.length) onNew([...newStudents, ...rows]);
@@ -538,8 +520,6 @@ function StudentsStep({
       // Clipboard read denied — silently ignore.
     }
   }
-
-  const colCount = aac ? 7 : 6;
 
   return (
     <div>
@@ -571,20 +551,10 @@ function StudentsStep({
 
       {tab === "continuing" ? (
         <>
-          <div
-            style={{
-              background: "var(--color-background-info)",
-              border: "0.5px solid var(--color-border-info)",
-              borderRadius: "var(--border-radius-md)",
-              padding: "10px 14px",
-              marginBottom: 14,
-              fontSize: 13,
-              color: "var(--color-text-info)",
-            }}
-          >
-            Ages carry over from last term — update anyone whose birthday has passed. Click × to remove a
-            student from this term (Undo restores them).
-          </div>
+          <p style={{ margin: "0 0 14px 0", fontSize: 13, color: "var(--color-text-secondary)" }}>
+            Review the roster — update birthdays, teachers, or IEP dates. Click × to remove a student from
+            this term; removed students are archived (not deleted) and can be restored with Undo.
+          </p>
 
           <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center" }}>
             <input
@@ -611,11 +581,8 @@ function StudentsStep({
           <StudentTable
             students={visibleContinuing}
             teachers={teachers}
-            aac={aac}
-            colCount={colCount}
             emptyText="No matching students."
             onPatch={(id, patch) => patchIn(continuing, onContinuing, id, patch)}
-            onSetField={(id, key, v) => setFieldIn(continuing, onContinuing, id, key, v)}
             onToggleRemove={(id) =>
               patchIn(continuing, onContinuing, id, { archived: !continuing.find((s) => s.id === id)?.archived })
             }
@@ -639,11 +606,8 @@ function StudentsStep({
           <StudentTable
             students={newStudents}
             teachers={teachers}
-            aac={aac}
-            colCount={colCount}
             emptyText="No new students yet — paste a list or add a row."
             onPatch={(id, patch) => patchIn(newStudents, onNew, id, patch)}
-            onSetField={(id, key, v) => setFieldIn(newStudents, onNew, id, key, v)}
             onToggleRemove={(id) => onNew(newStudents.filter((s) => s.id !== id))}
           />
 
@@ -659,20 +623,14 @@ function StudentsStep({
 function StudentTable({
   students,
   teachers,
-  aac,
-  colCount,
   emptyText,
   onPatch,
-  onSetField,
   onToggleRemove,
 }: {
   students: Student[];
   teachers: Teacher[];
-  aac: StudentField | undefined;
-  colCount: number;
   emptyText: string;
   onPatch: (id: string, patch: Partial<Student>) => void;
-  onSetField: (id: string, key: string, value: string[]) => void;
   onToggleRemove: (id: string) => void;
 }) {
   const th: CSSProperties = {
@@ -687,19 +645,18 @@ function StudentTable({
       <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse", tableLayout: "fixed" }}>
         <thead>
           <tr style={{ background: "var(--color-background-secondary)" }}>
-            <th style={{ ...th, width: "20%" }}>Name</th>
-            <th style={{ ...th, width: "13%" }}>Pronouns</th>
-            <th style={{ ...th, width: "9%" }}>Age</th>
-            <th style={{ ...th, width: "15%" }}>Teacher</th>
-            {aac && <th style={{ ...th, width: "23%" }}>{aac.label}</th>}
-            <th style={{ ...th, width: "14%" }}>Next IEP</th>
-            <th style={{ width: "7%" }} />
+            <th style={{ ...th, width: "26%" }}>Name</th>
+            <th style={{ ...th, width: "18%" }}>Birthday</th>
+            <th style={{ ...th, width: "10%" }}>Age</th>
+            <th style={{ ...th, width: "19%" }}>Teacher</th>
+            <th style={{ ...th, width: "18%" }}>Next IEP</th>
+            <th style={{ width: "9%" }} />
           </tr>
         </thead>
         <tbody>
           {students.length === 0 ? (
             <tr>
-              <td colSpan={colCount} style={{ padding: "24px 14px", textAlign: "center", color: "var(--color-text-tertiary)", fontSize: 13 }}>
+              <td colSpan={6} style={{ padding: "24px 14px", textAlign: "center", color: "var(--color-text-tertiary)", fontSize: 13 }}>
                 {emptyText}
               </td>
             </tr>
@@ -709,10 +666,7 @@ function StudentTable({
                 key={s.id}
                 s={s}
                 teachers={teachers}
-                aac={aac}
-                colCount={colCount}
                 onPatch={(patch) => onPatch(s.id, patch)}
-                onSetField={(key, v) => onSetField(s.id, key, v)}
                 onToggleRemove={() => onToggleRemove(s.id)}
               />
             ))
@@ -726,18 +680,12 @@ function StudentTable({
 function StudentRow({
   s,
   teachers,
-  aac,
-  colCount,
   onPatch,
-  onSetField,
   onToggleRemove,
 }: {
   s: Student;
   teachers: Teacher[];
-  aac: StudentField | undefined;
-  colCount: number;
   onPatch: (patch: Partial<Student>) => void;
-  onSetField: (key: string, value: string[]) => void;
   onToggleRemove: () => void;
 }) {
   const border = "0.5px solid var(--color-border-tertiary)";
@@ -749,8 +697,8 @@ function StudentRow({
             {fullName(s) || "(unnamed)"}
           </span>
         </td>
-        <td colSpan={colCount - 2} style={{ ...CELL, color: "var(--color-text-tertiary)", fontSize: 12 }}>
-          removed from this term
+        <td colSpan={4} style={{ ...CELL, color: "var(--color-text-tertiary)", fontSize: 12 }}>
+          removed (archived) from this term
         </td>
         <td style={{ ...CELL, textAlign: "center" }}>
           <button
@@ -772,26 +720,24 @@ function StudentRow({
       : flag === "warn"
         ? { background: "#FAEEDA", color: "#633806", fontWeight: 500 }
         : {};
-  const aacValue = aac && Array.isArray(s.fields[aac.key]) ? (s.fields[aac.key] as string[])[0] ?? "" : "";
   return (
     <tr style={{ borderTop: border }}>
       <td style={CELL}>
         <input style={CELL_INPUT} value={s.firstName} placeholder="Name" onChange={(e) => onPatch({ firstName: e.target.value })} />
       </td>
       <td style={CELL}>
-        <input style={CELL_INPUT} value={s.pronouns} placeholder="—" onChange={(e) => onPatch({ pronouns: e.target.value })} />
+        <input
+          type="date"
+          style={CELL_INPUT}
+          value={s.birthday ?? ""}
+          onChange={(e) => onPatch({ birthday: e.target.value || null })}
+        />
       </td>
       <td style={CELL}>
-        {s.birthday ? (
-          <span style={{ ...CELL_INPUT, ...ageStyle, display: "inline-block", borderRadius: 4 }}>{age ?? "—"}</span>
-        ) : (
-          <input
-            type="number"
-            style={{ ...CELL_INPUT, ...ageStyle }}
-            value={s.age ?? ""}
-            onChange={(e) => onPatch({ age: e.target.value === "" ? null : Number(e.target.value) })}
-          />
-        )}
+        {/* Age is derived from the birthday — locked. */}
+        <span style={{ ...CELL_INPUT, ...ageStyle, display: "inline-block", borderRadius: 4, textAlign: "center" }}>
+          {age ?? "—"}
+        </span>
       </td>
       <td style={CELL}>
         <select style={CELL_INPUT} value={s.teacherId} onChange={(e) => onPatch({ teacherId: e.target.value })}>
@@ -803,22 +749,6 @@ function StudentRow({
           ))}
         </select>
       </td>
-      {aac && (
-        <td style={CELL}>
-          <select
-            style={CELL_INPUT}
-            value={aacValue}
-            onChange={(e) => onSetField(aac.key, e.target.value ? [e.target.value] : [])}
-          >
-            <option value="">—</option>
-            {(aac.options ?? []).map((o) => (
-              <option key={o} value={o}>
-                {o}
-              </option>
-            ))}
-          </select>
-        </td>
-      )}
       <td style={CELL}>
         <input
           type="date"
