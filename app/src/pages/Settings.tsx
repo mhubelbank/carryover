@@ -4,8 +4,8 @@ import { Nav, type NavPage } from "../components/Nav";
 import { useAuth } from "../context/AuthContext";
 import { useTerm } from "../context/TermContext";
 import { loadTermHistory } from "../domain/data";
-import { formatShort, parseDate } from "../domain/dates";
-import type { Term } from "../domain/term";
+import { formatShort, parseDate, startOfDay } from "../domain/dates";
+import { termLabel, type Term } from "../domain/term";
 
 interface SettingsProps {
   onNavigate: (page: NavPage) => void;
@@ -34,8 +34,9 @@ export function Settings({ onNavigate, onStartNewTerm }: SettingsProps) {
 }
 
 function TermSection({ onStartNewTerm }: { onStartNewTerm: () => void }) {
-  const { state, client } = useTerm();
+  const { state, client, saveTerm } = useTerm();
   const [history, setHistory] = useState<Term[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
   useEffect(() => {
     if (!client) return;
     let cancelled = false;
@@ -51,77 +52,101 @@ function TermSection({ onStartNewTerm }: { onStartNewTerm: () => void }) {
     };
   }, [client]);
 
-  let body: ReactNode;
-  if (state.status === "ready") {
-    const { term, students, teachers } = state.data;
-    const first = parseDate(term.firstDay);
-    const last = parseDate(term.lastDay);
-    body = (
-      <>
-        <p style={{ fontSize: 14, fontWeight: 500 }}>{term.label}</p>
-        <p style={{ marginTop: 4, fontSize: 12, color: "var(--color-text-secondary)" }}>
-          {first ? formatShort(first) : term.firstDay} – {last ? formatShort(last) : term.lastDay} ·{" "}
-          {students.length} student{students.length === 1 ? "" : "s"} · {teachers.length} teacher
-          {teachers.length === 1 ? "" : "s"}
-        </p>
-      </>
-    );
-  } else if (state.status === "loading") {
-    body = <p style={{ fontSize: 14, color: "var(--color-text-secondary)" }}>Loading…</p>;
-  } else if (state.status === "error") {
-    body = (
-      <>
-        <p style={{ fontSize: 14 }}>Couldn't load your term</p>
-        <p style={{ marginTop: 4, fontSize: 12, color: "var(--color-text-secondary)" }}>
-          {state.message}
-        </p>
-      </>
-    );
-  } else {
-    body = (
-      <>
-        <p style={{ fontSize: 14 }}>No term loaded yet</p>
-        <p style={{ marginTop: 4, fontSize: 12, color: "var(--color-text-secondary)" }}>
-          Set up your first school year or summer term to start adding students.
-        </p>
-      </>
-    );
-  }
+  const ready = state.status === "ready" ? state.data : null;
+  const term = ready?.term ?? null;
+  const last = term ? parseDate(term.lastDay) : null;
+  const termOver = !!last && startOfDay(new Date()).getTime() >= last.getTime();
+
+  // Inline date edits re-derive the auto-label and save immediately.
+  const setDates = (patch: { firstDay?: string; lastDay?: string }) => {
+    if (!term) return;
+    const firstDay = patch.firstDay ?? term.firstDay;
+    const lastDay = patch.lastDay ?? term.lastDay;
+    void saveTerm({ ...term, firstDay, lastDay, label: termLabel(term.termType, firstDay, lastDay) });
+  };
 
   return (
     <div className="card" style={{ marginBottom: "1rem" }}>
-      <h3 className="card__title">Term</h3>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14 }}>
-        <div style={{ flex: 1 }}>{body}</div>
-        <button
-          className="button button--small"
-          onClick={onStartNewTerm}
-          disabled={state.status !== "ready"}
-        >
-          <Icon name="plus" size={14} />
-          Start a new term
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: 12 }}>
+        <h3 className="card__title" style={{ margin: 0 }}>
+          Term
+        </h3>
+        <button className="button button--small" onClick={onStartNewTerm} disabled={!ready}>
+          <Icon name="plus" size={14} /> Start a new term
         </button>
       </div>
 
+      {ready && term ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 14, fontWeight: 500 }}>{term.label}</span>
+          <input
+            className="input"
+            type="date"
+            value={term.firstDay}
+            style={{ width: 150 }}
+            onChange={(e) => setDates({ firstDay: e.target.value })}
+          />
+          <span style={{ color: "var(--color-text-tertiary)" }}>–</span>
+          <input
+            className="input"
+            type="date"
+            value={term.lastDay}
+            style={{ width: 150 }}
+            onChange={(e) => setDates({ lastDay: e.target.value })}
+          />
+          <span style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>
+            {ready.students.length} student{ready.students.length === 1 ? "" : "s"} ·{" "}
+            {ready.teachers.length} teacher{ready.teachers.length === 1 ? "" : "s"}
+          </span>
+          {termOver && (
+            <button
+              className="button button--small button--primary"
+              style={{ marginLeft: "auto" }}
+              onClick={onStartNewTerm}
+            >
+              Finish term →
+            </button>
+          )}
+        </div>
+      ) : state.status === "loading" ? (
+        <p style={{ fontSize: 14, color: "var(--color-text-secondary)" }}>Loading…</p>
+      ) : state.status === "error" ? (
+        <p style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>
+          Couldn't load your term: {state.message}
+        </p>
+      ) : (
+        <p style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>
+          No term yet — start one above.
+        </p>
+      )}
+
       {history.length > 0 && (
-        <div style={{ marginTop: 16, borderTop: "0.5px solid var(--color-border-tertiary)", paddingTop: 12 }}>
-          <p style={{ margin: "0 0 8px 0", fontSize: 11, fontWeight: 500, color: "var(--color-text-tertiary)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-            Past terms
-          </p>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {[...history].reverse().map((t, i) => {
-              const first = parseDate(t.firstDay);
-              const last = parseDate(t.lastDay);
-              return (
-                <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 13 }}>
-                  <span>{t.label}</span>
-                  <span style={{ color: "var(--color-text-tertiary)" }}>
-                    {first ? formatShort(first) : t.firstDay} – {last ? formatShort(last) : t.lastDay}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
+        <div style={{ marginTop: 14, borderTop: "0.5px solid var(--color-border-tertiary)", paddingTop: 10 }}>
+          <button
+            onClick={() => setShowHistory((v) => !v)}
+            style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: "pointer", padding: 0, font: "inherit", fontSize: 13, color: "var(--color-text-secondary)" }}
+          >
+            <span style={{ display: "inline-flex", transform: showHistory ? "rotate(90deg)" : "none", transition: "transform 0.12s" }}>
+              <Icon name="chevron-right" size={14} />
+            </span>
+            Past terms ({history.length})
+          </button>
+          {showHistory && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
+              {[...history].reverse().map((t, i) => {
+                const f = parseDate(t.firstDay);
+                const l = parseDate(t.lastDay);
+                return (
+                  <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 13 }}>
+                    <span>{t.label}</span>
+                    <span style={{ color: "var(--color-text-tertiary)" }}>
+                      {f ? formatShort(f) : t.firstDay} – {l ? formatShort(l) : t.lastDay}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
     </div>
