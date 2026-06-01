@@ -6,6 +6,7 @@ import { appendTermToHistory } from "../domain/data";
 import { termLabel, type TermType } from "../domain/term";
 import { teacherColor, type ColorKey, type Teacher } from "../domain/teacher";
 import { ageFlag, computedAge, fullName, type Student } from "../domain/student";
+import type { Goal } from "../domain/goal";
 import { ColorPicker } from "./Teachers";
 
 interface Props {
@@ -81,7 +82,7 @@ function blankStudent(): Student {
 // (Year) creates the term, step 2 reviews the teacher roster; steps 3–5 (students,
 // schedule, goals) are built out incrementally — placeholders for now.
 export function NewTermWizard({ onNavigate, onClose }: Props) {
-  const { state, client, saveTerm, saveTeachers, saveStudents, reload } = useTerm();
+  const { state, client, saveTerm, saveTeachers, saveStudents, saveSchedule, reload } = useTerm();
   const ready = state.status === "ready" ? state.data : null;
   const [step, setStep] = useState(1);
   const [termType, setTermType] = useState<TermType>("school-year");
@@ -135,6 +136,8 @@ export function NewTermWizard({ onNavigate, onClose }: Props) {
         const newFinal = cleanedNew.map((s) => ({ ...s, firstDay: s.firstDay ?? firstDay }));
         await saveStudents([...archivedPrev, ...continuingFinal, ...newFinal]);
       }
+      // A new term's schedule starts empty (no carry-forward); clear the old one.
+      if ((ready?.schedule.length ?? 0) > 0) await saveSchedule([]);
       // Term now exists → the app reloads into its normal (ready) state.
       reload();
       onClose?.();
@@ -176,8 +179,17 @@ export function NewTermWizard({ onNavigate, onClose }: Props) {
             onContinuing={setContinuing}
             onNew={setNewStudents}
           />
+        ) : step === 4 ? (
+          <ScheduleStep hadSchedule={(ready?.schedule.length ?? 0) > 0} />
         ) : (
-          <PlaceholderStep name={STEPS[step - 1]!} />
+          <GoalsStep
+            students={[
+              ...continuing.filter((s) => !s.archived),
+              ...newStudents.filter((s) => s.firstName.trim()),
+            ]}
+            goals={ready?.goals ?? []}
+            teachers={teachers}
+          />
         )}
       </div>
 
@@ -780,13 +792,72 @@ function StudentRow({
   );
 }
 
-function PlaceholderStep({ name }: { name: string }) {
+function ScheduleStep({ hadSchedule }: { hadSchedule: boolean }) {
   return (
     <div style={{ textAlign: "center", padding: "2rem 1rem", color: "var(--color-text-tertiary)" }}>
-      <p style={{ fontSize: 14, margin: 0 }}>
-        {name} setup is coming next. For now, continue to create the term — you can manage{" "}
-        {name.toLowerCase()} from their tab afterward.
+      <Icon name="calendar-plus" size={28} />
+      <p style={{ fontSize: 14, margin: "10px 0 0 0", color: "var(--color-text-secondary)" }}>
+        A new term starts with an empty schedule.
       </p>
+      <p style={{ fontSize: 13, margin: "8px auto 0", maxWidth: 460, lineHeight: 1.5 }}>
+        {hadSchedule
+          ? "Finishing clears last term's schedule. "
+          : ""}
+        Build the new weekly schedule on the Schedule tab afterward — add time slots and drop students
+        into each day.
+      </p>
+    </div>
+  );
+}
+
+function GoalsStep({
+  students,
+  goals,
+  teachers,
+}: {
+  students: Student[];
+  goals: Goal[];
+  teachers: Teacher[];
+}) {
+  const activeGoals = goals.filter((g) => !g.archived);
+  const withGoals = new Set(activeGoals.map((g) => g.studentId));
+  const without = students.filter((s) => !withGoals.has(s.id));
+  const teacherName = (id: string) => teachers.find((t) => t.id === id)?.name || "—";
+  const stat = (label: string, value: number, warn = false): JSX.Element => (
+    <div style={{ background: "var(--color-background-secondary)", borderRadius: "var(--border-radius-md)", padding: "1rem" }}>
+      <p style={{ margin: 0, fontSize: 13, color: "var(--color-text-secondary)" }}>{label}</p>
+      <p style={{ margin: "4px 0 0 0", fontSize: 24, fontWeight: 500, color: warn ? "var(--color-text-warning)" : undefined }}>
+        {value}
+      </p>
+    </div>
+  );
+  return (
+    <div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: "1.25rem" }}>
+        {stat("With goals", students.length - without.length)}
+        {stat("Without goals", without.length, without.length > 0)}
+        {stat("Total short-term goals", activeGoals.length)}
+      </div>
+      {without.length === 0 ? (
+        <p style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>
+          Everyone has goals. You're ready to finish.
+        </p>
+      ) : (
+        <div style={{ border: "0.5px solid var(--color-border-tertiary)", borderRadius: "var(--border-radius-md)", overflow: "hidden" }}>
+          <div style={{ padding: "10px 14px", background: "var(--color-background-secondary)", fontSize: 12, fontWeight: 500, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+            Students without goals · {without.length}
+          </div>
+          {without.map((s) => (
+            <div key={s.id} style={{ padding: "10px 14px", borderTop: "0.5px solid var(--color-border-tertiary)", fontSize: 14 }}>
+              {fullName(s) || "(unnamed)"}{" "}
+              <span style={{ color: "var(--color-text-tertiary)", fontSize: 12 }}>· {teacherName(s.teacherId)}</span>
+            </div>
+          ))}
+          <p style={{ margin: 0, padding: "10px 14px", borderTop: "0.5px solid var(--color-border-tertiary)", fontSize: 12, color: "var(--color-text-tertiary)" }}>
+            Add goals from each student's Goals page after finishing.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
