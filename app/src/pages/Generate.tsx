@@ -2095,7 +2095,7 @@ function buildContext(
     const roleData = buildRoleData(role, st.filming);
     const selectedShortNames = goals
       .filter((g) => st.filmingGoalIds.includes(g.id))
-      .map((g) => g.shortName);
+      .map((g) => g.shortTermGoal.trim() || g.shortName);
     return filmingContext({
       // Narrative uses first name only for natural clinical prose; the all-notes
       // block separately uses displayName for the colon-label disambiguation.
@@ -2113,9 +2113,17 @@ function buildContext(
   // form stores IDs so session metadata can persist them and shortname renames
   // don't break selections.
   const goalById = new Map(goals.map((g) => [g.id, g] as const));
+  // The generator receives the full short-term goal sentence so it works from the
+  // real clinical target, not a terse shortname it has to expand. Legacy goals
+  // (entered before full text was stored) fall back to the shortname.
   const resolvedInputs = st.regular.map((input) => ({
     ...input,
-    goals: input.goals.map((id) => goalById.get(id)?.shortName ?? "").filter(Boolean),
+    goals: input.goals
+      .map((id) => {
+        const g = goalById.get(id);
+        return g ? g.shortTermGoal.trim() || g.shortName : "";
+      })
+      .filter(Boolean),
   }));
   // Resolve each selected activityId → its catalog entry, then build the
   // description: catalog descriptionTemplate (e.g. journal) or a session-capture

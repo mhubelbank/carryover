@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Icon } from "../components/Icon";
 import { Nav, type NavPage } from "../components/Nav";
 import { SaveBar } from "../components/SaveBar";
+import { confirmNavAway } from "../hooks/useUnsavedGuard";
 import { useTerm } from "../context/TermContext";
 import { loadIepHistory } from "../domain/data";
 import { formatShort, parseDate, startOfDay } from "../domain/dates";
@@ -43,6 +44,11 @@ type View =
 export function Students({ onNavigate, target, onTargetConsumed }: Props) {
   const { state } = useTerm();
   const [view, setView] = useState<View>({ kind: "list" });
+  // Switch sub-views, but prompt first if an editor has unsaved changes (the
+  // back arrow / detail↔goals↔review jumps don't go through App's nav guard).
+  const go = (v: View) => {
+    if (confirmNavAway()) setView(v);
+  };
   useEffect(() => {
     if (target) {
       setView(
@@ -64,7 +70,7 @@ export function Students({ onNavigate, target, onTargetConsumed }: Props) {
         key="new"
         student={view.student}
         isNew
-        onBack={() => setView({ kind: "list" })}
+        onBack={() => go({ kind: "list" })}
         onViewGoals={() => {}}
         onReviewIep={() => {}}
         onNavigate={onNavigate}
@@ -79,9 +85,9 @@ export function Students({ onNavigate, target, onTargetConsumed }: Props) {
           key={student.id}
           student={student}
           isNew={false}
-          onBack={() => setView({ kind: "list" })}
-          onViewGoals={() => setView({ kind: "goals", id: student.id })}
-          onReviewIep={() => setView({ kind: "iep-review", id: student.id })}
+          onBack={() => go({ kind: "list" })}
+          onViewGoals={() => go({ kind: "goals", id: student.id })}
+          onReviewIep={() => go({ kind: "iep-review", id: student.id })}
           onNavigate={onNavigate}
         />
       );
@@ -91,7 +97,7 @@ export function Students({ onNavigate, target, onTargetConsumed }: Props) {
     return (
       <StudentGoals
         studentId={view.id}
-        onBack={() => setView({ kind: "detail", id: view.id })}
+        onBack={() => go({ kind: "detail", id: view.id })}
         onNavigate={onNavigate}
       />
     );
@@ -100,7 +106,7 @@ export function Students({ onNavigate, target, onTargetConsumed }: Props) {
     return (
       <IepReviewScreen
         studentId={view.id}
-        onBack={() => setView({ kind: "detail", id: view.id })}
+        onBack={() => go({ kind: "detail", id: view.id })}
         onNavigate={onNavigate}
       />
     );
@@ -108,8 +114,8 @@ export function Students({ onNavigate, target, onTargetConsumed }: Props) {
   return (
     <StudentsList
       onNavigate={onNavigate}
-      onOpen={(id) => setView({ kind: "detail", id })}
-      onAdd={() => setView({ kind: "create", student: blankStudent() })}
+      onOpen={(id) => go({ kind: "detail", id })}
+      onAdd={() => go({ kind: "create", student: blankStudent() })}
     />
   );
 }

@@ -204,7 +204,7 @@ export function IepReview({
         </p>
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <button className="button button--small" onClick={() => void handleNothingChanged()} disabled={saving}>
-            <Icon name="check" size={14} /> Nothing changed — confirm and unblock
+            <Icon name="check" size={14} /> Nothing changed — confirm goals
           </button>
           <span style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>
             or update the goals below

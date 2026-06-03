@@ -54,6 +54,8 @@ function GoalsView({
   onNavigate: (page: NavPage) => void;
 }) {
   const { state, teacherById, studentById, client, saveGoals } = useTerm();
+  const { keys } = useAuth();
+  const apiKey = keys?.anthropicApiKey ?? "";
   const ownGoals = () =>
     (state.status === "ready" ? state.data.goals.filter((g) => g.studentId === studentId) : []).map(
       cloneGoal,
@@ -63,6 +65,7 @@ function GoalsView({
   const [showArchived, setShowArchived] = useState(false);
   const [usage, setUsage] = useState<Map<string, number> | null>(null);
   const [saving, setSaving] = useState(false);
+  const [suggesting, setSuggesting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -100,9 +103,40 @@ function GoalsView({
 
   const setShortName = (id: string, v: string) =>
     setDraft((d) => d.map((g) => (g.id === id ? { ...g, shortName: v } : g)));
+  const setShortTermGoal = (id: string, v: string) =>
+    setDraft((d) => d.map((g) => (g.id === id ? { ...g, shortTermGoal: v } : g)));
   const toggleArchived = (id: string) =>
     setDraft((d) => d.map((g) => (g.id === id ? { ...g, archived: !g.archived } : g)));
   const removeGoal = (id: string) => setDraft((d) => d.filter((g) => g.id !== id));
+
+  // Re-suggest shortnames for every active goal — one Claude call per long-term
+  // group, fed the full short-term text (falling back to the current shortname
+  // for legacy goals). Updates the draft; she reviews and saves via the SaveBar.
+  async function reSuggestAll() {
+    if (!apiKey) {
+      setError("No Anthropic API key set — add one in Settings.");
+      return;
+    }
+    setSuggesting(true);
+    setError(null);
+    try {
+      const groups = groupByLongTerm(draft.filter((g) => !g.archived));
+      const updates = new Map<string, string>();
+      for (const group of groups) {
+        const names = await suggestShortnames(apiKey, {
+          longTermGoal: group.longTermGoal,
+          shortTerms: group.goals.map((g) => g.shortTermGoal.trim() || g.shortName),
+          current: group.goals.map((g) => g.shortName),
+        });
+        group.goals.forEach((g, i) => updates.set(g.id, names[i] ?? g.shortName));
+      }
+      setDraft((d) => d.map((g) => (updates.has(g.id) ? { ...g, shortName: updates.get(g.id)! } : g)));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't re-suggest shortnames.");
+    } finally {
+      setSuggesting(false);
+    }
+  }
 
   async function handleSave() {
     // A shortname is the goal's checkbox label in Generate; a long-term goal is
@@ -163,10 +197,23 @@ function GoalsView({
             {teacher ? ` · ${teacher.name}` : ""}
           </p>
         </div>
-        <button className="button button--small" onClick={() => onAdd("")}>
-          <Icon name="plus" size={14} />
-          Add goals
-        </button>
+        <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+          {activeCount > 0 && (
+            <button
+              className="button button--small button--primary"
+              onClick={() => void reSuggestAll()}
+              disabled={suggesting}
+              title="Re-suggest a shortname for every goal from its full text"
+            >
+              <Icon name="sparkles" size={14} />
+              {suggesting ? "Suggesting…" : "Re-suggest shortnames"}
+            </button>
+          )}
+          <button className="button button--small" onClick={() => onAdd("")}>
+            <Icon name="plus" size={14} />
+            Add goals
+          </button>
+        </div>
       </div>
 
       {groups.length === 0 && emptiedLtgs.length === 0 ? (
@@ -200,40 +247,64 @@ function GoalsView({
               </p>
               <p style={{ margin: "0 0 12px 0", fontSize: 14, lineHeight: 1.6 }}>{group.longTermGoal}</p>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {group.goals.map((goal) => (
+                {group.goals.map((goal, idx) => (
                   <div
                     key={goal.id}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                      opacity: goal.archived ? 0.55 : 1,
-                    }}
+                    style={{ display: "flex", alignItems: "flex-start", gap: 8, opacity: goal.archived ? 0.55 : 1 }}
                   >
-                    <input
-                      className="input"
-                      style={{ flex: 1, height: 32 }}
-                      value={goal.shortName}
-                      onChange={(e) => setShortName(goal.id, e.target.value)}
-                    />
-                    <span style={{ flexShrink: 0 }}>
-                      <UsageLabel usage={usage} goal={goal} />
-                    </span>
-                    <button
-                      className="button button--ghost button--small"
-                      style={{ flexShrink: 0 }}
-                      onClick={() => toggleArchived(goal.id)}
+                    <div
+                      style={{
+                        flexShrink: 0,
+                        width: 24,
+                        height: 32,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        background: "var(--color-background-pill)",
+                        color: "var(--color-text-secondary)",
+                        borderRadius: "var(--border-radius-md)",
+                        fontSize: 12,
+                        fontWeight: 500,
+                      }}
                     >
-                      {goal.archived ? "Unarchive" : "Archive"}
-                    </button>
-                    <button
-                      className="button button--ghost button--small"
-                      style={{ flexShrink: 0, padding: 6, color: "var(--color-text-tertiary)" }}
-                      title="Remove goal"
-                      onClick={() => removeGoal(goal.id)}
-                    >
-                      <Icon name="x" size={14} />
-                    </button>
+                      {idx + 1}
+                    </div>
+                    <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <input
+                          className="input"
+                          style={{ flex: 1, height: 32 }}
+                          value={goal.shortName}
+                          onChange={(e) => setShortName(goal.id, e.target.value)}
+                        />
+                        <span style={{ flexShrink: 0 }}>
+                          <UsageLabel usage={usage} goal={goal} />
+                        </span>
+                        <button
+                          className="button button--ghost button--small"
+                          style={{ flexShrink: 0 }}
+                          onClick={() => toggleArchived(goal.id)}
+                        >
+                          {goal.archived ? "Unarchive" : "Archive"}
+                        </button>
+                        <button
+                          className="button button--ghost button--small"
+                          style={{ flexShrink: 0, padding: 6, color: "var(--color-text-tertiary)" }}
+                          title="Remove goal"
+                          onClick={() => removeGoal(goal.id)}
+                        >
+                          <Icon name="x" size={14} />
+                        </button>
+                      </div>
+                      <textarea
+                        className="textarea"
+                        rows={2}
+                        placeholder="Full short-term goal — sent to the note generator (falls back to the shortname if left blank)"
+                        value={goal.shortTermGoal}
+                        onChange={(e) => setShortTermGoal(goal.id, e.target.value)}
+                        style={{ fontSize: 12, color: "var(--color-text-secondary)" }}
+                      />
+                    </div>
                   </div>
                 ))}
               </div>
@@ -436,6 +507,7 @@ export function AddGoals({
       id: `g_${crypto.randomUUID()}`,
       studentId,
       longTermGoal: it.ltg.trim(),
+      shortTermGoal: it.stText.trim(),
       shortName: it.shortName.trim(),
       archived: false,
     }));
@@ -853,7 +925,9 @@ function groupReview(items: ReviewItem[]): { ltg: string; items: ReviewItem[] }[
 function splitLines(text: string): string[] {
   return text
     .split("\n")
-    .map((l) => l.trim())
+    // Drop a leading list number from pasted goals ("1. Given a…" → "Given a…");
+    // the goal's position is shown separately as a number badge.
+    .map((l) => l.trim().replace(/^\d+[.)]\s+/, ""))
     .filter((l) => l.length > 0);
 }
 

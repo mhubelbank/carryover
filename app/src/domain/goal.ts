@@ -2,6 +2,10 @@ export interface Goal {
   id: string;
   studentId: string;
   longTermGoal: string;
+  // Full short-term goal sentence — fed to the note generator. Empty for goals
+  // entered before this was tracked; callers fall back to `shortName`.
+  shortTermGoal: string;
+  // Terse label (e.g. "WH questions") shown as the goal's checkbox in Generate.
   shortName: string;
   archived: boolean;
 }
