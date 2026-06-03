@@ -33,9 +33,10 @@ const emptyBoxStyle: CSSProperties = {
 };
 
 export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate, onStartNewTerm }: Props) {
-  const { state, client, teacherById, studentById, saveStudents, saveTerm } = useTerm();
+  const { state, client, teacherById, studentById, saveStudents, saveTerm, autoArchiveNotice, undoFinishTerm, dismissAutoArchiveNotice } = useTerm();
   const [selected, setSelected] = useState<Date>(() => toWeekday(startOfDay(new Date())));
   const [busy, setBusy] = useState(false);
+  const [undoingArchive, setUndoingArchive] = useState(false);
   // The deviation file for the selected date's week, if one exists; otherwise we
   // fall back to the usual template. Keyed by the week's Monday so it only
   // reloads when the date crosses into a different week.
@@ -203,6 +204,36 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate, on
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: "1.25rem" }}>
+        {autoArchiveNotice && (
+          <Banner
+            variant="info"
+            icon="check"
+            action={
+              <div style={{ display: "flex", gap: 6 }}>
+                <button
+                  className="button button--small"
+                  disabled={undoingArchive}
+                  onClick={() => {
+                    setUndoingArchive(true);
+                    void undoFinishTerm().finally(() => setUndoingArchive(false));
+                  }}
+                >
+                  {undoingArchive ? "Undoing…" : "Undo"}
+                </button>
+                <button
+                  className="button button--small"
+                  disabled={undoingArchive}
+                  onClick={dismissAutoArchiveNotice}
+                >
+                  Dismiss
+                </button>
+              </div>
+            }
+          >
+            Archived <strong>{autoArchiveNotice.label}</strong> to your term history — its caseload is
+            saved. Start a new term whenever you're ready.
+          </Banner>
+        )}
         {termOver && (
           <Banner
             variant="warning"

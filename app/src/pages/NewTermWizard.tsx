@@ -2,8 +2,8 @@ import { useState, type CSSProperties } from "react";
 import { Icon } from "../components/Icon";
 import { Nav, type NavPage } from "../components/Nav";
 import { useTerm } from "../context/TermContext";
-import { appendTermToHistory } from "../domain/data";
-import { termLabel, type TermType } from "../domain/term";
+import { startOfDay, toISODate } from "../domain/dates";
+import { buildTermSnapshot, termLabel, type ArchivedTerm, type TermType } from "../domain/term";
 import { teacherColor, type ColorKey, type Teacher } from "../domain/teacher";
 import { ageFlag, computedAge, fullName, type Student } from "../domain/student";
 import type { Goal } from "../domain/goal";
@@ -82,7 +82,8 @@ function blankStudent(): Student {
 // (Year) creates the term, step 2 reviews the teacher roster; steps 3–5 (students,
 // schedule, goals) are built out incrementally — placeholders for now.
 export function NewTermWizard({ onNavigate, onClose }: Props) {
-  const { state, client, saveTerm, saveTeachers, saveStudents, saveSchedule, reload } = useTerm();
+  const { state, saveTerm, saveTeachers, saveStudents, saveSchedule, reload, archiveTermToHistory } =
+    useTerm();
   const ready = state.status === "ready" ? state.data : null;
   const [step, setStep] = useState(1);
   const [termType, setTermType] = useState<TermType>("school-year");
@@ -115,8 +116,26 @@ export function NewTermWizard({ onNavigate, onClose }: Props) {
     setSaving(true);
     setError(null);
     try {
-      // Keep a record of the outgoing term before term.json is overwritten.
-      if (ready && client) await appendTermToHistory(client, ready.term);
+      // Archive the outgoing term before term.json is overwritten. Snapshot its
+      // end-of-term caseload from the loaded (pre-rollforward) data — unless it
+      // was already finished, in which case the upsert preserves that snapshot.
+      if (ready) {
+        const today = toISODate(startOfDay(new Date()));
+        const outgoing: ArchivedTerm = ready.term.finishedOn
+          ? ready.term
+          : {
+              ...ready.term,
+              finishedOn: today,
+              snapshot: buildTermSnapshot(
+                ready.term,
+                ready.students,
+                ready.teachers,
+                ready.goals,
+                today,
+              ),
+            };
+        await archiveTermToHistory(outgoing);
+      }
       await saveTerm({ termType, firstDay, lastDay, label: termLabel(termType, firstDay, lastDay) });
       // Persist the reviewed roster only if it changed (drop blank-name rows).
       const cleanedTeachers = teachers.map((t) => ({ ...t, name: t.name.trim() })).filter((t) => t.name);
