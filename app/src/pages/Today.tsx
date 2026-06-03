@@ -137,10 +137,10 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate, on
   }
 
   const lastDay = parseDate(term.lastDay);
-  // Banner appears on the term's last day and stays until she sets up the next
-  // term. She rarely has the next term's schedule before the new term starts,
-  // so notifying earlier just creates dismissal fatigue.
-  const daysToEnd = lastDay ? daysBetween(now, lastDay) : null;
+  // Relative to the previewed day: the banner shows on every day from the term's
+  // last day onward (and not while you're viewing days still inside the term),
+  // matching how the IEP "tomorrow" notice keys off the day you're looking at.
+  const daysToEnd = lastDay ? daysBetween(selected, lastDay) : null;
   const termOver = daysToEnd != null && daysToEnd <= 0;
 
   async function saveIepDate(studentId: string, nextIepReview: string | null) {
