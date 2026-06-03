@@ -1,4 +1,4 @@
-export type Mode = "regular" | "filming-day";
+export type Mode = "regular" | "news-day";
 
 export type ColorKey =
   | "purple"
@@ -71,8 +71,8 @@ export interface Activity {
   };
 }
 
-// A shared-catalog filming-day role (data/filming-roles.json), referenced by
-// teachers via `filmingRoleIds`. The news-show roles (Anchor, Reporter, …) are a
+// A shared-catalog news-day role (data/news-roles.json), referenced by
+// teachers via `newsRoleIds`. The news-show roles (Anchor, Reporter, …) are a
 // shared vocabulary; each teacher uses a subset.
 export interface Role {
   id: string;
@@ -133,8 +133,8 @@ export interface Teacher {
   modes: Mode[];
   // Ids into the shared activity catalog (data/activities.json).
   activityIds: string[];
-  // Ids into the shared filming-role catalog (data/filming-roles.json).
-  filmingRoleIds: string[];
+  // Ids into the shared news-role catalog (data/news-roles.json).
+  newsRoleIds: string[];
   sessionCaptures: SessionCapture[];
   // Archived teachers stay in the file (their students' history still
   // references their id) but are hidden from active workflows: caseload

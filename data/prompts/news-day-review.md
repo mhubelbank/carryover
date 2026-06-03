@@ -1,4 +1,4 @@
-Review this filming-day SLP session note for problems with structure and language.
+Review this news-day SLP session note for problems with structure and language.
 
 Note:
 {{draftNote}}

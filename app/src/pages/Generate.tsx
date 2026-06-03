@@ -30,7 +30,7 @@ import {
 } from "../domain/schedule";
 import {
   DOMAINS,
-  FILMING_PROMPT_LEVELS,
+  NEWS_PROMPT_LEVELS,
   PRAGMATIC_QUALITY_LEVELS,
   PROMPTING_LEVELS,
   PROMPTING_TYPES,
@@ -40,12 +40,12 @@ import {
   absentNote,
   buildRegularActivities,
   buildRoleData,
-  filmingContext,
+  newsContext,
   regularContext,
   resolveRolePhrase,
   type ActivityDef,
   type ActivityInput,
-  type FilmingFieldValues,
+  type NewsFieldValues,
   type PragmaticSkillKey,
   type PragmaticSkillValue,
 } from "../domain/generate";
@@ -99,10 +99,10 @@ interface StudentState {
   absent: boolean;
   // Regular: per-activity inputs aligned to `activities` indices.
   regular: ActivityInput[];
-  // Filming:
+  // News:
   roleId: string;
-  filming: FilmingFieldValues;
-  filmingGoalIds: string[];
+  news: NewsFieldValues;
+  newsGoalIds: string[];
   // Per-teacher session-capture form state, keyed first by capture name then
   // by field name. Drives the dynamic capture-form rendering and feeds
   // additionalContext / activity-rewrite in buildContext. Multiselect fields
@@ -154,7 +154,9 @@ interface FormDraft {
   studentState: Record<string, StudentState>;
   sessionSig: string;
 }
-const FORM_DRAFT_KEY = "generate_form_draft";
+// v2: bumped after the filming→news rename so pre-rename drafts (old `filming`
+// shape) are ignored rather than restored into the News card.
+const FORM_DRAFT_KEY = "generate_form_draft_v2";
 function loadFormDraft(): FormDraft | null {
   try {
     const s = storage.get(FORM_DRAFT_KEY);
@@ -170,7 +172,7 @@ function clearFormDraft(): void {
   storage.remove(FORM_DRAFT_KEY);
 }
 
-function blankFilming(): FilmingFieldValues {
+function blankNews(): NewsFieldValues {
   return {
     pragmatic: {
       maintainedAttention: { enabled: false, qualityLevel: "", promptLevel: "" },
@@ -379,12 +381,14 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
         const old = prev[s.id];
         const regular = activities.map((_, i) => old?.regular[i] ?? blankRegularInput());
         if (old && !sessionChanged) {
-          next[s.id] = { ...old, regular };
+          // Normalize possibly-stale shapes (e.g. a restored pre-rename draft that
+          // still has `filming`/`filmingGoalIds`) so the News card never reads undefined.
+          next[s.id] = { ...old, news: old.news ?? blankNews(), newsGoalIds: old.newsGoalIds ?? [], regular };
         } else {
           next[s.id] = {
             roleId: old?.roleId ?? "",
-            filming: old?.filming ?? blankFilming(),
-            filmingGoalIds: old?.filmingGoalIds ?? [],
+            news: old?.news ?? blankNews(),
+            newsGoalIds: old?.newsGoalIds ?? [],
             captures: old?.captures ?? {},
             absent: old?.absent ?? false,
             included: inSession.has(s.id),
@@ -409,11 +413,11 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
   if (state.status !== "ready") return null;
   const { students, goals } = state.data;
   const catalog = state.data.activities;
-  const roleCatalog = state.data.filmingRoles;
+  const roleCatalog = state.data.newsRoles;
   // The activities offered in the dropdown: this teacher's catalog activities
   // plus the reserved ad-hoc "Other".
   const activityOptions = teacher ? activityOptionsForGenerate(teacher, catalog) : [];
-  // The teacher's filming roles, resolved from the shared catalog.
+  // The teacher's news roles, resolved from the shared catalog.
   const roleOptions = teacher ? resolveRoles(teacher, roleCatalog) : [];
 
   function setStudent(id: string, patch: Partial<StudentState>) {
@@ -429,8 +433,8 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
     for (const s of caseload) {
       fresh[s.id] = {
         roleId: "",
-        filming: blankFilming(),
-        filmingGoalIds: [],
+        news: blankNews(),
+        newsGoalIds: [],
         captures: {},
         absent: false,
         included: inSession.has(s.id),
@@ -472,10 +476,10 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
     });
   }
 
-  function setFilming(id: string, patch: Partial<FilmingFieldValues>) {
+  function setNews(id: string, patch: Partial<NewsFieldValues>) {
     setStudentState((prev) => {
       const cur = prev[id]!;
-      return { ...prev, [id]: { ...cur, filming: { ...cur.filming, ...patch } } };
+      return { ...prev, [id]: { ...cur, news: { ...cur.news, ...patch } } };
     });
   }
 
@@ -502,14 +506,14 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
   function setPragmatic(id: string, key: PragmaticSkillKey, patch: Partial<PragmaticSkillValue>) {
     setStudentState((prev) => {
       const cur = prev[id]!;
-      const prag = cur.filming.pragmatic ?? {};
+      const prag = cur.news.pragmatic ?? {};
       const skill = prag[key] ?? { enabled: false, qualityLevel: "", promptLevel: "" };
       return {
         ...prev,
         [id]: {
           ...cur,
-          filming: {
-            ...cur.filming,
+          news: {
+            ...cur.news,
             pragmatic: { ...prag, [key]: { ...skill, ...patch } },
           },
         },
@@ -563,7 +567,7 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
     if (!teacher || !client || !keys?.anthropicApiKey) return;
     // Date and at least one activity are required (matching SESIS) — raise a
     // clear error rather than generating a dateless or activity-less note. The
-    // activity requirement is regular-mode only; filming day uses roles instead.
+    // activity requirement is regular-mode only; news day uses roles instead.
     if (!date) {
       setError("Pick a session date.");
       return;
@@ -860,7 +864,7 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
             >
               {teacher?.modes.map((m) => (
                 <option key={m} value={m}>
-                  {m === "regular" ? "Regular" : "Filming day"}
+                  {m === "regular" ? "Regular" : "News day"}
                 </option>
               ))}
             </select>
@@ -984,15 +988,15 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
                 />
               )}
 
-              {st.included && !st.absent && mode === "filming-day" && (
-                <FilmingStudentCard
+              {st.included && !st.absent && mode === "news-day" && (
+                <NewsStudentCard
                   roles={roleOptions}
                   state={st}
                   studentGoals={studentGoals}
                   onRoleChange={(roleId) => setStudent(student.id, { roleId })}
-                  onFilmingChange={(patch) => setFilming(student.id, patch)}
+                  onNewsChange={(patch) => setNews(student.id, patch)}
                   onPragmaticChange={(key, patch) => setPragmatic(student.id, key, patch)}
-                  onGoalsChange={(ids) => setStudent(student.id, { filmingGoalIds: ids })}
+                  onGoalsChange={(ids) => setStudent(student.id, { newsGoalIds: ids })}
                 />
               )}
             </div>
@@ -1482,12 +1486,12 @@ function RegularStudentCard({
   );
 }
 
-function FilmingStudentCard({
+function NewsStudentCard({
   roles,
   state: st,
   studentGoals,
   onRoleChange,
-  onFilmingChange,
+  onNewsChange,
   onPragmaticChange,
   onGoalsChange,
 }: {
@@ -1495,7 +1499,7 @@ function FilmingStudentCard({
   state: StudentState;
   studentGoals: Goal[];
   onRoleChange: (roleId: string) => void;
-  onFilmingChange: (patch: Partial<FilmingFieldValues>) => void;
+  onNewsChange: (patch: Partial<NewsFieldValues>) => void;
   onPragmaticChange: (key: PragmaticSkillKey, patch: Partial<PragmaticSkillValue>) => void;
   onGoalsChange: (ids: string[]) => void;
 }) {
@@ -1523,8 +1527,8 @@ function FilmingStudentCard({
             <label className="label">Role description</label>
             <input
               className="input"
-              value={st.filming.otherRoleDescription ?? ""}
-              onChange={(e) => onFilmingChange({ otherRoleDescription: e.target.value })}
+              value={st.news.otherRoleDescription ?? ""}
+              onChange={(e) => onNewsChange({ otherRoleDescription: e.target.value })}
             />
           </div>
         )}
@@ -1537,28 +1541,28 @@ function FilmingStudentCard({
             <input
               className="input"
               type="number"
-              value={st.filming.cuesPercentage ?? ""}
-              onChange={(e) => onFilmingChange({ cuesPercentage: e.target.value })}
+              value={st.news.cuesPercentage ?? ""}
+              onChange={(e) => onNewsChange({ cuesPercentage: e.target.value })}
             />
           </div>
           <div>
             <label className="label">Cue target</label>
             <input
               className="input"
-              value={st.filming.cuesTarget ?? ""}
+              value={st.news.cuesTarget ?? ""}
               placeholder="e.g. pacing, or 'other'"
-              onChange={(e) => onFilmingChange({ cuesTarget: e.target.value })}
+              onChange={(e) => onNewsChange({ cuesTarget: e.target.value })}
             />
           </div>
           <div>
             <label className="label">Prompting</label>
             <select
               className="select"
-              value={st.filming.cuesPrompting ?? ""}
-              onChange={(e) => onFilmingChange({ cuesPrompting: e.target.value })}
+              value={st.news.cuesPrompting ?? ""}
+              onChange={(e) => onNewsChange({ cuesPrompting: e.target.value })}
             >
               <option value="">—</option>
-              {FILMING_PROMPT_LEVELS.map((v) => (
+              {NEWS_PROMPT_LEVELS.map((v) => (
                 <option key={v} value={v}>
                   {v}
                 </option>
@@ -1575,19 +1579,19 @@ function FilmingStudentCard({
             <input
               className="input"
               type="number"
-              value={st.filming.facialPercentage ?? ""}
-              onChange={(e) => onFilmingChange({ facialPercentage: e.target.value })}
+              value={st.news.facialPercentage ?? ""}
+              onChange={(e) => onNewsChange({ facialPercentage: e.target.value })}
             />
           </div>
           <div>
             <label className="label">Prompting</label>
             <select
               className="select"
-              value={st.filming.facialPrompting ?? ""}
-              onChange={(e) => onFilmingChange({ facialPrompting: e.target.value })}
+              value={st.news.facialPrompting ?? ""}
+              onChange={(e) => onNewsChange({ facialPrompting: e.target.value })}
             >
               <option value="">—</option>
-              {FILMING_PROMPT_LEVELS.map((v) => (
+              {NEWS_PROMPT_LEVELS.map((v) => (
                 <option key={v} value={v}>
                   {v}
                 </option>
@@ -1603,8 +1607,8 @@ function FilmingStudentCard({
           <input
             className="input"
             type="number"
-            value={st.filming.decodingPercentage ?? ""}
-            onChange={(e) => onFilmingChange({ decodingPercentage: e.target.value })}
+            value={st.news.decodingPercentage ?? ""}
+            onChange={(e) => onNewsChange({ decodingPercentage: e.target.value })}
           />
         </div>
       )}
@@ -1614,7 +1618,7 @@ function FilmingStudentCard({
           <label className="label">Pragmatic skills (Studio Audience)</label>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {(Object.keys(STUDIO_AUDIENCE_SKILLS) as PragmaticSkillKey[]).map((key) => {
-              const skill = st.filming.pragmatic?.[key] ?? {
+              const skill = st.news.pragmatic?.[key] ?? {
                 enabled: false,
                 qualityLevel: "",
                 promptLevel: "",
@@ -1650,7 +1654,7 @@ function FilmingStudentCard({
                     onChange={(e) => onPragmaticChange(key, { promptLevel: e.target.value })}
                   >
                     <option value="">— Prompting —</option>
-                    {FILMING_PROMPT_LEVELS.map((v) => (
+                    {NEWS_PROMPT_LEVELS.map((v) => (
                       <option key={v} value={v}>
                         {v}
                       </option>
@@ -1668,19 +1672,19 @@ function FilmingStudentCard({
           <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
             <input
               type="checkbox"
-              checked={!!st.filming.gaveCompliments}
-              onChange={(e) => onFilmingChange({ gaveCompliments: e.target.checked })}
+              checked={!!st.news.gaveCompliments}
+              onChange={(e) => onNewsChange({ gaveCompliments: e.target.checked })}
             />
             Gave compliments
           </label>
           <select
             className="select"
-            value={st.filming.complimentsPrompting ?? ""}
-            disabled={!st.filming.gaveCompliments}
-            onChange={(e) => onFilmingChange({ complimentsPrompting: e.target.value })}
+            value={st.news.complimentsPrompting ?? ""}
+            disabled={!st.news.gaveCompliments}
+            onChange={(e) => onNewsChange({ complimentsPrompting: e.target.value })}
           >
             <option value="">— Prompting —</option>
-            {FILMING_PROMPT_LEVELS.map((v) => (
+            {NEWS_PROMPT_LEVELS.map((v) => (
               <option key={v} value={v}>
                 {v}
               </option>
@@ -1693,8 +1697,8 @@ function FilmingStudentCard({
         <label className="label">Rehearsal → broadcast</label>
         <input
           className="input"
-          value={st.filming.rehearsalToBroadcast ?? ""}
-          onChange={(e) => onFilmingChange({ rehearsalToBroadcast: e.target.value })}
+          value={st.news.rehearsalToBroadcast ?? ""}
+          onChange={(e) => onNewsChange({ rehearsalToBroadcast: e.target.value })}
         />
       </div>
 
@@ -1702,15 +1706,15 @@ function FilmingStudentCard({
         <label className="label">Additional notes</label>
         <input
           className="input"
-          value={st.filming.additionalNotes ?? ""}
-          onChange={(e) => onFilmingChange({ additionalNotes: e.target.value })}
+          value={st.news.additionalNotes ?? ""}
+          onChange={(e) => onNewsChange({ additionalNotes: e.target.value })}
         />
       </div>
 
       <CheckGroup
         label="Goals"
         options={studentGoals.map((g) => ({ value: g.id, label: g.shortName }))}
-        selected={st.filmingGoalIds}
+        selected={st.newsGoalIds}
         onChange={onGoalsChange}
       />
     </div>
@@ -2258,13 +2262,13 @@ function buildContext(
   roleCatalog: Role[],
 ) {
   const pronoun = student.pronouns.split("/")[0]?.trim() || student.pronouns;
-  if (mode === "filming-day") {
+  if (mode === "news-day") {
     const role = resolveRoles(teacher, roleCatalog).find((r) => r.id === st.roleId);
     if (!role) throw new Error(`Pick a role for ${fullName(student)}`);
-    const phrase = resolveRolePhrase(role, st.filming);
-    const roleData = buildRoleData(role, st.filming);
-    const selectedFilming = goals.filter((g) => st.filmingGoalIds.includes(g.id));
-    return filmingContext({
+    const phrase = resolveRolePhrase(role, st.news);
+    const roleData = buildRoleData(role, st.news);
+    const selectedNews = goals.filter((g) => st.newsGoalIds.includes(g.id));
+    return newsContext({
       // Narrative uses first name only for natural clinical prose; the all-notes
       // block separately uses displayName for the colon-label disambiguation.
       studentName: student.firstName,
@@ -2273,8 +2277,8 @@ function buildContext(
       role: { ...role, name: role.name },
       rolePhrase: phrase,
       // Note names the concise shortname; the full sentence is passed as context.
-      selectedGoals: selectedFilming.map((g) => g.shortName || g.shortTermGoal),
-      selectedGoalDetails: selectedFilming.map((g) => g.shortTermGoal.trim() || g.shortName),
+      selectedGoals: selectedNews.map((g) => g.shortName || g.shortTermGoal),
+      selectedGoalDetails: selectedNews.map((g) => g.shortTermGoal.trim() || g.shortName),
       roleData,
       additionalContext: buildAdditionalContext(teacher, student, st.captures),
     });
@@ -2331,8 +2335,8 @@ function buildSessionMetadata(
     students: includedStudents.map((s) => {
       const st = studentState[s.id]!;
       const goalIds =
-        mode === "filming-day"
-          ? st.filmingGoalIds.slice()
+        mode === "news-day"
+          ? st.newsGoalIds.slice()
           : Array.from(new Set(st.regular.flatMap((r) => r.goals)));
       // Persist absence so Today/Schedule can mark it; omit the key when present
       // to keep files tidy. Absent students carry no goalIds.

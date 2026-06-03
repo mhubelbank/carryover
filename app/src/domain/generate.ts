@@ -31,8 +31,8 @@ export const RESPONSE_TYPES = [
 export const DOMAINS = ["expressive", "receptive", "pragmatic"] as const;
 export type Domain = (typeof DOMAINS)[number];
 
-// Filming cue/facial prompting use the levels minus "no" / "one to one para support".
-export const FILMING_PROMPT_LEVELS = ["minimal", "moderate", "significant"] as const;
+// News cue/facial prompting use the levels minus "no" / "one to one para support".
+export const NEWS_PROMPT_LEVELS = ["minimal", "moderate", "significant"] as const;
 export const PRAGMATIC_QUALITY_LEVELS = [
   "Consistently",
   "Frequently",
@@ -135,7 +135,7 @@ export function buildRegularActivities(
 }
 
 // ---------------------------------------------------------------------------
-// Filming mode
+// News mode
 // ---------------------------------------------------------------------------
 
 export interface PragmaticSkillValue {
@@ -144,7 +144,7 @@ export interface PragmaticSkillValue {
   promptLevel: string;
 }
 
-export interface FilmingFieldValues {
+export interface NewsFieldValues {
   // visualCues
   cuesPercentage?: string;
   cuesTarget?: string;
@@ -168,7 +168,7 @@ export interface FilmingFieldValues {
 
 // The "{phrase}" after "serving as" in the opening sentence. Prefers the role's
 // configured phrase; "Other" uses the lowercased free-text description.
-export function resolveRolePhrase(role: Role, values: FilmingFieldValues): string {
+export function resolveRolePhrase(role: Role, values: NewsFieldValues): string {
   if (role.name === "Other") return (values.otherRoleDescription || "other role").toLowerCase();
   if (role.phrase && role.phrase.trim()) return role.phrase.trim();
   return ROLE_PHRASES[role.name] ?? role.name.toLowerCase();
@@ -176,8 +176,8 @@ export function resolveRolePhrase(role: Role, values: FilmingFieldValues): strin
 
 // Build the pre-formatted `roleData` string (one performance line per row),
 // driven by the role's enabled field components. Wording is verbatim from the
-// original alfredo-filming-day.tsx / lefkie-filming-day.tsx.
-export function buildRoleData(role: Role, v: FilmingFieldValues): string {
+// original alfredo-news-day.tsx / lefkie-news-day.tsx.
+export function buildRoleData(role: Role, v: NewsFieldValues): string {
   const has = (key: string) => role.fields.includes(key);
   let out = "";
 
@@ -253,7 +253,7 @@ export function regularContext(a: RegularContextArgs): TemplateContext {
   };
 }
 
-export interface FilmingContextArgs {
+export interface NewsContextArgs {
   studentName: string;
   pronouns: string;
   teacher: Teacher;
@@ -265,7 +265,7 @@ export interface FilmingContextArgs {
   additionalContext?: string;
 }
 
-export function filmingContext(a: FilmingContextArgs): TemplateContext {
+export function newsContext(a: NewsContextArgs): TemplateContext {
   return {
     student: { name: a.studentName, pronouns: a.pronouns, role: a.role.name },
     role: { phrase: a.rolePhrase },

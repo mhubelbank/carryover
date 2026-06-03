@@ -1,4 +1,4 @@
-This is the final pass on a filming-day SLP session note. The earlier passes have already enforced structure and removed invented details. Your job is to catch *redundancy* and *logic errors*. If you find none, return the note as-is.
+This is the final pass on a news-day SLP session note. The earlier passes have already enforced structure and removed invented details. Your job is to catch *redundancy* and *logic errors*. If you find none, return the note as-is.
 
 Note:
 {{reviewedNote}}

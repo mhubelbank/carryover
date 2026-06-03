@@ -43,7 +43,7 @@ All three passes use the same model and `max_tokens`. Token settings
 from her existing files:
 
 - Regular: `max_tokens: 1500`
-- Filming-day: `max_tokens: 1000`
+- News-day: `max_tokens: 1000`
 
 Keep these for parity. If she reports truncation, bump.
 
@@ -88,7 +88,7 @@ rule sets. Mixing user-promoted feedback into them risks
 overconstraining the corrective pass — the model might start "fixing"
 text that doesn't have the problem her feedback describes.
 
-Implementation: when rendering `regular-draft.md` or `filming-draft.md`,
+Implementation: when rendering `regular-draft.md` or `news-day-draft.md`,
 if `data/feedback-rules.md` exists and is non-empty, append its
 contents as an additional rules block at the end of the prompt
 (after any `teacher.draftAppend` content).
@@ -156,9 +156,9 @@ prompt text itself:
 3. **Nina — Spanish.** As described above, this is a post-streamline
    deterministic append. Not in the prompt input.
 
-## Filming-day role data formatting
+## News-day role data formatting
 
-The `roleData` string in `filming-draft.md` is pre-formatted before it
+The `roleData` string in `news-day-draft.md` is pre-formatted before it
 hits the prompt. Each role (Anchor, Studio Audience, Reporter, etc.)
 has its own data-building logic in alfredo-filming-day.tsx /
 lefkie-filming-day.tsx. The patterns to port:
@@ -181,7 +181,7 @@ Rehearsal carryover: 2 rehearsals
 ```
 
 This is what `{{roleData}}` becomes in the rendered prompt. Each line
-is one performance metric. The filming-draft prompt's rule about
+is one performance metric. The news-day-draft prompt's rule about
 "preserve the exact wording" relies on these lines being well-formed.
 
 Don't try to embed role-data formatting logic in the prompt template.
@@ -193,7 +193,7 @@ Format in TS code, pass to the prompt as a finished string.
 2. For each student in the session:
    a. If absent → push `"[Name] was absent."` and continue.
    b. Build `activitySummaries` for the student (regular) or
-      `roleData` (filming-day).
+      `roleData` (news-day).
    c. Build `additionalContext` if any teacher quirk applies.
    d. Render the appropriate `-draft.md` template; call API; clean.
    e. Render the `-review.md` template with the cleaned draft; call API;

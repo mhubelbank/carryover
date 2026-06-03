@@ -5,7 +5,7 @@ import type { Mode } from "./teacher";
 // Token ceilings ported from her existing TSX files (bump if she sees truncation).
 export const MAX_TOKENS_BY_MODE: Record<Mode, number> = {
   regular: 1500,
-  "filming-day": 1000,
+  "news-day": 1000,
 };
 
 export type Pass = "draft" | "review" | "streamline";

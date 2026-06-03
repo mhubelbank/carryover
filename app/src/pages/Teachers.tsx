@@ -23,7 +23,7 @@ interface Props {
   onOpenStudent: (studentId: string) => void;
 }
 
-const MODE_LABELS: Record<Mode, string> = { regular: "Regular", "filming-day": "Filming day" };
+const MODE_LABELS: Record<Mode, string> = { regular: "Regular", "news-day": "News day" };
 
 type View = { kind: "list" } | { kind: "detail"; id: string } | { kind: "create"; teacher: Teacher };
 
@@ -243,7 +243,7 @@ function TeacherDetail({
 
   const color = teacherColor(draft.color);
   const caseload = data.students.filter((s) => s.teacherId === draft.id);
-  const showFilming = draft.modes.includes("filming-day") || draft.filmingRoleIds.length > 0;
+  const showNews = draft.modes.includes("news-day") || draft.newsRoleIds.length > 0;
   const dirty = isNew || JSON.stringify(draft) !== JSON.stringify(baseline);
 
   const set = (patch: Partial<Teacher>) => setDraft((d) => ({ ...d, ...patch }));
@@ -263,19 +263,19 @@ function TeacherDetail({
         : d.activityIds.filter((x) => x !== id),
     }));
 
-  // Filming roles are a shared catalog (managed in the Activities tab); a teacher
+  // News roles are a shared catalog (managed in the Activities tab); a teacher
   // just selects which ones it uses.
   const toggleRole = (id: string, on: boolean) =>
     setDraft((d) => ({
       ...d,
-      filmingRoleIds: on
-        ? [...new Set([...d.filmingRoleIds, id])]
-        : d.filmingRoleIds.filter((x) => x !== id),
+      newsRoleIds: on
+        ? [...new Set([...d.newsRoleIds, id])]
+        : d.newsRoleIds.filter((x) => x !== id),
     }));
   // Catalog activities offered for selection (the reserved ad-hoc "Other" is
   // always available in Generate, so it isn't listed per-teacher).
   const selectableActivities = data.activities.filter((a) => a.id !== RESERVED_OTHER_ID);
-  const selectableRoles = data.filmingRoles;
+  const selectableRoles = data.newsRoles;
 
   async function handleSave() {
     const problem = validateTeacherName(data!.teachers, draft);
@@ -409,10 +409,10 @@ function TeacherDetail({
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
             <input
               type="checkbox"
-              checked={draft.modes.includes("filming-day")}
-              onChange={(e) => toggleMode("filming-day", e.target.checked)}
+              checked={draft.modes.includes("news-day")}
+              onChange={(e) => toggleMode("news-day", e.target.checked)}
             />
-            Filming day
+            News day
           </label>
         </div>
       </div>
@@ -453,7 +453,7 @@ function TeacherDetail({
         )}
       </div>
 
-      {showFilming && (
+      {showNews && (
         <div className="card" style={{ marginBottom: "1rem" }}>
           <div
             style={{
@@ -464,7 +464,7 @@ function TeacherDetail({
             }}
           >
             <h3 className="card__title" style={{ margin: 0 }}>
-              Filming day · roles
+              News day · roles
             </h3>
             <button className="button button--small" onClick={() => onNavigate("activities")}>
               Manage catalog
@@ -472,7 +472,7 @@ function TeacherDetail({
           </div>
           {selectableRoles.length === 0 ? (
             <p style={{ fontSize: 13, color: "var(--color-text-tertiary)" }}>
-              No filming roles in the catalog yet. Add some in the Activities tab.
+              No news roles in the catalog yet. Add some in the Activities tab.
             </p>
           ) : (
             <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 16px", fontSize: 13 }}>
@@ -480,7 +480,7 @@ function TeacherDetail({
                 <label key={r.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <input
                     type="checkbox"
-                    checked={draft.filmingRoleIds.includes(r.id)}
+                    checked={draft.newsRoleIds.includes(r.id)}
                     onChange={(e) => toggleRole(r.id, e.target.checked)}
                   />
                   {r.name}
@@ -704,7 +704,7 @@ function cloneTeacher(t: Teacher): Teacher {
     ...t,
     modes: [...t.modes],
     activityIds: [...t.activityIds],
-    filmingRoleIds: [...t.filmingRoleIds],
+    newsRoleIds: [...t.newsRoleIds],
     sessionCaptures: (t.sessionCaptures ?? []).map((c) => ({ ...c })),
   };
 }
@@ -716,7 +716,7 @@ function blankTeacher(): Teacher {
     color: "purple",
     modes: ["regular"],
     activityIds: [],
-    filmingRoleIds: [],
+    newsRoleIds: [],
     sessionCaptures: [],
     archived: false,
   };
@@ -726,7 +726,7 @@ function validateTeacherName(teachers: Teacher[], candidate: Teacher): string | 
   const name = candidate.name.trim();
   if (name === "") return "Name can't be empty.";
   if (candidate.modes.length === 0) {
-    return "Pick at least one session mode (regular or filming-day).";
+    return "Pick at least one session mode (regular or news-day).";
   }
   // Archived teachers stay in the file with their original name; the uniqueness
   // check only enforces against active teachers so she can reuse a retired

@@ -25,7 +25,7 @@ function blankTeacher(): Teacher {
     color: "purple",
     modes: ["regular"],
     activityIds: [],
-    filmingRoleIds: [],
+    newsRoleIds: [],
     sessionCaptures: [],
     archived: false,
   };
@@ -36,7 +36,7 @@ function cloneTeacher(t: Teacher): Teacher {
     ...t,
     modes: [...t.modes],
     activityIds: [...t.activityIds],
-    filmingRoleIds: [...t.filmingRoleIds],
+    newsRoleIds: [...t.newsRoleIds],
     sessionCaptures: (t.sessionCaptures ?? []).map((c) => ({ ...c })),
   };
 }
@@ -391,7 +391,7 @@ function YearStep({
 
 const TEACHER_MODES = [
   { id: "regular", label: "Regular" },
-  { id: "filming-day", label: "Filming day" },
+  { id: "news-day", label: "News day" },
 ] as const;
 
 function TeachersStep({

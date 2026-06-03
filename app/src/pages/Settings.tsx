@@ -358,7 +358,7 @@ function CatalogsSection({ onNavigate }: { onNavigate: (page: NavPage) => void }
       <h3 className="card__title">Catalogs</h3>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14 }}>
         <p style={{ flex: 1, fontSize: 13, color: "var(--color-text-secondary)" }}>
-          Activities, filming roles, and student fields — assigned to teachers and used when
+          Activities, news roles, and student fields — assigned to teachers and used when
           generating notes.
         </p>
         <button className="button button--small" onClick={() => onNavigate("activities")}>

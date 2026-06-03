@@ -17,8 +17,8 @@ export interface TermData {
   schedule: ScheduleEntry[];
   // Shared activity catalog (data/activities.json), referenced by teachers.
   activities: Activity[];
-  // Shared filming-role catalog (data/filming-roles.json).
-  filmingRoles: Role[];
+  // Shared news-role catalog (data/news-roles.json).
+  newsRoles: Role[];
   // Configurable student-field catalog (data/student-fields.json).
   studentFields: StudentField[];
 }
@@ -32,7 +32,7 @@ export interface FileShas {
   goals?: string;
   schedule?: string;
   activities?: string;
-  filmingRoles?: string;
+  newsRoles?: string;
   studentFields?: string;
 }
 
@@ -49,7 +49,7 @@ const PATHS = {
   goals: "data/goals.csv",
   schedule: "data/schedule.csv",
   activities: "data/activities.json",
-  filmingRoles: "data/filming-roles.json",
+  newsRoles: "data/news-roles.json",
   studentFields: "data/student-fields.json",
   feedbackRules: "data/feedback-rules.md",
 } as const;
@@ -98,7 +98,7 @@ export async function loadTermData(client: GitHubClient): Promise<LoadedTerm | n
     goalsFile,
     scheduleFile,
     activitiesFile,
-    filmingRolesFile,
+    newsRolesFile,
     studentFieldsFile,
   ] = await Promise.all([
     client.readFile(PATHS.teachers),
@@ -106,7 +106,7 @@ export async function loadTermData(client: GitHubClient): Promise<LoadedTerm | n
     client.readFile(PATHS.goals),
     client.readFile(PATHS.schedule),
     client.readFile(PATHS.activities),
-    client.readFile(PATHS.filmingRoles),
+    client.readFile(PATHS.newsRoles),
     client.readFile(PATHS.studentFields),
   ]);
 
@@ -127,8 +127,8 @@ export async function loadTermData(client: GitHubClient): Promise<LoadedTerm | n
       activities: activitiesFile
         ? (JSON.parse(activitiesFile.text) as unknown[]).map(toActivity)
         : [],
-      filmingRoles: filmingRolesFile
-        ? (JSON.parse(filmingRolesFile.text) as unknown[]).map(toRole)
+      newsRoles: newsRolesFile
+        ? (JSON.parse(newsRolesFile.text) as unknown[]).map(toRole)
         : [],
       studentFields,
     },
@@ -139,7 +139,7 @@ export async function loadTermData(client: GitHubClient): Promise<LoadedTerm | n
       goals: goalsFile?.sha,
       schedule: scheduleFile?.sha,
       activities: activitiesFile?.sha,
-      filmingRoles: filmingRolesFile?.sha,
+      newsRoles: newsRolesFile?.sha,
       studentFields: studentFieldsFile?.sha,
     },
   };
@@ -327,16 +327,16 @@ export function writeActivities(
   );
 }
 
-// Writes filming-roles.json (the shared catalog); returns the new blob sha.
-export function writeFilmingRoles(
+// Writes news-roles.json (the shared catalog); returns the new blob sha.
+export function writeNewsRoles(
   client: GitHubClient,
   roles: Role[],
   sha: string | undefined,
 ): Promise<string> {
   return client.writeFile(
-    PATHS.filmingRoles,
+    PATHS.newsRoles,
     `${JSON.stringify(roles, null, 2)}\n`,
-    "data: update filming roles",
+    "data: update news roles",
     sha,
   );
 }
@@ -547,10 +547,10 @@ function toTeacher(raw: unknown): Teacher {
     name: t.name ?? "",
     color: t.color ?? "blue",
     modes: t.modes ?? ["regular"],
-    // Activities and filming roles are now ids into shared catalogs. Records
+    // Activities and news roles are now ids into shared catalogs. Records
     // lacking the fields (pre-migration) load empty rather than crashing.
     activityIds: t.activityIds ?? [],
-    filmingRoleIds: t.filmingRoleIds ?? [],
+    newsRoleIds: t.newsRoleIds ?? [],
     sessionCaptures: t.sessionCaptures ?? [],
     archived: t.archived === true,
     promptOverrides: t.promptOverrides,
@@ -579,7 +579,7 @@ function toActivity(raw: unknown): Activity {
   };
 }
 
-// Normalizes a raw entry from filming-roles.json.
+// Normalizes a raw entry from news-roles.json.
 function toRole(raw: unknown): Role {
   const r = (raw ?? {}) as Partial<Role>;
   return {
