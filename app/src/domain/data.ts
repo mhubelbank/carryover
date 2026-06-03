@@ -7,7 +7,7 @@ import type { SessionMetadata } from "./session";
 import type { Student } from "./student";
 import type { StudentField } from "./studentField";
 import type { Activity, Role, Teacher } from "./teacher";
-import type { Term } from "./term";
+import type { ArchivedTerm, Term } from "./term";
 
 export interface TermData {
   term: Term;
@@ -26,6 +26,7 @@ export interface TermData {
 // Blob shas of each loaded file, needed to safely overwrite on save.
 export interface FileShas {
   term?: string;
+  termHistory?: string;
   teachers?: string;
   students?: string;
   goals?: string;
@@ -240,23 +241,60 @@ export function writeTerm(
   return client.writeFile(PATHS.term, `${JSON.stringify(term, null, 2)}\n`, "data: update term", sha);
 }
 
-// data/term-history.json — the record of past terms, appended (oldest → newest)
-// when a new term starts, so the outgoing term isn't lost when term.json is
-// overwritten. Empty/absent until the first roll-over.
-export async function loadTermHistory(client: GitHubClient): Promise<Term[]> {
+// data/term-history.json — the record of past terms (oldest → newest), so the
+// outgoing term isn't lost when term.json is overwritten. A term lands here when
+// it's finished ("Finish term", carrying a caseload snapshot) or when the next
+// term starts (carried forward without a snapshot if it wasn't finished first).
+// Empty/absent until the first roll-over.
+//
+// History is held in memory by TermContext (array + tracked blob sha) and never
+// re-read after a write — the same sha-threading every other data file uses. The
+// pure helpers below mutate the in-memory array; writeTermHistory persists it with
+// the tracked sha. (Re-reading for the sha would hit GitHub's CDN-cached contents
+// API, which can serve a stale sha right after a write and 409 the next save.)
+export async function loadTermHistory(
+  client: GitHubClient,
+): Promise<{ history: ArchivedTerm[]; sha: string | undefined }> {
   const file = await client.readFile(PATHS.termHistory);
-  return file ? (JSON.parse(file.text) as Term[]) : [];
+  return { history: file ? (JSON.parse(file.text) as ArchivedTerm[]) : [], sha: file?.sha };
 }
 
-export async function appendTermToHistory(client: GitHubClient, term: Term): Promise<void> {
-  const existing = await client.readFile(PATHS.termHistory);
-  const history: Term[] = existing ? (JSON.parse(existing.text) as Term[]) : [];
-  history.push(term);
-  await client.writeFile(
+// Two terms are the same record if they share type and date span. Lets Finish
+// (snapshot) then Start-new-term (no snapshot) coexist without duplicating.
+function sameTerm(a: Term, b: Term): boolean {
+  return a.termType === b.termType && a.firstDay === b.firstDay && a.lastDay === b.lastDay;
+}
+
+// Upsert a term into history (pure). A matching entry is merged (a new snapshot
+// wins; an existing snapshot is preserved if the incoming entry has none),
+// otherwise the term is appended. Keeps the order oldest → newest.
+export function upsertTermHistory(history: ArchivedTerm[], term: ArchivedTerm): ArchivedTerm[] {
+  let merged = false;
+  const next = history.map((t) => {
+    if (!sameTerm(t, term)) return t;
+    merged = true;
+    return { ...t, ...term, snapshot: term.snapshot ?? t.snapshot };
+  });
+  if (!merged) next.push(term);
+  return next;
+}
+
+// Remove a term from history (pure). Used to undo an archive.
+export function removeFromTermHistory(history: ArchivedTerm[], term: Term): ArchivedTerm[] {
+  return history.filter((t) => !sameTerm(t, term));
+}
+
+// Persist the history array; returns the new blob sha for the next safe overwrite.
+export function writeTermHistory(
+  client: GitHubClient,
+  history: ArchivedTerm[],
+  sha: string | undefined,
+): Promise<string> {
+  return client.writeFile(
     PATHS.termHistory,
     `${JSON.stringify(history, null, 2)}\n`,
-    "data: append term to history",
-    existing?.sha,
+    "data: update term history",
+    sha,
   );
 }
 

@@ -1,11 +1,10 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Icon } from "../components/Icon";
 import { Nav, type NavPage } from "../components/Nav";
 import { useAuth } from "../context/AuthContext";
 import { useTerm } from "../context/TermContext";
-import { loadTermHistory } from "../domain/data";
-import { formatShort, parseDate, startOfDay } from "../domain/dates";
-import { termLabel, type Term } from "../domain/term";
+import { formatShort, parseDate, startOfDay, toISODate } from "../domain/dates";
+import { termLabel, type ArchivedTerm, type StudentSnapshot } from "../domain/term";
 
 interface SettingsProps {
   onNavigate: (page: NavPage) => void;
@@ -78,28 +77,27 @@ function EditableDate({ value, onChange }: { value: string; onChange: (v: string
 }
 
 function TermSection({ onStartNewTerm }: { onStartNewTerm: () => void }) {
-  const { state, client, saveTerm } = useTerm();
-  const [history, setHistory] = useState<Term[]>([]);
+  const { state, saveTerm, finishTerm, undoFinishTerm, termHistory } = useTerm();
   const [showHistory, setShowHistory] = useState(false);
-  useEffect(() => {
-    if (!client) return;
-    let cancelled = false;
-    loadTermHistory(client)
-      .then((h) => {
-        if (!cancelled) setHistory(h);
-      })
-      .catch(() => {
-        if (!cancelled) setHistory([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [client]);
+  // null = idle, "confirm" = confirm panel open, "busy" = finishing in progress.
+  const [finishStep, setFinishStep] = useState<null | "confirm" | "busy">(null);
+  const [finishError, setFinishError] = useState<string | null>(null);
+  const [reopening, setReopening] = useState(false);
 
   const ready = state.status === "ready" ? state.data : null;
   const term = ready?.term ?? null;
   const last = term ? parseDate(term.lastDay) : null;
   const termOver = !!last && startOfDay(new Date()).getTime() >= last.getTime();
+  const finished = !!term?.finishedOn;
+  const finishedOn = term?.finishedOn ? parseDate(term.finishedOn) : null;
+  // The current term is also in history once finished — show it only once (as the
+  // current term above), so exclude it from the Past-terms list.
+  const pastTerms = term
+    ? termHistory.filter(
+        (t) =>
+          !(t.termType === term.termType && t.firstDay === term.firstDay && t.lastDay === term.lastDay),
+      )
+    : termHistory;
 
   // Inline date edits re-derive the auto-label and save immediately.
   const setDates = (patch: { firstDay?: string; lastDay?: string }) => {
@@ -107,6 +105,30 @@ function TermSection({ onStartNewTerm }: { onStartNewTerm: () => void }) {
     const firstDay = patch.firstDay ?? term.firstDay;
     const lastDay = patch.lastDay ?? term.lastDay;
     void saveTerm({ ...term, firstDay, lastDay, label: termLabel(term.termType, firstDay, lastDay) });
+  };
+
+  const doFinish = async () => {
+    setFinishStep("busy");
+    setFinishError(null);
+    try {
+      await finishTerm(toISODate(startOfDay(new Date())));
+      setShowHistory(true);
+      setFinishStep(null);
+    } catch (e) {
+      setFinishError(e instanceof Error ? e.message : "Couldn't finish the term.");
+      setFinishStep("confirm");
+    }
+  };
+
+  const doReopen = async () => {
+    setReopening(true);
+    try {
+      await undoFinishTerm();
+    } catch {
+      // Leave the term finished; the chip stays so she can retry.
+    } finally {
+      setReopening(false);
+    }
   };
 
   return (
@@ -139,15 +161,35 @@ function TermSection({ onStartNewTerm }: { onStartNewTerm: () => void }) {
               {ready.students.length} student{ready.students.length === 1 ? "" : "s"} ·{" "}
               {ready.teachers.length} teacher{ready.teachers.length === 1 ? "" : "s"}
             </span>
-            {termOver && (
+            {finished ? (
+              <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 8 }}>
+                <span
+                  style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, color: "var(--color-text-tertiary)" }}
+                  title="This term has been archived to your history."
+                >
+                  <Icon name="check" size={14} /> Finished{finishedOn ? ` ${formatShort(finishedOn)}` : ""}
+                </span>
+                <button
+                  className="button button--small"
+                  onClick={() => void doReopen()}
+                  disabled={reopening}
+                  title="Reverse the archive: clears the finished mark and removes the history entry."
+                >
+                  {reopening ? "Reopening…" : "Reopen"}
+                </button>
+              </span>
+            ) : termOver && finishStep === null ? (
               <button
                 className="button button--small button--primary"
                 style={{ marginLeft: "auto" }}
-                onClick={onStartNewTerm}
+                onClick={() => {
+                  setFinishError(null);
+                  setFinishStep("confirm");
+                }}
               >
                 Finish term →
               </button>
-            )}
+            ) : null}
           </div>
         ) : state.status === "loading" ? (
           <p style={{ fontSize: 14, color: "var(--color-text-secondary)", margin: 0 }}>Loading…</p>
@@ -162,7 +204,46 @@ function TermSection({ onStartNewTerm }: { onStartNewTerm: () => void }) {
         )}
       </div>
 
-      {history.length > 0 && (
+      {ready && term && !finished && finishStep !== null && (
+        <div
+          style={{
+            marginTop: 12,
+            padding: 12,
+            borderRadius: "var(--border-radius-md)",
+            background: "var(--color-background-secondary)",
+            fontSize: 13,
+          }}
+        >
+          <p style={{ margin: 0, color: "var(--color-text-secondary)" }}>
+            Archive <strong>{term.label}</strong>? This saves a snapshot of today's{" "}
+            {ready.students.length} student{ready.students.length === 1 ? "" : "s"} and{" "}
+            {ready.teachers.length} teacher{ready.teachers.length === 1 ? "" : "s"} (with their goals)
+            to your history. Your caseload stays put — start a new term whenever you're ready to roll
+            it forward.
+          </p>
+          {finishError && (
+            <p style={{ margin: "8px 0 0", color: "var(--color-text-danger)" }}>{finishError}</p>
+          )}
+          <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
+            <button
+              className="button button--small"
+              onClick={() => setFinishStep(null)}
+              disabled={finishStep === "busy"}
+            >
+              Cancel
+            </button>
+            <button
+              className="button button--small button--primary"
+              onClick={() => void doFinish()}
+              disabled={finishStep === "busy"}
+            >
+              {finishStep === "busy" ? "Finishing…" : "Finish term"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {pastTerms.length > 0 && (
         <div style={{ marginTop: 12 }}>
           <button
             onClick={() => setShowHistory((v) => !v)}
@@ -171,26 +252,96 @@ function TermSection({ onStartNewTerm }: { onStartNewTerm: () => void }) {
             <span style={{ display: "inline-flex", transform: showHistory ? "rotate(90deg)" : "none", transition: "transform 0.12s" }}>
               <Icon name="chevron-right" size={14} />
             </span>
-            Past terms ({history.length})
+            Past terms ({pastTerms.length})
           </button>
           {showHistory && (
             <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
-              {[...history].reverse().map((t, i) => {
-                const f = parseDate(t.firstDay);
-                const l = parseDate(t.lastDay);
-                return (
-                  <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 13 }}>
-                    <span>{t.label}</span>
-                    <span style={{ color: "var(--color-text-tertiary)" }}>
-                      {f ? formatShort(f) : t.firstDay} – {l ? formatShort(l) : t.lastDay}
-                    </span>
-                  </div>
-                );
-              })}
+              {[...pastTerms].reverse().map((t, i) => (
+                <PastTermRow key={`${t.firstDay}-${t.lastDay}-${i}`} term={t} />
+              ))}
             </div>
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// A past term: label + dates, expandable to its end-of-term snapshot (students
+// grouped by classroom, with the long-term goals worked on that term).
+function PastTermRow({ term }: { term: ArchivedTerm }) {
+  const [open, setOpen] = useState(false);
+  const f = parseDate(term.firstDay);
+  const l = parseDate(term.lastDay);
+  const snapshot = term.snapshot;
+
+  return (
+    <div style={{ borderTop: "0.5px solid var(--color-border-tertiary)", paddingTop: 6 }}>
+      <button
+        onClick={() => snapshot && setOpen((v) => !v)}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          width: "100%",
+          background: "none",
+          border: "none",
+          padding: 0,
+          font: "inherit",
+          fontSize: 13,
+          cursor: snapshot ? "pointer" : "default",
+        }}
+      >
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          {snapshot && (
+            <span style={{ display: "inline-flex", transform: open ? "rotate(90deg)" : "none", transition: "transform 0.12s" }}>
+              <Icon name="chevron-right" size={14} />
+            </span>
+          )}
+          {term.label}
+        </span>
+        <span style={{ color: "var(--color-text-tertiary)" }}>
+          {f ? formatShort(f) : term.firstDay} – {l ? formatShort(l) : term.lastDay}
+          {snapshot ? ` · ${snapshot.students.length} student${snapshot.students.length === 1 ? "" : "s"}` : ""}
+        </span>
+      </button>
+      {snapshot && open && <TermSnapshotDetail students={snapshot.students} />}
+    </div>
+  );
+}
+
+function TermSnapshotDetail({ students }: { students: StudentSnapshot[] }) {
+  // Group by the classroom recorded at term end; "—" for unassigned.
+  const groups = new Map<string, StudentSnapshot[]>();
+  for (const s of students) {
+    const key = s.teacherName || "—";
+    const list = groups.get(key) ?? [];
+    list.push(s);
+    groups.set(key, list);
+  }
+  const entries = [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+
+  if (students.length === 0) {
+    return (
+      <p style={{ margin: "8px 0 4px 20px", fontSize: 12, color: "var(--color-text-tertiary)" }}>
+        No students on the caseload.
+      </p>
+    );
+  }
+
+  return (
+    <div style={{ margin: "8px 0 4px 20px", display: "flex", flexDirection: "column", gap: 8 }}>
+      {entries.map(([teacher, group]) => (
+        <div key={teacher}>
+          <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: "var(--color-text-secondary)" }}>
+            {teacher}
+          </p>
+          <p style={{ margin: "2px 0 0", fontSize: 12, color: "var(--color-text-secondary)" }}>
+            {group.map((s) => (s.exited ? `${s.name} (left)` : s.name)).join(", ")}
+          </p>
+        </div>
+      ))}
     </div>
   );
 }
