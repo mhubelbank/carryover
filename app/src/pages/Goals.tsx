@@ -318,7 +318,7 @@ interface ReviewItem {
   shortName: string;
 }
 
-function AddGoals({
+export function AddGoals({
   studentId,
   initialLtg,
   onDone,
@@ -812,7 +812,7 @@ function SaveBar({
   );
 }
 
-function UsageLabel({ usage, goal }: { usage: Map<string, number> | null; goal: Goal }) {
+export function UsageLabel({ usage, goal }: { usage: Map<string, number> | null; goal: Goal }) {
   if (usage === null) {
     return <span style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>…</span>;
   }

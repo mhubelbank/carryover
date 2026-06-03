@@ -4,7 +4,7 @@ import { Nav, type NavPage } from "../components/Nav";
 import { SaveBar } from "../components/SaveBar";
 import { useTerm } from "../context/TermContext";
 import { loadIepHistory } from "../domain/data";
-import { formatShort, parseDate } from "../domain/dates";
+import { formatShort, parseDate, startOfDay } from "../domain/dates";
 import type { Goal } from "../domain/goal";
 import type { IepReview } from "../domain/iep";
 import {
@@ -23,12 +23,13 @@ import {
   RESPONSE_TYPES,
 } from "../domain/generate";
 import { StudentGoals } from "./Goals";
+import { IepReview as IepReviewScreen } from "./IepReview";
 
 interface Props {
   onNavigate: (page: NavPage) => void;
   // A student to open directly (deep-link from Today) and which view to land on.
   // Consumed once on arrival.
-  target: { id: string; view: "detail" | "goals" } | null;
+  target: { id: string; view: "detail" | "goals" | "iep-review" } | null;
   onTargetConsumed: () => void;
 }
 
@@ -36,6 +37,7 @@ type View =
   | { kind: "list" }
   | { kind: "detail"; id: string }
   | { kind: "goals"; id: string }
+  | { kind: "iep-review"; id: string }
   | { kind: "create"; student: Student };
 
 export function Students({ onNavigate, target, onTargetConsumed }: Props) {
@@ -46,7 +48,9 @@ export function Students({ onNavigate, target, onTargetConsumed }: Props) {
       setView(
         target.view === "goals"
           ? { kind: "goals", id: target.id }
-          : { kind: "detail", id: target.id },
+          : target.view === "iep-review"
+            ? { kind: "iep-review", id: target.id }
+            : { kind: "detail", id: target.id },
       );
       onTargetConsumed();
     }
@@ -62,6 +66,7 @@ export function Students({ onNavigate, target, onTargetConsumed }: Props) {
         isNew
         onBack={() => setView({ kind: "list" })}
         onViewGoals={() => {}}
+        onReviewIep={() => {}}
         onNavigate={onNavigate}
       />
     );
@@ -76,6 +81,7 @@ export function Students({ onNavigate, target, onTargetConsumed }: Props) {
           isNew={false}
           onBack={() => setView({ kind: "list" })}
           onViewGoals={() => setView({ kind: "goals", id: student.id })}
+          onReviewIep={() => setView({ kind: "iep-review", id: student.id })}
           onNavigate={onNavigate}
         />
       );
@@ -84,6 +90,15 @@ export function Students({ onNavigate, target, onTargetConsumed }: Props) {
   if (view.kind === "goals") {
     return (
       <StudentGoals
+        studentId={view.id}
+        onBack={() => setView({ kind: "detail", id: view.id })}
+        onNavigate={onNavigate}
+      />
+    );
+  }
+  if (view.kind === "iep-review") {
+    return (
+      <IepReviewScreen
         studentId={view.id}
         onBack={() => setView({ kind: "detail", id: view.id })}
         onNavigate={onNavigate}
@@ -370,12 +385,14 @@ function StudentDetail({
   isNew,
   onBack,
   onViewGoals,
+  onReviewIep,
   onNavigate,
 }: {
   student: Student;
   isNew: boolean;
   onBack: () => void;
   onViewGoals: () => void;
+  onReviewIep: () => void;
   onNavigate: (page: NavPage) => void;
 }) {
   const { state, teacherById, client, saveStudents } = useTerm();
@@ -413,6 +430,8 @@ function StudentDetail({
   const flag = ageFlag(liveAge);
   const ageColor = ageColorOf(liveAge, flag);
   const goalCount = data.goals.filter((g) => g.studentId === draft.id && !g.archived).length;
+  const iepDate = parseDate(draft.nextIepReview);
+  const iepReviewOverdue = iepDate != null && iepDate.getTime() < startOfDay(new Date()).getTime();
 
   // New collision rule: same first + middle + last AND same teacher, comparing
   // against active (non-archived) students only. Archived students are out of
@@ -693,7 +712,14 @@ function StudentDetail({
         </div>
 
         <Divider />
-        <h3 style={{ fontSize: 14, fontWeight: 500, margin: "0 0 12px 0" }}>IEP dates</h3>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, margin: "0 0 12px 0" }}>
+          <h3 style={{ fontSize: 14, fontWeight: 500, margin: 0 }}>IEP dates</h3>
+          {!isNew && iepReviewOverdue && (
+            <button className="button button--small" onClick={onReviewIep}>
+              <Icon name="clipboard-check" size={14} /> Review now →
+            </button>
+          )}
+        </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px 20px" }}>
           <EditField label="Next IEP review">
             <input

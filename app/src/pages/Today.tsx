@@ -13,7 +13,7 @@ import { EVENT_STYLE } from "../components/EventChip";
 
 interface Props {
   onNavigate: (page: NavPage) => void;
-  onOpenStudent: (studentId: string, view?: "detail" | "goals") => void;
+  onOpenStudent: (studentId: string, view?: "detail" | "goals" | "iep-review") => void;
   onOpenTeacher: (teacherId: string) => void;
   onGenerate: (date: string, teacherId: string, studentIds: string[], timeSlot?: string) => void;
   onStartNewTerm: () => void;
@@ -264,7 +264,7 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate, on
                 />
                 <button
                   className="button button--small"
-                  onClick={() => onOpenStudent(student.id, "goals")}
+                  onClick={() => onOpenStudent(student.id, "iep-review")}
                 >
                   Review goals →
                 </button>
@@ -320,7 +320,7 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate, on
                 <button
                   className="button button--small"
                   style={{ flexShrink: 0 }}
-                  onClick={() => onOpenStudent(event.studentId, "goals")}
+                  onClick={() => onOpenStudent(event.studentId, "iep-review")}
                 >
                   Review goals →
                 </button>
