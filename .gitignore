@@ -38,3 +38,9 @@ coverage/
 .idea/
 *.swp
 *.swo
+
+# Live app data lives on the `data` branch (fetched at runtime via the GitHub
+# API), not on main. Keep only the prompt templates here as the editable
+# source of truth; ignore everything else that might land in data/.
+/data/*
+!/data/prompts/
