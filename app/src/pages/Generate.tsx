@@ -74,6 +74,7 @@ import type { Goal } from "../domain/goal";
 import type { SessionMetadata } from "../domain/session";
 import { displayName, fullName, isActiveOn, studentContext, type Student } from "../domain/student";
 import { teacherColor, type Activity, type Mode, type Role, type SessionCapture, type Teacher } from "../domain/teacher";
+import { getSessionNotes, saveNotes, type CachedNote } from "../clients/noteCache";
 
 // Human-readable label for each generation pass, shown in the progress status.
 const PASS_LABEL: Record<Pass, string> = {
@@ -125,6 +126,7 @@ interface ResultRow {
 function blankRegularInput(): ActivityInput {
   return {
     goals: [],
+    goalDetails: [],
     promptingLevel: [],
     promptingType: [],
     redirection: [],
@@ -161,6 +163,8 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
   const [phase, setPhase] = useState<"form" | "running" | "results">("form");
   const [results, setResults] = useState<ResultRow[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // Cached notes for the chosen session (offered as a restore on the form).
+  const [restorable, setRestorable] = useState<CachedNote[]>([]);
   // While generating: which note (1-based) and which pipeline pass is in flight.
   const [progress, setProgress] = useState<{ current: number; total: number; pass: Pass } | null>(
     null,
@@ -262,6 +266,56 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
     const firstActive = state.data.teachers.find((t) => !t.archived);
     if (firstActive) setTeacherId(firstActive.id);
   }, [state, teacherId, target]);
+
+  // Persist generated notes to the local cache (repo never stores narrative), so
+  // they survive navigation/refresh and feed the recent-notes export. Re-saves
+  // after a regenerate settles (skipped while a row is still in flight).
+  useEffect(() => {
+    if (phase !== "results" || !teacher) return;
+    if (results.some((r) => r.regenerating)) return;
+    const at = Date.now();
+    const notes: CachedNote[] = results
+      .filter((r) => r.result && !r.absent)
+      .map((r) => ({
+        id: `${date}|${teacher.id}|${timeSlot}|${r.studentId}`,
+        date,
+        teacherId: teacher.id,
+        teacherName: teacher.name,
+        timeSlot,
+        studentId: r.studentId,
+        studentName: r.name,
+        note: r.result!.final,
+        generatedAt: at,
+      }));
+    void saveNotes(notes);
+  }, [phase, results, teacher, date, timeSlot]);
+
+  // Surface previously-generated notes for the chosen session while on the form.
+  useEffect(() => {
+    if (phase !== "form" || !teacher || !timeSlot) {
+      setRestorable([]);
+      return;
+    }
+    let cancelled = false;
+    getSessionNotes(date, teacher.id, timeSlot)
+      .then((n) => !cancelled && setRestorable(n))
+      .catch(() => !cancelled && setRestorable([]));
+    return () => {
+      cancelled = true;
+    };
+  }, [phase, date, teacher, timeSlot]);
+
+  const restoreCachedNotes = () => {
+    setResults(
+      restorable.map((n) => ({
+        studentId: n.studentId,
+        name: n.studentName,
+        absent: false,
+        result: { draft: "", reviewed: "", final: n.note, warnings: [] },
+      })),
+    );
+    setPhase("results");
+  };
 
   // Snap mode to one the teacher supports when teacher changes.
   useEffect(() => {
@@ -484,6 +538,7 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
             draft: "",
             reviewed: "",
             final: absentNote(displayName(student, includedStudents)),
+            warnings: [],
           },
         });
         continue;
@@ -624,6 +679,24 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
           {includedStudents.length === 1 ? "" : "s"}
         </p>
       </div>
+
+      {restorable.length > 0 && (
+        <div
+          className="banner banner--info"
+          style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: "1rem" }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <Icon name="notebook" size={16} />
+            <span>
+              You generated {restorable.length} note{restorable.length === 1 ? "" : "s"} for this
+              session earlier.
+            </span>
+          </div>
+          <button className="button button--small" style={{ flexShrink: 0 }} onClick={restoreCachedNotes}>
+            View them →
+          </button>
+        </div>
+      )}
 
       {onReviewIep && iepOverdue.length > 0 && (
         <div
@@ -892,18 +965,15 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
       )}
 
       <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 12, marginTop: 16 }}>
-        {phase === "running" && progress && (
-          <span role="status" style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>
-            Note {progress.current} of {progress.total} · {PASS_LABEL[progress.pass]}…
-          </span>
-        )}
         <button
           className="button button--primary"
           onClick={handleGenerate}
           disabled={!canGenerate || phase === "running"}
         >
           {phase === "running"
-            ? "Generating…"
+            ? progress
+              ? `Note ${progress.current} of ${progress.total} · ${PASS_LABEL[progress.pass]}…`
+              : "Generating…"
             : `Generate ${includedStudents.length} note${includedStudents.length === 1 ? "" : "s"}`}
         </button>
       </div>
@@ -1795,6 +1865,28 @@ function ResultsView({
               >
                 {r.result.final}
               </p>
+              {!r.regenerating && r.result.warnings.length > 0 && (
+                <div
+                  style={{
+                    marginTop: 10,
+                    padding: "8px 12px",
+                    background: "var(--color-background-warning)",
+                    border: "0.5px solid var(--color-border-warning)",
+                    borderRadius: "var(--border-radius-md)",
+                    fontSize: 12,
+                    color: "var(--color-text-warning)",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 600, marginBottom: 4 }}>
+                    <Icon name="alert-circle" size={13} /> Needs your review
+                  </div>
+                  <ul style={{ margin: 0, paddingLeft: 18 }}>
+                    {r.result.warnings.map((w, i) => (
+                      <li key={i}>{w}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               {r.showDrafts && (
                 <div style={{ marginTop: 10, fontSize: 12, color: "var(--color-text-secondary)" }}>
                   <details>
@@ -2093,9 +2185,7 @@ function buildContext(
     if (!role) throw new Error(`Pick a role for ${fullName(student)}`);
     const phrase = resolveRolePhrase(role, st.filming);
     const roleData = buildRoleData(role, st.filming);
-    const selectedShortNames = goals
-      .filter((g) => st.filmingGoalIds.includes(g.id))
-      .map((g) => g.shortTermGoal.trim() || g.shortName);
+    const selectedFilming = goals.filter((g) => st.filmingGoalIds.includes(g.id));
     return filmingContext({
       // Narrative uses first name only for natural clinical prose; the all-notes
       // block separately uses displayName for the colon-label disambiguation.
@@ -2104,27 +2194,26 @@ function buildContext(
       teacher,
       role: { ...role, name: role.name },
       rolePhrase: phrase,
-      selectedGoals: selectedShortNames,
+      // Note names the concise shortname; the full sentence is passed as context.
+      selectedGoals: selectedFilming.map((g) => g.shortName || g.shortTermGoal),
+      selectedGoalDetails: selectedFilming.map((g) => g.shortTermGoal.trim() || g.shortName),
       roleData,
       additionalContext: buildAdditionalContext(teacher, student, st.captures),
     });
   }
-  // Resolve regular goal IDs → shortname strings for the prompt template; the
-  // form stores IDs so session metadata can persist them and shortname renames
-  // don't break selections.
+  // Resolve regular goal IDs for the prompt: the note's "targeting" clause names
+  // the concise shortname, while the full short-term sentence is supplied as
+  // context so the model understands the clinical target (legacy goals with no
+  // full text fall back to the shortname, and vice versa). The form stores IDs.
   const goalById = new Map(goals.map((g) => [g.id, g] as const));
-  // The generator receives the full short-term goal sentence so it works from the
-  // real clinical target, not a terse shortname it has to expand. Legacy goals
-  // (entered before full text was stored) fall back to the shortname.
-  const resolvedInputs = st.regular.map((input) => ({
-    ...input,
-    goals: input.goals
-      .map((id) => {
-        const g = goalById.get(id);
-        return g ? g.shortTermGoal.trim() || g.shortName : "";
-      })
-      .filter(Boolean),
-  }));
+  const resolvedInputs = st.regular.map((input) => {
+    const picked = input.goals.map((id) => goalById.get(id)).filter((g): g is Goal => !!g);
+    return {
+      ...input,
+      goals: picked.map((g) => g.shortName || g.shortTermGoal).filter(Boolean),
+      goalDetails: picked.map((g) => g.shortTermGoal.trim() || g.shortName).filter(Boolean),
+    };
+  });
   // Resolve each selected activityId → its catalog entry, then build the
   // description: catalog descriptionTemplate (e.g. journal) or a session-capture
   // rewrite (e.g. José's pragmatic skills), falling back to the default. A

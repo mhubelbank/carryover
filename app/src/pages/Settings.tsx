@@ -7,7 +7,8 @@ import { REPO_CONFIG, useAuth } from "../context/AuthContext";
 import { useTerm } from "../context/TermContext";
 import { triggerDownload, downloadText, zipStore } from "../clients/download";
 import { buildXlsx } from "../clients/xlsx";
-import { backupJson, csvBundleEntries, termSlug, workbookSheets } from "../domain/export";
+import { clearNotes, getAllNotes } from "../clients/noteCache";
+import { backupJson, csvBundleEntries, recentNotesTxt, termSlug, workbookSheets } from "../domain/export";
 import { formatShort, parseDate, startOfDay, toISODate } from "../domain/dates";
 import { termLabel, type ArchivedTerm, type StudentSnapshot } from "../domain/term";
 
@@ -546,6 +547,17 @@ function ExportSection() {
     );
   };
 
+  const [notesMsg, setNotesMsg] = useState<string | null>(null);
+  const downloadRecentNotes = async () => {
+    setNotesMsg(null);
+    const notes = await getAllNotes();
+    if (notes.length === 0) {
+      setNotesMsg("No generated notes are cached yet — generate some first.");
+      return;
+    }
+    downloadText(`sesis-${slug}-recent-notes.txt`, recentNotesTxt(notes));
+  };
+
   return (
     <div className="card" style={{ marginBottom: "1rem" }}>
       <h3 className="card__title">Export</h3>
@@ -564,11 +576,7 @@ function ExportSection() {
           <button className="button button--small" onClick={downloadBundle}>
             CSV bundle (.zip)
           </button>
-          <button
-            className="button button--small"
-            disabled
-            title="Available once generated notes are cached locally"
-          >
+          <button className="button button--small" onClick={() => void downloadRecentNotes()}>
             Recent notes (.txt)
           </button>
           <button className="button button--small" onClick={downloadBackup}>
@@ -576,12 +584,17 @@ function ExportSection() {
           </button>
         </div>
       )}
+      {notesMsg && (
+        <p className="field-hint" style={{ marginTop: 10 }}>
+          {notesMsg}
+        </p>
+      )}
     </div>
   );
 }
 
 function ResetSection({ onSignOut, onTestMode }: { onSignOut: () => void; onTestMode: () => void }) {
-  const [confirming, setConfirming] = useState<"signout" | "testmode" | null>(null);
+  const [confirming, setConfirming] = useState<"signout" | "testmode" | "cache" | null>(null);
 
   return (
     <div className="card">
@@ -624,11 +637,28 @@ function ResetSection({ onSignOut, onTestMode }: { onSignOut: () => void; onTest
 
       <ResetRow
         title="Reset session cache"
-        description="Clears generated notes drafts from this browser. Doesn't affect saved data."
+        description="Clears generated notes cached in this browser. Doesn't affect saved data."
         action={
-          <button className="button button--small" disabled>
-            Reset cache
-          </button>
+          confirming === "cache" ? (
+            <div style={{ display: "flex", gap: 6 }}>
+              <button className="button button--small" onClick={() => setConfirming(null)}>
+                Cancel
+              </button>
+              <button
+                className="button button--small"
+                onClick={() => {
+                  void clearNotes();
+                  setConfirming(null);
+                }}
+              >
+                Confirm
+              </button>
+            </div>
+          ) : (
+            <button className="button button--small" onClick={() => setConfirming("cache")}>
+              Reset cache
+            </button>
+          )
         }
       />
     </div>
