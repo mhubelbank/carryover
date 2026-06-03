@@ -28,6 +28,8 @@ import {
 } from "../domain/schedule";
 import { fullName, isActiveOn, type Student } from "../domain/student";
 import { teacherColor, type Teacher } from "../domain/teacher";
+import { dayEvents } from "../domain/events";
+import { EventChip } from "../components/EventChip";
 
 interface Props {
   onNavigate: (page: NavPage) => void;
@@ -51,14 +53,8 @@ const USUAL_LOOKBACK_WEEKS = 4;
 // Per-event height in the calendar-event row above each day's time grid.
 const EVENT_LINE_PX = 22;
 
-interface CalendarEvent {
-  kind: "iep" | "first-day" | "last-day" | "birthday";
-  studentId: string;
-  firstName: string;
-}
-
 export function Schedule({ onNavigate, onOpenStudent }: Props) {
-  const { state, client, teacherById, studentById, saveSchedule } = useTerm();
+  const { state, client, teacherById, studentById, saveSchedule, saveTerm } = useTerm();
   const [draft, setDraft] = useState<ScheduleEntry[]>(() =>
     state.status === "ready" ? state.data.schedule.map(cloneEntry) : [],
   );
@@ -253,6 +249,18 @@ export function Schedule({ onNavigate, onOpenStudent }: Props) {
   const todayMonday = mondayOf(toWeekday(startOfDay(new Date())));
   const firstDay = parseDate(term.firstDay);
   const lastDay = parseDate(term.lastDay);
+
+  // Toggle a day's "No school" closure (shared term.closures, same as Today).
+  // Saved immediately and independently of the schedule draft.
+  const toggleClosure = (date: Date) => {
+    const iso = toISODate(date);
+    const current = term.closures ?? [];
+    const closures = current.includes(iso)
+      ? current.filter((d) => d !== iso)
+      : [...current, iso];
+    void saveTerm({ ...term, closures });
+  };
+
   const minMonday = firstDay ? mondayOf(firstDay) : null;
   const maxMonday = lastDay ? mondayOf(lastDay) : null;
   const weekDate = weekKey ? parseDate(weekKey) : null;
@@ -264,21 +272,9 @@ export function Schedule({ onNavigate, onOpenStudent }: Props) {
   // Calendar-event markers per day-column (week mode only): IEP review dates,
   // first day, last day. Rendered as clickable chips above the time grid that
   // navigate to the student's detail page.
-  const weeklyEvents: CalendarEvent[][] = WEEKDAYS.map((_, i) => {
-    if (!weekDate) return [];
-    const iso = toISODate(addDays(weekDate, i));
-    const events: CalendarEvent[] = [];
-    for (const s of students) {
-      if (s.archived) continue;
-      if (s.nextIepReview === iso) events.push({ kind: "iep", studentId: s.id, firstName: s.firstName });
-      if (s.firstDay === iso) events.push({ kind: "first-day", studentId: s.id, firstName: s.firstName });
-      if (s.lastDay === iso) events.push({ kind: "last-day", studentId: s.id, firstName: s.firstName });
-      // Birthdays recur yearly — match on month-day, ignoring the birth year.
-      if (s.birthday && s.birthday.slice(5) === iso.slice(5))
-        events.push({ kind: "birthday", studentId: s.id, firstName: s.firstName });
-    }
-    return events;
-  });
+  const weeklyEvents = WEEKDAYS.map((_, i) =>
+    weekDate ? dayEvents(students, toISODate(addDays(weekDate, i))) : [],
+  );
   const maxEventsPerDay = Math.max(0, ...weeklyEvents.map((e) => e.length));
   // Events are rendered as a single absolute-positioned chip stack per column.
   // We only need to *shift* the body down by the amount the stack overflows the
@@ -671,6 +667,13 @@ export function Schedule({ onNavigate, onOpenStudent }: Props) {
             columnDate !== null &&
             ((firstDay !== null && columnDate.getTime() < firstDay.getTime()) ||
               (lastDay !== null && columnDate.getTime() > lastDay.getTime()));
+          // Days marked "No school" on Today (term.closures) — shown the same way
+          // as out-of-term columns, kept in sync via the shared term.closures.
+          const isClosed =
+            columnDate !== null &&
+            !outOfTerm &&
+            (term.closures ?? []).includes(toISODate(columnDate));
+          const dimmed = outOfTerm || isClosed;
           return (
             <div key={day} style={{ flex: 1, minWidth: 0 }}>
               <div
@@ -687,7 +690,7 @@ export function Schedule({ onNavigate, onOpenStudent }: Props) {
                   style={{
                     fontSize: 13,
                     fontWeight: 500,
-                    color: outOfTerm
+                    color: dimmed
                       ? "var(--color-text-tertiary)"
                       : "var(--color-text-secondary)",
                   }}
@@ -725,6 +728,7 @@ export function Schedule({ onNavigate, onOpenStudent }: Props) {
                         <EventChip
                           event={event}
                           onClick={() => onOpenStudent(event.studentId)}
+                          height={EVENT_LINE_PX - 2}
                         />
                       </div>
                     ))}
@@ -736,10 +740,10 @@ export function Schedule({ onNavigate, onOpenStudent }: Props) {
                   position: "relative",
                   height: bodyHeight,
                   borderLeft: "0.5px solid var(--color-border-tertiary)",
-                  opacity: outOfTerm ? 0.4 : 1,
+                  opacity: dimmed ? 0.4 : 1,
                 }}
               >
-                {outOfTerm && (
+                {dimmed && (
                   <div
                     style={{
                       position: "absolute",
@@ -751,7 +755,7 @@ export function Schedule({ onNavigate, onOpenStudent }: Props) {
                       color: "var(--color-text-tertiary)",
                     }}
                   >
-                    Outside term
+                    {outOfTerm ? "Outside term" : "No school"}
                   </div>
                 )}
                 {/* Hour gridlines */}
@@ -769,7 +773,7 @@ export function Schedule({ onNavigate, onOpenStudent }: Props) {
                   />
                 ))}
 
-                {!outOfTerm && slots.map((slot) => {
+                {!dimmed && slots.map((slot) => {
                   const top = (slotStartMinutes(slot) - axis.gridStart) * scale;
                   const durationPx = (slotEndMinutes(slot) - slotStartMinutes(slot)) * scale;
                   const minHeight = Math.max(cellHeight, durationPx);
@@ -872,8 +876,8 @@ export function Schedule({ onNavigate, onOpenStudent }: Props) {
                 })}
               </div>
 
-              <div style={{ marginTop: 8 }}>
-                {!outOfTerm &&
+              <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+                {!dimmed &&
                   (addingFor === day ? (
                   <div
                     style={{
@@ -948,6 +952,20 @@ export function Schedule({ onNavigate, onOpenStudent }: Props) {
                     Add block
                   </button>
                   ))}
+                {columnDate && !outOfTerm && (
+                  <button
+                    className="button button--ghost button--small"
+                    onClick={() => toggleClosure(columnDate)}
+                    style={{
+                      width: "100%",
+                      justifyContent: "center",
+                      color: "var(--color-text-tertiary)",
+                    }}
+                  >
+                    <Icon name={isClosed ? "calendar-plus" : "x"} size={13} />
+                    {isClosed ? "Mark school day" : "No school"}
+                  </button>
+                )}
               </div>
             </div>
           );
@@ -1382,59 +1400,6 @@ function formatHour(h: number): string {
 }
 
 // Whether a week cell's students match the usual template's for that cell.
-function EventChip({ event, onClick }: { event: CalendarEvent; onClick: () => void }) {
-  // Color-keyed by event type: IEP = info blue, start = success green, last
-  // day = warning amber. Each row is a single line — name + short label suffix.
-  const palette =
-    event.kind === "iep"
-      ? {
-          bg: "var(--color-background-info)",
-          color: "var(--color-text-info)",
-          label: "IEP review",
-        }
-      : event.kind === "first-day"
-        ? {
-            bg: "var(--color-background-success)",
-            color: "var(--color-text-success)",
-            label: "First day",
-          }
-        : event.kind === "birthday"
-          ? {
-              bg: "#efe6fb",
-              color: "#6b3fa0",
-              label: "🎂 Birthday",
-            }
-          : {
-              bg: "var(--color-background-warning)",
-              color: "var(--color-text-warning)",
-              label: "Last day",
-            };
-  return (
-    <button
-      onClick={onClick}
-      title={`${event.firstName} · ${palette.label}`}
-      style={{
-        fontSize: 10,
-        padding: "0 6px",
-        background: palette.bg,
-        color: palette.color,
-        border: "none",
-        borderRadius: "var(--border-radius-md)",
-        cursor: "pointer",
-        whiteSpace: "nowrap",
-        overflow: "hidden",
-        textOverflow: "ellipsis",
-        height: EVENT_LINE_PX - 2,
-        lineHeight: `${EVENT_LINE_PX - 2}px`,
-        textAlign: "left",
-        fontFamily: "inherit",
-      }}
-    >
-      {event.firstName} · {palette.label}
-    </button>
-  );
-}
-
 // Students offered in the cell editor: drop archived everywhere, and in week
 // mode drop anyone whose enrollment window doesn't include the column's date.
 function editorStudents(students: Student[], weekDate: Date | null, day: Weekday): Student[] {

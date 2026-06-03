@@ -8,6 +8,8 @@ import { loadSessions, loadWeekSchedule } from "../domain/data";
 import { slotStartMinutes, type ScheduleEntry } from "../domain/schedule";
 import { teacherColor } from "../domain/teacher";
 import { fullName, isActiveOn, type Student } from "../domain/student";
+import { dayEvents } from "../domain/events";
+import { EVENT_STYLE } from "../components/EventChip";
 
 interface Props {
   onNavigate: (page: NavPage) => void;
@@ -156,6 +158,9 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate, on
     (!lastDay || selectedTime <= lastDay.getTime());
   const selectedIso = toISODate(selected);
   const isClosed = (term.closures ?? []).includes(selectedIso);
+  // Birthdays / first / last / IEP days falling on the selected date — the same
+  // markers the Schedule shows per day-column (shared dayEvents).
+  const events = dayEvents(students, selectedIso);
 
   async function setClosure(closed: boolean) {
     setBusy(true);
@@ -283,6 +288,46 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate, on
             {fullName(student)}'s IEP review is tomorrow
           </Banner>
         ))}
+        {events.map((event, i) => {
+          const student = studentById.get(event.studentId);
+          const name = student ? fullName(student) : event.firstName;
+          const style = EVENT_STYLE[event.kind];
+          const text =
+            event.kind === "birthday"
+              ? `${name}'s birthday!`
+              : event.kind === "first-day"
+                ? `${name}'s first day`
+                : event.kind === "last-day"
+                  ? `${name}'s last day`
+                  : `${name}'s IEP review`;
+          return (
+            <div
+              key={`${event.kind}-${event.studentId}-${i}`}
+              className="banner"
+              style={{
+                justifyContent: "space-between",
+                background: style.bg,
+                color: style.color,
+                borderColor: style.border,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <Icon name={style.icon} size={16} />
+                <span>{text}</span>
+              </div>
+              {/* Only IEP gets an action; birthdays/first/last days are informational. */}
+              {event.kind === "iep" && (
+                <button
+                  className="button button--small"
+                  style={{ flexShrink: 0 }}
+                  onClick={() => onOpenStudent(event.studentId, "goals")}
+                >
+                  Review goals →
+                </button>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {!inTerm ? (
