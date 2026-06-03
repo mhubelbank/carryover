@@ -5,7 +5,7 @@ import { SaveBar } from "../components/SaveBar";
 import { confirmNavAway } from "../hooks/useUnsavedGuard";
 import { useTerm } from "../context/TermContext";
 import { loadIepHistory } from "../domain/data";
-import { formatShort, parseDate, startOfDay } from "../domain/dates";
+import { formatShort, parseDate, startOfDay, toISODate } from "../domain/dates";
 import type { Goal } from "../domain/goal";
 import type { IepReview } from "../domain/iep";
 import {
@@ -407,6 +407,9 @@ function StudentDetail({
   const [history, setHistory] = useState<IepReview[] | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Archive prompt: collects the student's last day (defaults to today) before
+  // archiving. null = closed.
+  const [archiveDate, setArchiveDate] = useState<string | null>(null);
 
   useEffect(() => {
     if (isNew || !client) {
@@ -481,17 +484,20 @@ function StudentDetail({
     }
   }
 
-  async function handleArchiveToggle() {
+  // Apply archive/unarchive directly (independent of unsaved profile edits).
+  // Archiving stamps the student's last day; unarchiving clears it so they're
+  // cleanly active again.
+  async function applyArchive(archived: boolean, lastDay: string | null) {
     setSaving(true);
     setError(null);
     try {
-      const next = data!.students.map((s) =>
-        s.id === draft.id ? { ...s, archived: !s.archived } : s,
+      const patch = { archived, lastDay };
+      await saveStudents(
+        data!.students.map((s) => (s.id === draft.id ? { ...s, ...patch } : s)),
       );
-      await saveStudents(next);
-      // Reflect new archived state in the draft + baseline so the toolbar updates.
-      setDraft((d) => ({ ...d, archived: !d.archived }));
-      setBaseline((b) => ({ ...b, archived: !b.archived }));
+      setDraft((d) => ({ ...d, ...patch }));
+      setBaseline((b) => ({ ...b, ...patch }));
+      setArchiveDate(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Archive failed");
     } finally {
@@ -601,7 +607,11 @@ function StudentDetail({
             </button>
             <button
               className="button button--small"
-              onClick={handleArchiveToggle}
+              onClick={() =>
+                draft.archived
+                  ? void applyArchive(false, null)
+                  : setArchiveDate(draft.lastDay || toISODate(startOfDay(new Date())))
+              }
               disabled={saving}
             >
               {draft.archived ? "Unarchive" : "Archive"}
@@ -609,6 +619,42 @@ function StudentDetail({
           </div>
         )}
       </div>
+
+      {archiveDate !== null && (
+        <div
+          className="card"
+          style={{
+            marginBottom: "1rem",
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <span style={{ fontSize: 14 }}>
+            Archive <strong>{headerName}</strong> — last day:
+          </span>
+          <input
+            className="input"
+            type="date"
+            style={{ width: 170 }}
+            value={archiveDate}
+            onChange={(e) => setArchiveDate(e.target.value)}
+          />
+          <div style={{ display: "flex", gap: 6, marginLeft: "auto" }}>
+            <button className="button button--small" onClick={() => setArchiveDate(null)} disabled={saving}>
+              Cancel
+            </button>
+            <button
+              className="button button--small button--primary"
+              onClick={() => void applyArchive(true, archiveDate || null)}
+              disabled={saving}
+            >
+              {saving ? "Archiving…" : "Archive"}
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="card" style={{ marginBottom: "1rem" }}>
         <h3 className="card__title">Profile</h3>
