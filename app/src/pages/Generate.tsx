@@ -75,6 +75,7 @@ import type { SessionMetadata } from "../domain/session";
 import { displayName, fullName, isActiveOn, studentContext, type Student } from "../domain/student";
 import { teacherColor, type Activity, type Mode, type Role, type SessionCapture, type Teacher } from "../domain/teacher";
 import { getSessionNotes, saveNotes, type CachedNote } from "../clients/noteCache";
+import { storage } from "../clients/storage";
 
 // Human-readable label for each generation pass, shown in the progress status.
 const PASS_LABEL: Record<Pass, string> = {
@@ -141,6 +142,34 @@ function blankActivity(): ActivityDef {
   return { activityId: "", additionalInfo: "", segmentName: "", domains: [] };
 }
 
+// In-progress Generate form, auto-saved to localStorage so it survives a refresh.
+// Small + synchronous (restored in useState initializers); the bulkier generated
+// note narrative lives in IndexedDB (clients/noteCache.ts) instead.
+interface FormDraft {
+  date: string;
+  teacherId: string;
+  timeSlot: string;
+  mode: Mode;
+  activities: ActivityDef[];
+  studentState: Record<string, StudentState>;
+  sessionSig: string;
+}
+const FORM_DRAFT_KEY = "generate_form_draft";
+function loadFormDraft(): FormDraft | null {
+  try {
+    const s = storage.get(FORM_DRAFT_KEY);
+    return s ? (JSON.parse(s) as FormDraft) : null;
+  } catch {
+    return null;
+  }
+}
+function saveFormDraft(draft: FormDraft): void {
+  storage.set(FORM_DRAFT_KEY, JSON.stringify(draft));
+}
+function clearFormDraft(): void {
+  storage.remove(FORM_DRAFT_KEY);
+}
+
 function blankFilming(): FilmingFieldValues {
   return {
     pragmatic: {
@@ -155,11 +184,20 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
   const { state, client } = useTerm();
   const { keys } = useAuth();
 
-  const [date, setDate] = useState(() => toISODate(toWeekday(startOfDay(new Date()))));
-  const [teacherId, setTeacherId] = useState<string>("");
-  const [mode, setMode] = useState<Mode>("regular");
-  const [activities, setActivities] = useState<ActivityDef[]>([blankActivity()]);
-  const [studentState, setStudentState] = useState<Record<string, StudentState>>({});
+  // Restore an auto-saved in-progress form on a plain mount (refresh), but never
+  // over a deep-link target — that's a deliberately fresh session from Today.
+  const [initialDraft] = useState<FormDraft | null>(() => (target ? null : loadFormDraft()));
+  const [date, setDate] = useState(
+    () => initialDraft?.date ?? toISODate(toWeekday(startOfDay(new Date()))),
+  );
+  const [teacherId, setTeacherId] = useState<string>(() => initialDraft?.teacherId ?? "");
+  const [mode, setMode] = useState<Mode>(() => initialDraft?.mode ?? "regular");
+  const [activities, setActivities] = useState<ActivityDef[]>(
+    () => initialDraft?.activities ?? [blankActivity()],
+  );
+  const [studentState, setStudentState] = useState<Record<string, StudentState>>(
+    () => initialDraft?.studentState ?? {},
+  );
   const [phase, setPhase] = useState<"form" | "running" | "results">("form");
   const [results, setResults] = useState<ResultRow[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -171,7 +209,7 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
   );
   // The schedule slot this session targets. Drives the default roster and the
   // schedule write-back on generate. Set from the deep-link, or chosen manually.
-  const [timeSlot, setTimeSlot] = useState<string>("");
+  const [timeSlot, setTimeSlot] = useState<string>(() => initialDraft?.timeSlot ?? "");
   // The selected date's week deviation, if any (else the usual template applies).
   const [weekSchedule, setWeekSchedule] = useState<ScheduleEntry[] | null>(null);
 
@@ -327,7 +365,9 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
   // (teacher / date / slot / scheduled set). Manual add/remove within a session
   // is preserved, since those don't change the session signature.
   const sessionSig = `${teacherId}|${date}|${timeSlot}|${sessionStudentIds.join(",")}`;
-  const seededSig = useRef<string | null>(null);
+  // Seed from the restored draft's signature so the studentState effect treats a
+  // restored session as unchanged and preserves the restored inputs (not reseed).
+  const seededSig = useRef<string | null>(initialDraft?.sessionSig ?? null);
   useEffect(() => {
     if (caseload.length === 0) return;
     const sessionChanged = seededSig.current !== sessionSig;
@@ -356,6 +396,16 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
     });
   }, [caseload, activities.length, sessionSig]);
 
+  // Auto-save the in-progress form (debounced) so a refresh restores it. Cleared
+  // on a successful generate. Only while on the form.
+  useEffect(() => {
+    if (phase !== "form") return;
+    const id = setTimeout(() => {
+      saveFormDraft({ date, teacherId, timeSlot, mode, activities, studentState, sessionSig });
+    }, 800);
+    return () => clearTimeout(id);
+  }, [phase, date, teacherId, timeSlot, mode, activities, studentState, sessionSig]);
+
   if (state.status !== "ready") return null;
   const { students, goals } = state.data;
   const catalog = state.data.activities;
@@ -368,6 +418,28 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
 
   function setStudent(id: string, patch: Partial<StudentState>) {
     setStudentState((prev) => ({ ...prev, [id]: { ...prev[id]!, ...patch } }));
+  }
+
+  // Reset the form for this session: one blank activity and fresh per-student
+  // inputs (roster inclusion still from the schedule). Keeps date/teacher/slot/mode.
+  function clearForm() {
+    setActivities([blankActivity()]);
+    const inSession = new Set(sessionStudentIds);
+    const fresh: Record<string, StudentState> = {};
+    for (const s of caseload) {
+      fresh[s.id] = {
+        roleId: "",
+        filming: blankFilming(),
+        filmingGoalIds: [],
+        captures: {},
+        absent: false,
+        included: inSession.has(s.id),
+        regular: [blankRegularInput()],
+      };
+    }
+    setStudentState(fresh);
+    seededSig.current = sessionSig; // already seeded — keep the effect from clobbering
+    clearFormDraft();
   }
 
   function setRegularInput(id: string, idx: number, patch: Partial<ActivityInput>) {
@@ -595,6 +667,7 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
       }
     }
 
+    clearFormDraft(); // the form's work is done — don't restore it next time
     setPhase("results");
   }
 
@@ -666,18 +739,23 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
     <div className="shell">
       <Nav current="generate" onNavigate={onNavigate} />
 
-      <div style={{ marginBottom: "1rem" }}>
-        <h1 style={{ fontSize: 22, fontWeight: 500, margin: 0 }}>Generate notes</h1>
-        <p style={{ margin: "4px 0 0 0", color: "var(--color-text-secondary)", fontSize: 14, display: "flex", alignItems: "center", gap: 7 }}>
-          {teacher && (
-            <span
-              style={{ width: 10, height: 10, borderRadius: 3, background: teacherColor(teacher.color).bg, flexShrink: 0 }}
-              aria-hidden
-            />
-          )}
-          {teacher ? `${teacher.name}'s caseload` : "—"} · {includedStudents.length} student
-          {includedStudents.length === 1 ? "" : "s"}
-        </p>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: "1rem" }}>
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 500, margin: 0 }}>Generate notes</h1>
+          <p style={{ margin: "4px 0 0 0", color: "var(--color-text-secondary)", fontSize: 14, display: "flex", alignItems: "center", gap: 7 }}>
+            {teacher && (
+              <span
+                style={{ width: 10, height: 10, borderRadius: 3, background: teacherColor(teacher.color).bg, flexShrink: 0 }}
+                aria-hidden
+              />
+            )}
+            {teacher ? `${teacher.name}'s caseload` : "—"} · {includedStudents.length} student
+            {includedStudents.length === 1 ? "" : "s"}
+          </p>
+        </div>
+        <button className="button button--small" onClick={clearForm} title="Reset activities and every student's inputs for this session">
+          Clear form
+        </button>
       </div>
 
       {restorable.length > 0 && (
