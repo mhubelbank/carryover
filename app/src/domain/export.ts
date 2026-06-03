@@ -1,6 +1,8 @@
 import { goalsToCsv, scheduleToCsv, studentsToCsv, type TermData } from "./data";
 import type { ZipEntry } from "../clients/download";
 import type { Sheet } from "../clients/xlsx";
+import type { CachedNote } from "../clients/noteCache";
+import { formatLong, parseDate } from "./dates";
 import { groupByLongTerm } from "./goal";
 import { WEEKDAYS, slotStartMinutes } from "./schedule";
 import { computedAge, fullName } from "./student";
@@ -142,6 +144,28 @@ function goalsSheet(data: TermData): Sheet {
 
 export function workbookSheets(data: TermData): Sheet[] {
   return [scheduleSheet(data), iepSheet(data), goalsSheet(data)];
+}
+
+// Recent generated notes (from the local cache) as plain text, grouped by
+// session (newest first). `notes` is expected pre-sorted newest-first.
+export function recentNotesTxt(notes: CachedNote[]): string {
+  const groups = new Map<string, CachedNote[]>();
+  for (const n of notes) {
+    const key = `${n.date}|${n.teacherId}|${n.timeSlot}`;
+    const list = groups.get(key);
+    if (list) list.push(n);
+    else groups.set(key, [n]);
+  }
+  const blocks: string[] = [];
+  for (const group of groups.values()) {
+    const f = group[0]!;
+    const d = parseDate(f.date);
+    const header =
+      `${d ? formatLong(d) : f.date}${f.timeSlot ? ` · ${f.timeSlot}` : ""} · ${f.teacherName}`;
+    const body = group.map((n) => `${n.studentName}:\n${n.note}`).join("\n\n");
+    blocks.push(`${header}\n${"=".repeat(header.length)}\n${body}`);
+  }
+  return `${blocks.join("\n\n\n")}\n`;
 }
 
 // A filesystem-safe slug from the term label, e.g. "School Year 2025–2026" →

@@ -5,7 +5,8 @@ Session data:
 Activity {{@index_plus_one}}: {{this.description}}{{#if this.segmentName}}
    Segment name: {{this.segmentName}}{{/if}}
    Language domains: {{this.domains}}
-   IEP goals — use only these: {{this.goals}}
+   IEP goals — name these (and only these): {{this.goals}}{{#if this.goalDetails}}
+   Goal details (context only — understand the target; do NOT quote): {{this.goalDetails}}{{/if}}
    Prompting: {{this.promptingLevel}} {{this.promptingType}}
    Redirection: {{this.redirection}}
    Student response: {{this.response}}
@@ -28,7 +29,7 @@ Language conventions (non-negotiable):
 - When multiple prompting types share the same level, combine them: "minimal verbal and visual prompting." Never list separately.
 - Prompting levels joined together: "minimal to moderate." Not "minimal and moderate."
 - Redirection is written as "redirection to task." Never just "redirection."
-- Goals are named exactly as provided in the session data. Never replaced with vague phrases like "her communication goals."
+- Goals are named using the exact short labels in "IEP goals" — never the full "Goal details" sentences, and never vague phrases like "her communication goals." The goal-details text is background only; it must not appear in the note.
 - If a session field is empty or shows no value, do not mention that category at all.
 
 Do NOT:

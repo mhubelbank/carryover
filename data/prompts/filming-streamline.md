@@ -18,6 +18,14 @@ Fix logic errors only when present:
 - Role mentioned doesn't match {{student.role}}.
 - Contradictions across sentences (e.g., "consistently" for a skill in one place, "not observed" in another).
 
-If the note is already clean, return it unchanged. Keep all data (quality levels, percentages, goals) and connecting phrases ("throughout the session," "during the broadcast," "while working on"). Return ONLY the note text — no commentary, no list of changes, no explanation.{{#if teacher.streamlineAppend}}
+Flag, do NOT change the note (these need a clinician):
+- The goals named don't correspond to the role/work described. (Goals are clinical targets, so flag only a clear mismatch.)
+- A contradiction or claim that can't be resolved without inventing or removing data.
+
+Keep all data (quality levels, percentages, goals) and connecting phrases ("throughout the session," "during the broadcast," "while working on"). Do not invent or remove information.
+
+Output format (strict):
+- Output the note text only — corrected for the fixes above. Never put commentary, headings, labels, or separators inside the note.
+- If (and only if) you have something to flag, append a final line that is exactly `[[WARNINGS]]`, then one `- ` bullet per issue, and nothing after. If there is nothing to flag, do not output the marker at all.{{#if teacher.streamlineAppend}}
 
 {{teacher.streamlineAppend}}{{/if}}

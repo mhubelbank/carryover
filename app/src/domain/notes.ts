@@ -21,6 +21,26 @@ export interface NoteResult {
   draft: string;
   reviewed: string;
   final: string;
+  // Unfixable logic issues the streamline pass flagged (e.g. the targeted goals
+  // don't correspond to the described activity). Shown beside the note, never in
+  // it. Empty when the note is clean.
+  warnings: string[];
+}
+
+const WARNINGS_MARKER = "[[WARNINGS]]";
+
+// Split the streamline output into the clean note and any flagged warnings. The
+// streamline prompt appends `[[WARNINGS]]` + bullet lines only when it can't fix
+// something without inventing/removing content.
+export function splitWarnings(text: string): { note: string; warnings: string[] } {
+  const i = text.indexOf(WARNINGS_MARKER);
+  if (i === -1) return { note: text.trim(), warnings: [] };
+  const warnings = text
+    .slice(i + WARNINGS_MARKER.length)
+    .split("\n")
+    .map((l) => l.replace(/^[\s\-*•]+/, "").trim())
+    .filter(Boolean);
+  return { note: text.slice(0, i).trim(), warnings };
 }
 
 // Render context: nested objects/arrays addressed by the templates (student,
@@ -281,16 +301,18 @@ export async function generateNote(
   );
 
   opts.onPhase?.("streamline");
-  let final = await callPass(
+  const streamlined = await callPass(
     apiKey,
     "streamline",
     model,
     maxTokens,
     renderTemplate(prompts.streamline, { ...ctx, draftNote: draft, reviewedNote: reviewed }),
   );
-  if (opts.postProcess) final = opts.postProcess(final);
+  const { note, warnings } = splitWarnings(streamlined);
+  // Post-processing (e.g. a teacher append) applies to the note, not warnings.
+  const final = opts.postProcess ? opts.postProcess(note) : note;
 
-  return { draft, reviewed, final };
+  return { draft, reviewed, final, warnings };
 }
 
 function delay(ms: number): Promise<void> {

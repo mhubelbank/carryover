@@ -2,7 +2,8 @@ You are writing a professional SLP session note for {{student.name}} ({{student.
 
 Activity: Collaborated with classmates to produce a live episode of the 811X Dragon News
 Role: {{student.role}}
-Goals addressed: {{selectedGoals | join: ", "}}
+Goals addressed (name these, not the detail sentences): {{selectedGoals | join: ", "}}{{#if selectedGoalDetails.length}}
+Goal details (context only — do not quote): {{selectedGoalDetails | join: "; "}}{{/if}}
 {{roleData}}
 {{#if additionalContext}}{{additionalContext}}{{/if}}
 

@@ -74,7 +74,8 @@ export interface ActivityDef {
 
 // Per-student per-activity inputs (multi-selects already reduced to string[]).
 export interface ActivityInput {
-  goals: string[]; // resolved shortname strings
+  goals: string[]; // resolved shortnames — named in the note's "targeting" clause
+  goalDetails: string[]; // full short-term goal sentences — context for the model
   promptingLevel: string[];
   promptingType: string[];
   redirection: string[];
@@ -93,6 +94,7 @@ export interface RenderedActivity {
   segmentName: string;
   domains: string;
   goals: string;
+  goalDetails: string;
   promptingLevel: string;
   promptingType: string;
   redirection: string;
@@ -121,6 +123,7 @@ export function buildRegularActivities(
       segmentName: def.segmentName || "",
       domains: def.domains.join(", "),
       goals: (input?.goals ?? []).join(", "),
+      goalDetails: (input?.goalDetails ?? []).join("; "),
       promptingLevel: (input?.promptingLevel ?? []).join(", "),
       promptingType: (input?.promptingType ?? []).join(", "),
       redirection: (input?.redirection ?? []).join(", "),
@@ -256,7 +259,8 @@ export interface FilmingContextArgs {
   teacher: Teacher;
   role: Role;
   rolePhrase: string;
-  selectedGoals: string[];
+  selectedGoals: string[]; // shortnames named in the note
+  selectedGoalDetails: string[]; // full sentences — context for the model
   roleData: string;
   additionalContext?: string;
 }
@@ -267,6 +271,7 @@ export function filmingContext(a: FilmingContextArgs): TemplateContext {
     role: { phrase: a.rolePhrase },
     teacher: teacherPromptContext(a.teacher),
     selectedGoals: a.selectedGoals,
+    selectedGoalDetails: a.selectedGoalDetails,
     roleData: a.roleData,
     additionalContext: a.additionalContext ?? "",
   };
