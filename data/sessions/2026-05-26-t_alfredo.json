@@ -1,8 +1,0 @@
-{
-  "date": "2026-05-26",
-  "teacherId": "t_alfredo",
-  "students": [
-    { "studentId": "s_joel", "goalIds": ["g_joel_1", "g_joel_2", "g_joel_5"], "mode": "regular" },
-    { "studentId": "s_alisia", "goalIds": ["g_alisia_1"], "mode": "regular" }
-  ]
-}
