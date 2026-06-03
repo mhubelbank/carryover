@@ -2159,7 +2159,11 @@ function buildSessionMetadata(
         mode === "filming-day"
           ? st.filmingGoalIds.slice()
           : Array.from(new Set(st.regular.flatMap((r) => r.goals)));
-      return { studentId: s.id, goalIds, mode };
+      // Persist absence so Today/Schedule can mark it; omit the key when present
+      // to keep files tidy. Absent students carry no goalIds.
+      return st.absent
+        ? { studentId: s.id, goalIds: [], mode, absent: true }
+        : { studentId: s.id, goalIds, mode };
     }),
   };
 }

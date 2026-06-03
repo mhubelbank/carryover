@@ -65,6 +65,8 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate, on
   // `${date}|${teacherId}`. Loaded once; Today remounts on return from Generate,
   // so it refreshes after she generates notes.
   const [generatedByKey, setGeneratedByKey] = useState<Map<string, Set<string>>>(() => new Map());
+  // Students marked absent in a generated session, keyed `${date}|${teacherId}`.
+  const [absentByKey, setAbsentByKey] = useState<Map<string, Set<string>>>(() => new Map());
   useEffect(() => {
     if (!client) return;
     let cancelled = false;
@@ -72,13 +74,20 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate, on
       .then((all) => {
         if (cancelled) return;
         const m = new Map<string, Set<string>>();
+        const absent = new Map<string, Set<string>>();
         for (const s of all) {
-          m.set(`${s.date}|${s.teacherId}`, new Set(s.students.map((e) => e.studentId)));
+          const key = `${s.date}|${s.teacherId}`;
+          m.set(key, new Set(s.students.map((e) => e.studentId)));
+          absent.set(key, new Set(s.students.filter((e) => e.absent).map((e) => e.studentId)));
         }
         setGeneratedByKey(m);
+        setAbsentByKey(absent);
       })
       .catch(() => {
-        if (!cancelled) setGeneratedByKey(new Map());
+        if (!cancelled) {
+          setGeneratedByKey(new Map());
+          setAbsentByKey(new Map());
+        }
       });
     return () => {
       cancelled = true;
@@ -366,6 +375,7 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate, on
             const teacher = teacherById.get(session.teacherId);
             const color = teacherColor(teacher?.color);
             const generatedSet = generatedByKey.get(`${selectedIso}|${session.teacherId}`);
+            const absentSet = absentByKey.get(`${selectedIso}|${session.teacherId}`);
             const allGenerated =
               !!generatedSet && session.studentIds.every((id) => generatedSet.has(id));
             return (
@@ -443,6 +453,7 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate, on
                     const student = studentById.get(id);
                     const isOverdue = overdue.has(id);
                     const isGenerated = !!generatedSet?.has(id);
+                    const isAbsent = !!absentSet?.has(id);
                     const customized = isCustomized(session.teacherId, session.timeSlot, id);
                     return (
                       <button
@@ -476,7 +487,23 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate, on
                             </span>
                           )
                         )}
-                        {student ? fullName(student) : "Unknown"}
+                        <span
+                          style={
+                            isAbsent
+                              ? { textDecoration: "line-through", color: "var(--color-text-tertiary)" }
+                              : undefined
+                          }
+                        >
+                          {student ? fullName(student) : "Unknown"}
+                        </span>
+                        {isAbsent && (
+                          <span
+                            title="Marked absent in a generated session"
+                            style={{ color: "var(--color-text-tertiary)", lineHeight: 0, flexShrink: 0 }}
+                          >
+                            <Icon name="user-off" size={13} />
+                          </span>
+                        )}
                         {customized && (
                           <span
                             title="Customized this week (differs from the usual schedule)"
