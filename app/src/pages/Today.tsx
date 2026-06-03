@@ -117,18 +117,21 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate, on
 
   const now = startOfDay(new Date());
 
-  // IEP status is relative to the real current date, not the previewed day.
+  // Overdue is relative to the real current date (a standing reminder on any day
+  // you preview). "Tomorrow" is relative to the PREVIEWED day, so it shows only
+  // when you're viewing the day before the review — and never doubles up with the
+  // IEP-review event banner that appears on the review day itself.
   const overdue = new Set<string>();
   const overdueStudents: Student[] = [];
   const tomorrowStudents: Student[] = [];
   for (const student of students) {
     const date = parseDate(student.nextIepReview);
     if (!date) continue;
-    const delta = daysBetween(now, date);
-    if (delta < 0) {
+    if (daysBetween(now, date) < 0) {
       overdue.add(student.id);
       overdueStudents.push(student);
-    } else if (delta === 1) {
+    }
+    if (daysBetween(selected, date) === 1) {
       tomorrowStudents.push(student);
     }
   }

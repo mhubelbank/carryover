@@ -5,6 +5,9 @@ import { AnthropicError, validateApiKey } from "../clients/anthropic";
 import { GitHubError, validateGitHubToken } from "../clients/github";
 import { REPO_CONFIG, useAuth } from "../context/AuthContext";
 import { useTerm } from "../context/TermContext";
+import { triggerDownload, downloadText, zipStore } from "../clients/download";
+import { buildXlsx } from "../clients/xlsx";
+import { backupJson, csvBundleEntries, termSlug, workbookSheets } from "../domain/export";
 import { formatShort, parseDate, startOfDay, toISODate } from "../domain/dates";
 import { termLabel, type ArchivedTerm, type StudentSnapshot } from "../domain/term";
 
@@ -517,15 +520,62 @@ function KeyRow({
 }
 
 function ExportSection() {
+  const { state } = useTerm();
+  const data = state.status === "ready" ? state.data : null;
+  const slug = data ? termSlug(data.term.label) : "term";
+
+  const downloadBackup = () => {
+    if (!data) return;
+    downloadText(`sesis-${slug}-backup.json`, backupJson(data), "application/json");
+  };
+
+  const downloadBundle = () => {
+    if (!data) return;
+    const bytes = zipStore(csvBundleEntries(data));
+    triggerDownload(`sesis-${slug}-data.zip`, new Blob([bytes], { type: "application/zip" }));
+  };
+
+  const downloadExcel = () => {
+    if (!data) return;
+    const bytes = buildXlsx(workbookSheets(data));
+    triggerDownload(
+      `sesis-${slug}.xlsx`,
+      new Blob([bytes], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      }),
+    );
+  };
+
   return (
     <div className="card" style={{ marginBottom: "1rem" }}>
       <h3 className="card__title">Export</h3>
       <p style={{ fontSize: 13, color: "var(--color-text-secondary)", marginBottom: 14 }}>
         Download your data for backup or sharing.
       </p>
-      <p style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>
-        Export becomes available after you set up a term.
-      </p>
+      {!data ? (
+        <p style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>
+          Export becomes available after you set up a term.
+        </p>
+      ) : (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button className="button button--small" onClick={downloadExcel}>
+            Excel (your sheet format)
+          </button>
+          <button className="button button--small" onClick={downloadBundle}>
+            CSV bundle (.zip)
+          </button>
+          <button
+            className="button button--small"
+            disabled
+            title="Available once generated notes are cached locally"
+          >
+            Recent notes (.txt)
+          </button>
+          <button className="button button--small" onClick={downloadBackup}>
+            Full JSON backup
+          </button>
+        </div>
+      )}
     </div>
   );
 }
