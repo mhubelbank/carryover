@@ -15,6 +15,7 @@ import {
 } from "../domain/dates";
 import {
   deleteWeekSchedule,
+  loadSessions,
   loadWeekSchedule,
   writeWeekSchedule,
 } from "../domain/data";
@@ -95,6 +96,9 @@ export function Schedule({ onNavigate, onOpenStudent }: Props) {
   // forces re-measurement on viewport resize (pill wrapping is width-dependent).
   const [cellHeight, setCellHeight] = useState(DEFAULT_CELL_PX);
   const [resizeTick, setResizeTick] = useState(0);
+  // Students marked absent in a generated session, keyed `${date}|${teacherId}`,
+  // so week-mode cells can flag the absence (mirrors Today).
+  const [absentByKey, setAbsentByKey] = useState<Map<string, Set<string>>>(() => new Map());
 
   // (day|slot) -> studentIds.
   const cells = useMemo(() => {
@@ -206,6 +210,27 @@ export function Schedule({ onNavigate, onOpenStudent }: Props) {
       cancelled = true;
     };
   }, [weekKey, client, state]);
+
+  // Load generated-session absences once (keyed date|teacher) for week-cell flags.
+  useEffect(() => {
+    if (!client) return;
+    let cancelled = false;
+    loadSessions(client)
+      .then((all) => {
+        if (cancelled) return;
+        const m = new Map<string, Set<string>>();
+        for (const s of all) {
+          m.set(`${s.date}|${s.teacherId}`, new Set(s.students.filter((e) => e.absent).map((e) => e.studentId)));
+        }
+        setAbsentByKey(m);
+      })
+      .catch(() => {
+        if (!cancelled) setAbsentByKey(new Map());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client]);
 
   // Stretch the time axis so the uniform cell fits in the tightest gap. Longer
   // blocks then render proportionally taller than that floor.
@@ -846,6 +871,12 @@ export function Schedule({ onNavigate, onOpenStudent }: Props) {
                                 ? teacherById.get(student.teacherId)
                                 : undefined;
                               const color = teacherColor(teacher?.color);
+                              const isAbsent =
+                                !!columnDate &&
+                                !!student &&
+                                !!absentByKey
+                                  .get(`${toISODate(columnDate)}|${student.teacherId}`)
+                                  ?.has(studentId);
                               return (
                                 <span
                                   key={`${studentId}-${i}`}
@@ -859,9 +890,14 @@ export function Schedule({ onNavigate, onOpenStudent }: Props) {
                                     color: color.text,
                                     borderRadius: "var(--border-radius-md)",
                                     whiteSpace: "nowrap",
+                                    textDecoration: isAbsent ? "line-through" : undefined,
+                                    opacity: isAbsent ? 0.6 : 1,
                                   }}
                                 >
                                   {student ? fullName(student) : "Unknown"}
+                                  {isAbsent && (
+                                    <Icon name="user-off" size={10} label="Marked absent" />
+                                  )}
                                   {isCustomized(studentId) && (
                                     <Icon name="pencil" size={10} label="Customized this week" />
                                   )}

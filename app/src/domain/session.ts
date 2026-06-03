@@ -4,6 +4,9 @@ export interface SessionStudentEntry {
   studentId: string;
   goalIds: string[];
   mode: Mode;
+  // Marked absent in Generate for this session. Absent students still get a row
+  // (so Today/Schedule can show the absence) but their note is just "X was absent."
+  absent?: boolean;
 }
 
 export interface SessionMetadata {
