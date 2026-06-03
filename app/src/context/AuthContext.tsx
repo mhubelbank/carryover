@@ -19,6 +19,9 @@ interface Keys {
 interface AuthContextValue {
   keys: Keys | null;
   signIn: (keys: Keys) => void;
+  // Replace a single key in place, leaving the other untouched. No-op if not
+  // already signed in (both keys must exist before a partial update makes sense).
+  updateKeys: (partial: Partial<Keys>) => void;
   signOut: () => void;
   // Test mode pretends the data repo is empty for this session without
   // actually deleting anything. Refresh exits test mode.
@@ -56,6 +59,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         storage.set(StorageKeys.anthropicApiKey, newKeys.anthropicApiKey);
         storage.set(StorageKeys.githubToken, newKeys.githubToken);
         setKeys(newKeys);
+      },
+      updateKeys: (partial) => {
+        const base = keys ?? loadKeys();
+        if (!base) return;
+        const next = { ...base, ...partial };
+        if (partial.anthropicApiKey !== undefined) {
+          storage.set(StorageKeys.anthropicApiKey, next.anthropicApiKey);
+        }
+        if (partial.githubToken !== undefined) {
+          storage.set(StorageKeys.githubToken, next.githubToken);
+        }
+        setKeys(next);
       },
       signOut: () => {
         storage.remove(StorageKeys.anthropicApiKey);

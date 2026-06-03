@@ -1,7 +1,9 @@
 import { useState, type ReactNode } from "react";
 import { Icon } from "../components/Icon";
 import { Nav, type NavPage } from "../components/Nav";
-import { useAuth } from "../context/AuthContext";
+import { AnthropicError, validateApiKey } from "../clients/anthropic";
+import { GitHubError, validateGitHubToken } from "../clients/github";
+import { REPO_CONFIG, useAuth } from "../context/AuthContext";
 import { useTerm } from "../context/TermContext";
 import { formatShort, parseDate, startOfDay, toISODate } from "../domain/dates";
 import { termLabel, type ArchivedTerm, type StudentSnapshot } from "../domain/term";
@@ -364,14 +366,152 @@ function CatalogsSection({ onNavigate }: { onNavigate: (page: NavPage) => void }
 }
 
 function KeysSection() {
-  // Slice 1: show masked values, allow update via Sign Out + re-entry.
-  // Inline editing comes in a later slice.
+  const { keys, updateKeys } = useAuth();
   return (
     <div className="card" style={{ marginBottom: "1rem" }}>
       <h3 className="card__title">Keys</h3>
-      <p style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>
-        Both keys are set. Sign out below to replace them.
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <KeyRow
+          label="Anthropic API key"
+          value={keys?.anthropicApiKey ?? ""}
+          placeholder="sk-ant-…"
+          validate={(v) => validateApiKey(v)}
+          onSave={(v) => updateKeys({ anthropicApiKey: v })}
+        />
+        <KeyRow
+          label="GitHub personal access token"
+          value={keys?.githubToken ?? ""}
+          placeholder="github_pat_… or ghp_…"
+          validate={(v) => validateGitHubToken(v, REPO_CONFIG.owner, REPO_CONFIG.repo)}
+          onSave={(v) => updateKeys({ githubToken: v })}
+        />
+      </div>
+      <p className="field-hint" style={{ marginTop: 12 }}>
+        Stored only in this browser. Update the GitHub token if data is missing, and the Anthropic key if note generation fails.
       </p>
+    </div>
+  );
+}
+
+// Mask a stored secret for display: visible scheme prefix + dots + last 4, so
+// she can tell which key is set and recognize it without revealing it.
+function maskKey(value: string): string {
+  if (!value) return "Not set";
+  if (value.length <= 8) return "••••••••";
+  return `${value.slice(0, 6)}••••••••${value.slice(-4)}`;
+}
+
+function formatKeyError(err: unknown): string {
+  if (err instanceof AnthropicError) return `Key rejected: ${err.message}`;
+  if (err instanceof GitHubError) return `Token rejected: ${err.message}`;
+  return err instanceof Error ? err.message : "Couldn't validate — check your connection.";
+}
+
+// One key row: masked value + Update, expanding to a password field + Save/Cancel.
+// Save validates the new key against its service first, so a typo can't silently
+// break the app. Each row saves independently, so editing one never disturbs the other.
+function KeyRow({
+  label,
+  value,
+  placeholder,
+  validate,
+  onSave,
+}: {
+  label: string;
+  value: string;
+  placeholder: string;
+  validate: (value: string) => Promise<unknown>;
+  onSave: (value: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [validating, setValidating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const close = () => {
+    setEditing(false);
+    setDraft("");
+    setError(null);
+    setValidating(false);
+  };
+
+  const save = async () => {
+    const v = draft.trim();
+    if (!v || validating) return;
+    setValidating(true);
+    setError(null);
+    try {
+      await validate(v);
+      onSave(v);
+      close();
+    } catch (err) {
+      setError(formatKeyError(err));
+      setValidating(false);
+    }
+  };
+
+  return (
+    <div>
+      <label className="label">{label}</label>
+      <div style={{ display: "flex", gap: 8 }}>
+        {editing ? (
+          <>
+            <input
+              className="input"
+              type="password"
+              autoFocus
+              autoComplete="off"
+              spellCheck={false}
+              placeholder={placeholder}
+              value={draft}
+              disabled={validating}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void save();
+                else if (e.key === "Escape") close();
+              }}
+            />
+            <button
+              className="button button--small"
+              style={{ flexShrink: 0 }}
+              onClick={close}
+              disabled={validating}
+            >
+              Cancel
+            </button>
+            <button
+              className="button button--small button--primary"
+              style={{ flexShrink: 0 }}
+              onClick={() => void save()}
+              disabled={!draft.trim() || validating}
+            >
+              {validating ? "Checking…" : "Save"}
+            </button>
+          </>
+        ) : (
+          <>
+            <input
+              className="input"
+              type="text"
+              readOnly
+              value={maskKey(value)}
+              style={{ fontFamily: "var(--font-mono)", color: "var(--color-text-secondary)" }}
+            />
+            <button
+              className="button button--small"
+              style={{ flexShrink: 0 }}
+              onClick={() => setEditing(true)}
+            >
+              Update
+            </button>
+          </>
+        )}
+      </div>
+      {error && (
+        <p className="field-hint" style={{ color: "var(--color-text-danger)" }}>
+          {error}
+        </p>
+      )}
     </div>
   );
 }
