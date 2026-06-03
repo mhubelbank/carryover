@@ -88,6 +88,8 @@ interface Props {
   // Today's per-session "Generate N notes" button). Consumed once on arrival.
   target?: { date: string; teacherId: string; studentIds: string[]; timeSlot?: string } | null;
   onTargetConsumed?: () => void;
+  // Open a student's IEP review (soft-block nudge for overdue students).
+  onReviewIep?: (studentId: string) => void;
 }
 
 interface StudentState {
@@ -147,7 +149,7 @@ function blankFilming(): FilmingFieldValues {
   };
 }
 
-export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
+export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: Props) {
   const { state, client } = useTerm();
   const { keys } = useAuth();
 
@@ -419,6 +421,12 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
       (s) => !sessionStudentIds.includes(s.id) && (studentState[s.id]?.included ?? false),
     ),
   ];
+  // Soft block: surface included students whose IEP review has passed. Generation
+  // is NOT prevented — this just nudges her to review (clearing the date there).
+  const iepOverdue = includedStudents.filter((s) => {
+    const d = parseDate(s.nextIepReview);
+    return d != null && d.getTime() < startOfDay(new Date()).getTime();
+  });
   const canGenerate =
     teacher !== undefined &&
     includedStudents.length > 0 &&
@@ -616,6 +624,28 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
           {includedStudents.length === 1 ? "" : "s"}
         </p>
       </div>
+
+      {onReviewIep && iepOverdue.length > 0 && (
+        <div
+          className="banner banner--warning"
+          style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: "1rem" }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <Icon name="clipboard-check" size={16} />
+            <span>
+              IEP review overdue for {iepOverdue.map((s) => s.firstName).join(", ")} — notes still
+              generate; review when you can.
+            </span>
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {iepOverdue.map((s) => (
+              <button key={s.id} className="button button--small" onClick={() => onReviewIep(s.id)}>
+                Review {s.firstName} →
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Top controls — pick the session (date · teacher · time slot) and mode.
           Deep-linking from Today pre-fills date/teacher/slot. A top accent in the

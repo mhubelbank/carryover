@@ -521,6 +521,21 @@ export async function loadIepHistory(
   return reviews.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 }
 
+// Append one IEP review to a student's log (creates the file if absent). Reviews
+// are infrequent (≤ a couple per student per year), so the read-for-sha here
+// won't hit the rapid read-after-write staleness that term-history avoids.
+export async function appendIepReview(
+  client: GitHubClient,
+  studentId: string,
+  review: IepReview,
+): Promise<void> {
+  const path = `data/iep-history/${studentId}.jsonl`;
+  const existing = await client.readFile(path);
+  const prior = existing?.text ?? "";
+  const base = prior && !prior.endsWith("\n") ? `${prior}\n` : prior;
+  await client.writeFile(path, `${base}${JSON.stringify(review)}\n`, "data: append IEP review", existing?.sha);
+}
+
 // Normalize a raw teacher record from teachers.json — handles older shapes that
 // predate `sessionCaptures` (still on disk on the data branch) and drops the
 // retired `perStudentFields` field so the in-memory type matches.

@@ -30,7 +30,7 @@ function Router() {
 function Pages() {
   const [page, setPage] = useState<NavPage>("today");
   const [studentTarget, setStudentTarget] = useState<
-    { id: string; view: "detail" | "goals" } | null
+    { id: string; view: "detail" | "goals" | "iep-review" } | null
   >(null);
   const [openTeacherId, setOpenTeacherId] = useState<string | null>(null);
   const [generateTarget, setGenerateTarget] = useState<
@@ -53,11 +53,14 @@ function Pages() {
   );
 
   const clearStudentTarget = useCallback(() => setStudentTarget(null), []);
-  const openStudent = useCallback((id: string, view: "detail" | "goals" = "detail") => {
-    if (!confirmNavAway()) return;
-    setStudentTarget({ id, view });
-    setPage("students");
-  }, []);
+  const openStudent = useCallback(
+    (id: string, view: "detail" | "goals" | "iep-review" = "detail") => {
+      if (!confirmNavAway()) return;
+      setStudentTarget({ id, view });
+      setPage("students");
+    },
+    [],
+  );
   const clearOpenTeacher = useCallback(() => setOpenTeacherId(null), []);
   const openTeacher = useCallback((id: string) => {
     if (!confirmNavAway()) return;
@@ -134,6 +137,7 @@ function Pages() {
           onNavigate={nav}
           target={generateTarget}
           onTargetConsumed={clearGenerateTarget}
+          onReviewIep={(id) => openStudent(id, "iep-review")}
         />
       );
     default:
