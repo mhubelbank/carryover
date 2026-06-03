@@ -73,7 +73,7 @@ import { resolveRoles } from "../domain/role";
 import type { Goal } from "../domain/goal";
 import type { SessionMetadata } from "../domain/session";
 import { displayName, fullName, isActiveOn, studentContext, type Student } from "../domain/student";
-import type { Activity, Mode, Role, SessionCapture, Teacher } from "../domain/teacher";
+import { teacherColor, type Activity, type Mode, type Role, type SessionCapture, type Teacher } from "../domain/teacher";
 
 // Human-readable label for each generation pass, shown in the progress status.
 const PASS_LABEL: Record<Pass, string> = {
@@ -605,15 +605,28 @@ export function Generate({ onNavigate, target, onTargetConsumed }: Props) {
 
       <div style={{ marginBottom: "1rem" }}>
         <h1 style={{ fontSize: 22, fontWeight: 500, margin: 0 }}>Generate notes</h1>
-        <p style={{ margin: "4px 0 0 0", color: "var(--color-text-secondary)", fontSize: 14 }}>
+        <p style={{ margin: "4px 0 0 0", color: "var(--color-text-secondary)", fontSize: 14, display: "flex", alignItems: "center", gap: 7 }}>
+          {teacher && (
+            <span
+              style={{ width: 10, height: 10, borderRadius: 3, background: teacherColor(teacher.color).bg, flexShrink: 0 }}
+              aria-hidden
+            />
+          )}
           {teacher ? `${teacher.name}'s caseload` : "—"} · {includedStudents.length} student
           {includedStudents.length === 1 ? "" : "s"}
         </p>
       </div>
 
       {/* Top controls — pick the session (date · teacher · time slot) and mode.
-          Deep-linking from Today pre-fills date/teacher/slot. */}
-      <div className="card" style={{ marginBottom: "1rem" }}>
+          Deep-linking from Today pre-fills date/teacher/slot. A top accent in the
+          teacher's color ties the screen to them, mirroring Today's session cards. */}
+      <div
+        className="card"
+        style={{
+          marginBottom: "1rem",
+          borderTop: `4px solid ${teacherColor(teacher?.color).bg}`,
+        }}
+      >
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "14px 20px" }}>
           <div>
             <label className="label">Date</label>
