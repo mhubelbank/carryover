@@ -416,7 +416,7 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate, on
                           gap: 4,
                           background: isOverdue
                             ? "var(--color-background-danger)"
-                            : "var(--color-background-tertiary)",
+                            : "var(--color-background-pill)",
                           color: isOverdue
                             ? "var(--color-text-danger)"
                             : "var(--color-text-primary)",

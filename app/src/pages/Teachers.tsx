@@ -194,7 +194,7 @@ function TeacherList({
                       fontSize: 11,
                       padding: "1px 7px",
                       borderRadius: "var(--border-radius-md)",
-                      background: "var(--color-background-secondary)",
+                      background: "var(--color-background-pill)",
                       color: "var(--color-text-secondary)",
                     }}
                   >

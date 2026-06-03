@@ -380,7 +380,7 @@ export function Activities({ onNavigate, onOpenStudent }: Props) {
       .filter((s) => !s.archived && hasFieldValue(s.fields[f.key]))
       .map((s) => ({
         label: s.firstName || s.id,
-        bg: "var(--color-background-tertiary)",
+        bg: "var(--color-background-pill)",
         text: "var(--color-text-secondary)",
       }));
     return { pills, emptyText: "Unused" };
@@ -1076,7 +1076,7 @@ function MembersPicker({
                 display: "inline-flex",
                 alignItems: "center",
                 gap: 6,
-                background: m.bg ?? "var(--color-background-tertiary)",
+                background: m.bg ?? "var(--color-background-pill)",
                 color: m.text ?? "var(--color-text-secondary)",
                 padding: "2px 6px 2px 10px",
                 borderRadius: 999,
