@@ -19,7 +19,7 @@ export function backupJson(data: TermData): string {
     goals: data.goals,
     schedule: data.schedule,
     activities: data.activities,
-    filmingRoles: data.filmingRoles,
+    newsRoles: data.newsRoles,
     studentFields: data.studentFields,
   };
   return `${JSON.stringify(payload, null, 2)}\n`;
@@ -35,7 +35,7 @@ export function csvBundleEntries(data: TermData): ZipEntry[] {
     { name: "schedule.csv", content: scheduleToCsv(data.schedule) },
     { name: "teachers.json", content: json(data.teachers) },
     { name: "activities.json", content: json(data.activities) },
-    { name: "filming-roles.json", content: json(data.filmingRoles) },
+    { name: "news-roles.json", content: json(data.newsRoles) },
     { name: "student-fields.json", content: json(data.studentFields) },
     { name: "term.json", content: json(data.term) },
   ];

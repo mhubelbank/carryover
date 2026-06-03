@@ -15,7 +15,7 @@ import {
   removeFromTermHistory,
   upsertTermHistory,
   writeActivities,
-  writeFilmingRoles,
+  writeNewsRoles,
   writeGoals,
   writeSchedule,
   writeStudentFields,
@@ -85,8 +85,8 @@ interface TermContextValue {
   saveSchedule: (schedule: ScheduleEntry[]) => Promise<void>;
   // Persist the shared activity catalog: writes activities.json.
   saveActivities: (activities: Activity[]) => Promise<void>;
-  // Persist the shared filming-role catalog: writes filming-roles.json.
-  saveFilmingRoles: (roles: Role[]) => Promise<void>;
+  // Persist the shared news-role catalog: writes news-roles.json.
+  saveNewsRoles: (roles: Role[]) => Promise<void>;
   // Persist the configurable student-field catalog: writes student-fields.json.
   saveStudentFields: (fields: StudentField[]) => Promise<void>;
 }
@@ -339,13 +339,13 @@ export function TermProvider({ children }: { children: ReactNode }) {
     [client],
   );
 
-  const saveFilmingRoles = useCallback(
-    async (filmingRoles: Role[]) => {
+  const saveNewsRoles = useCallback(
+    async (newsRoles: Role[]) => {
       if (!client) throw new Error("Not connected to the data repo");
-      const newSha = await writeFilmingRoles(client, filmingRoles, shasRef.current.filmingRoles);
-      shasRef.current = { ...shasRef.current, filmingRoles: newSha };
+      const newSha = await writeNewsRoles(client, newsRoles, shasRef.current.newsRoles);
+      shasRef.current = { ...shasRef.current, newsRoles: newSha };
       setState((prev) =>
-        prev.status === "ready" ? { ...prev, data: { ...prev.data, filmingRoles } } : prev,
+        prev.status === "ready" ? { ...prev, data: { ...prev.data, newsRoles } } : prev,
       );
     },
     [client],
@@ -396,7 +396,7 @@ export function TermProvider({ children }: { children: ReactNode }) {
       saveTeachers,
       saveSchedule,
       saveActivities,
-      saveFilmingRoles,
+      saveNewsRoles,
       saveStudentFields,
     }),
     [
@@ -417,7 +417,7 @@ export function TermProvider({ children }: { children: ReactNode }) {
       saveTeachers,
       saveSchedule,
       saveActivities,
-      saveFilmingRoles,
+      saveNewsRoles,
       saveStudentFields,
     ],
   );

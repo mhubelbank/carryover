@@ -30,7 +30,7 @@ interface Props {
   onOpenStudent: (id: string) => void;
 }
 
-// Filming field-component keys, with display labels, that a role can enable.
+// News field-component keys, with display labels, that a role can enable.
 const FIELD_LABELS: Record<string, string> = {
   visualCues: "Visual cues",
   facialExpressions: "Facial expressions",
@@ -57,11 +57,11 @@ type View =
   | { kind: "detail"; cat: "role"; id: string }
   | { kind: "detail"; cat: "field"; idx: number };
 
-// The shared catalogs (activities, filming roles, student fields). Teachers/
+// The shared catalogs (activities, news roles, student fields). Teachers/
 // students reference these; here Emily edits the catalogs. Each catalog is a
 // compact table (name + who uses it); clicking a row opens its detail editor.
 export function Activities({ onNavigate, onOpenStudent }: Props) {
-  const { state, saveActivities, saveFilmingRoles, saveStudentFields, saveTeachers, saveStudents } =
+  const { state, saveActivities, saveNewsRoles, saveStudentFields, saveTeachers, saveStudents } =
     useTerm();
   const [acts, setActs] = useState<Activity[]>(() =>
     state.status === "ready" ? state.data.activities.map(cloneActivity) : [],
@@ -70,10 +70,10 @@ export function Activities({ onNavigate, onOpenStudent }: Props) {
     state.status === "ready" ? state.data.activities.map(cloneActivity) : [],
   );
   const [roles, setRoles] = useState<Role[]>(() =>
-    state.status === "ready" ? state.data.filmingRoles.map(cloneRole) : [],
+    state.status === "ready" ? state.data.newsRoles.map(cloneRole) : [],
   );
   const [rolesBase, setRolesBase] = useState<Role[]>(() =>
-    state.status === "ready" ? state.data.filmingRoles.map(cloneRole) : [],
+    state.status === "ready" ? state.data.newsRoles.map(cloneRole) : [],
   );
   const [sf, setSf] = useState<StudentField[]>(() =>
     state.status === "ready" ? state.data.studentFields.map(cloneField) : [],
@@ -170,7 +170,7 @@ export function Activities({ onNavigate, onOpenStudent }: Props) {
   };
   const removeRole = (id: string): boolean => {
     const r = roles.find((x) => x.id === id);
-    if (!confirmDelete("filming role", r?.name ?? "", roleRefs.get(id) ?? 0, "teacher")) return false;
+    if (!confirmDelete("news role", r?.name ?? "", roleRefs.get(id) ?? 0, "teacher")) return false;
     setRoles((d) => d.filter((x) => x.id !== id));
     return true;
   };
@@ -216,9 +216,9 @@ export function Activities({ onNavigate, onOpenStudent }: Props) {
         t.id === teacherId
           ? {
               ...t,
-              filmingRoleIds: on
-                ? [...new Set([...t.filmingRoleIds, roleId])]
-                : t.filmingRoleIds.filter((id) => id !== roleId),
+              newsRoleIds: on
+                ? [...new Set([...t.newsRoleIds, roleId])]
+                : t.newsRoleIds.filter((id) => id !== roleId),
             }
           : t,
       ),
@@ -299,7 +299,7 @@ export function Activities({ onNavigate, onOpenStudent }: Props) {
       }
     }
     if (cleanedRoles.some((r) => r.name === "")) {
-      setError("Every filming role needs a name.");
+      setError("Every news role needs a name.");
       return;
     }
     if (cleanedFields.some((f) => f.label === "")) {
@@ -329,7 +329,7 @@ export function Activities({ onNavigate, onOpenStudent }: Props) {
     setSaving(true);
     try {
       if (actsDirty) await saveActivities(cleanedActs);
-      if (rolesDirty) await saveFilmingRoles(cleanedRoles);
+      if (rolesDirty) await saveNewsRoles(cleanedRoles);
       if (sfDirty) await saveStudentFields(cleanedFields);
       if (teachersDirty) await saveTeachers(teachers);
       if (studentsDirty) await saveStudents(students);
@@ -371,7 +371,7 @@ export function Activities({ onNavigate, onOpenStudent }: Props) {
     };
   };
   const roleUsers = (r: Role): UsedBy => ({
-    pills: teacherPills(teachers.filter((t) => t.filmingRoleIds.includes(r.id))),
+    pills: teacherPills(teachers.filter((t) => t.newsRoleIds.includes(r.id))),
     emptyText: "Unused",
   });
   const fieldUsers = (f: StudentField): UsedBy => {
@@ -404,7 +404,7 @@ export function Activities({ onNavigate, onOpenStudent }: Props) {
           <h1 style={{ fontSize: 22, fontWeight: 500, margin: 0 }}>Activities</h1>
           <p style={{ margin: "4px 0 0 0", color: "var(--color-text-secondary)", fontSize: 14 }}>
             {countLabel(acts.length, "activity", "activities")} ·{" "}
-            {countLabel(roles.length, "filming role", "filming roles")} ·{" "}
+            {countLabel(roles.length, "news role", "news roles")} ·{" "}
             {countLabel(sf.length, "student field", "student fields")}
           </p>
         </div>
@@ -436,7 +436,7 @@ export function Activities({ onNavigate, onOpenStudent }: Props) {
           ]}
         />
         <CatalogTable
-          title="Filming roles"
+          title="News roles"
           addLabel="Add role"
           onAdd={addRole}
           usedHeader="Used by teachers"
@@ -537,7 +537,7 @@ export function Activities({ onNavigate, onOpenStudent }: Props) {
                   return {
                     id: t.id,
                     name: t.name,
-                    member: t.filmingRoleIds.includes(r.id),
+                    member: t.newsRoleIds.includes(r.id),
                     bg: c.bg,
                     text: c.text,
                   };
@@ -1386,7 +1386,7 @@ function cloneTeacher(t: Teacher): Teacher {
     ...t,
     modes: [...t.modes],
     activityIds: [...t.activityIds],
-    filmingRoleIds: [...t.filmingRoleIds],
+    newsRoleIds: [...t.newsRoleIds],
     sessionCaptures: (t.sessionCaptures ?? []).map((c) => ({ ...c })),
   };
 }
