@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Icon } from "../components/Icon";
+import { Icon, type IconName } from "../components/Icon";
 import { Nav, type NavPage } from "../components/Nav";
 import { useAuth } from "../context/AuthContext";
 import { useTerm } from "../context/TermContext";
@@ -79,6 +79,8 @@ import { storage } from "../clients/storage";
 import {
   blankTrialEntry,
   blankTrials,
+  eventsToPatch,
+  expandEntryToEvents,
   trialEntryAction,
   trialEntrySentence,
   trialEntryStarted,
@@ -88,8 +90,41 @@ import {
   TRIAL_SUPPORT_TYPES,
   type TrialData,
   type TrialEntry,
+  type TrialEvent,
   type TrialSupportRow,
 } from "../domain/trial";
+
+// Symbol + short label per prompting/support type, for compact trial displays.
+const PROMPT_TYPE_ICON: Record<string, IconName> = {
+  verbal: "message",
+  visual: "eye",
+  tactile: "hand-finger",
+  gestural: "hand-finger-right",
+  modeled: "user",
+};
+const LEVEL_ABBR: Record<string, string> = {
+  "no support": "Indep",
+  minimal: "Min",
+  moderate: "Mod",
+  maximum: "Max",
+};
+
+// Shared style for a toggle button (prompting types) — active = filled pill.
+function toggleBtnStyle(active: boolean, disabled = false) {
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 4,
+    padding: "3px 9px",
+    fontSize: 12,
+    borderRadius: "var(--border-radius-md)",
+    border: `0.5px solid ${active ? "var(--color-border-secondary)" : "var(--color-border-tertiary)"}`,
+    background: active ? "var(--color-background-pill)" : "transparent",
+    color: active ? "var(--color-text-primary)" : "var(--color-text-secondary)",
+    fontWeight: active ? 500 : 400,
+    opacity: disabled ? 0.4 : 1,
+  };
+}
 
 // Human-readable label for each generation pass, shown in the progress status.
 const PASS_LABEL: Record<Pass, string> = {
@@ -428,12 +463,15 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
     });
   }, [caseload, activities.length, sessionSig]);
 
-  // Auto-save the in-progress form (debounced) so a refresh restores it. Cleared
-  // on a successful generate. Only while on the form.
+  // Auto-save the in-progress form (debounced) so a refresh — or coming back
+  // later in the day — restores it. Cleared on a successful generate. Only while
+  // on the form. `savedAt` drives the "Saved" indicator so she can trust it.
+  const [savedAt, setSavedAt] = useState<number | null>(null);
   useEffect(() => {
     if (phase !== "form") return;
     const id = setTimeout(() => {
       saveFormDraft({ date, teacherId, timeSlot, mode, activities, studentState, sessionSig });
+      setSavedAt(Date.now());
     }, 800);
     return () => clearTimeout(id);
   }, [phase, date, teacherId, timeSlot, mode, activities, studentState, sessionSig]);
@@ -785,9 +823,20 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
             {includedStudents.length === 1 ? "" : "s"}
           </p>
         </div>
-        <button className="button button--small" onClick={clearForm} title="Reset activities and every student's inputs for this session">
-          Clear form
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
+          {savedAt && (
+            <span
+              style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, color: "var(--color-text-tertiary)" }}
+              title="This form auto-saves — you can leave and come back to keep logging trials through the day."
+            >
+              <Icon name="check" size={13} />
+              Saved {new Date(savedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+            </span>
+          )}
+          <button className="button button--small" onClick={clearForm} title="Reset activities and every student's inputs for this session">
+            Clear form
+          </button>
+        </div>
       </div>
 
       {restorable.length > 0 && (
@@ -1420,10 +1469,50 @@ function TrialsPanel({
   onChange: (t: TrialData) => void;
 }) {
   const entries = value.entries ?? [];
+  const method = value.method ?? "summary";
   const setEntry = (ei: number, patch: Partial<TrialEntry>) =>
     onChange({ ...value, entries: entries.map((e, j) => (j === ei ? { ...e, ...patch } : e)) });
+  const seg = (active: boolean) => ({
+    border: "none",
+    borderRadius: 0,
+    padding: "2px 10px",
+    height: "auto",
+    fontSize: 12,
+    lineHeight: 1.4,
+    background: active ? "var(--color-background-primary)" : "transparent",
+    color: active ? "var(--color-text-primary)" : "var(--color-text-secondary)",
+    fontWeight: active ? 500 : 400,
+  });
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>Entry</span>
+        <div
+          role="group"
+          aria-label="Trial entry method"
+          style={{
+            display: "inline-flex",
+            border: "0.5px solid var(--color-border-secondary)",
+            borderRadius: "var(--border-radius-md)",
+            overflow: "hidden",
+          }}
+        >
+          <button
+            className="button button--small"
+            style={seg(method === "summary")}
+            onClick={() => onChange({ ...value, method: "summary" })}
+          >
+            Summary
+          </button>
+          <button
+            className="button button--small"
+            style={{ ...seg(method === "live"), borderLeft: "0.5px solid var(--color-border-secondary)" }}
+            onClick={() => onChange({ ...value, method: "live" })}
+          >
+            Trial-by-trial
+          </button>
+        </div>
+      </div>
       {entries.length === 0 && (
         <p style={{ margin: 0, fontSize: 12, color: "var(--color-text-tertiary)" }}>
           No measurements yet — add one per goal you're counting.
@@ -1435,6 +1524,7 @@ function TrialsPanel({
           studentName={studentName}
           pronoun={pronoun}
           goals={goals}
+          method={method}
           entry={entry}
           onChange={(patch) => setEntry(ei, patch)}
           onRemove={() => onChange({ ...value, entries: entries.filter((_, j) => j !== ei) })}
@@ -1456,6 +1546,7 @@ function TrialEntryEditor({
   studentName,
   pronoun,
   goals,
+  method,
   entry,
   onChange,
   onRemove,
@@ -1463,6 +1554,7 @@ function TrialEntryEditor({
   studentName: string;
   pronoun: string;
   goals: { id: string; shortName: string; measuredVerb: string; measuredNoun: string }[];
+  method: "summary" | "live";
   entry: TrialEntry;
   onChange: (patch: Partial<TrialEntry>) => void;
   onRemove: () => void;
@@ -1472,6 +1564,20 @@ function TrialEntryEditor({
     onChange({ rows: rows.map((r, j) => (j === ri ? { ...r, ...patch } : r)) });
   const preview = trialEntrySentence(studentName, pronoun, entry);
   const err = trialError(entry);
+  // Compact, scannable summary of the aggregate — one chip per support level
+  // used (count + level + type icons), plus a failed chip.
+  const successRows = rows.filter((r) => (Number(r.count) || 0) > 0);
+  const failedCount = entry.failed.trim() !== "" ? Number(entry.failed) || 0 : trialFailedAuto(entry);
+  const chip = (ok: boolean) => ({
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 4,
+    padding: "2px 8px",
+    fontSize: 12,
+    borderRadius: "var(--border-radius-md)",
+    background: `color-mix(in srgb, var(${ok ? "--color-background-success" : "--color-background-danger"}) 60%, transparent)`,
+    color: ok ? "var(--color-text-success)" : "var(--color-text-danger)",
+  });
   return (
     <div
       style={{
@@ -1520,16 +1626,19 @@ function TrialEntryEditor({
         </button>
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
-        <div style={{ width: 80 }}>
-          <label className="label">Trials</label>
-          <input
-            className="input"
-            type="number"
-            min={0}
-            value={entry.total}
-            onChange={(e) => onChange({ total: e.target.value })}
-          />
-        </div>
+        {method === "summary" && (
+          <div>
+            <label className="label">Trials</label>
+            <input
+              className="input"
+              type="text"
+              inputMode="numeric"
+              style={{ width: 42 }}
+              value={entry.total}
+              onChange={(e) => onChange({ total: e.target.value.replace(/\D/g, "") })}
+            />
+          </div>
+        )}
         <div style={{ flex: 1, minWidth: 200 }}>
           <label className="label">What is being measured? E.g. [ answered ] [ WH questions ]</label>
           <div style={{ display: "flex", gap: 8 }}>
@@ -1550,6 +1659,10 @@ function TrialEntryEditor({
           </div>
         </div>
       </div>
+      {method === "live" ? (
+        <LiveTrialFields entry={entry} onChange={onChange} />
+      ) : (
+      <>
       <div>
         <label className="label">Successful attempts</label>
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -1557,12 +1670,12 @@ function TrialEntryEditor({
             <div key={ri} style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
               <input
                 className="input"
-                type="number"
-                min={0}
-                style={{ width: 60, background: "color-mix(in srgb, var(--color-background-success) 55%, transparent)" }}
+                type="text"
+                inputMode="numeric"
+                style={{ width: 42, background: "color-mix(in srgb, var(--color-background-success) 55%, transparent)" }}
                 placeholder="0"
                 value={row.count}
-                onChange={(e) => setRow(ri, { count: e.target.value })}
+                onChange={(e) => setRow(ri, { count: e.target.value.replace(/\D/g, "") })}
               />
               <span style={{ fontSize: 13, fontStyle: "italic", color: "var(--color-text-secondary)" }}>of</span>
               <span
@@ -1582,7 +1695,7 @@ function TrialEntryEditor({
               <span style={{ fontSize: 13, fontStyle: "italic", color: "var(--color-text-secondary)" }}>with</span>
               <select
                 className="select"
-                style={{ width: 130 }}
+                style={{ width: "auto" }}
                 value={row.level}
                 onChange={(e) => setRow(ri, { level: e.target.value })}
               >
@@ -1592,23 +1705,26 @@ function TrialEntryEditor({
                   </option>
                 ))}
               </select>
-              <span style={{ display: "inline-flex", gap: 8, flexWrap: "wrap" }}>
-                {TRIAL_SUPPORT_TYPES.map((t) => (
-                  <label
-                    key={t}
-                    style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 12, opacity: row.level === "no support" ? 0.4 : 1 }}
-                  >
-                    <input
-                      type="checkbox"
-                      disabled={row.level === "no support"}
-                      checked={row.types.includes(t)}
-                      onChange={(e) =>
-                        setRow(ri, { types: e.target.checked ? [...row.types, t] : row.types.filter((x) => x !== t) })
+              <span style={{ display: "inline-flex", gap: 6, flexWrap: "wrap" }}>
+                {TRIAL_SUPPORT_TYPES.map((t) => {
+                  const active = row.types.includes(t);
+                  const disabled = row.level === "no support";
+                  return (
+                    <button
+                      key={t}
+                      type="button"
+                      className="button"
+                      disabled={disabled}
+                      style={toggleBtnStyle(active, disabled)}
+                      onClick={() =>
+                        setRow(ri, { types: active ? row.types.filter((x) => x !== t) : [...row.types, t] })
                       }
-                    />
-                    {t}
-                  </label>
-                ))}
+                    >
+                      {PROMPT_TYPE_ICON[t] && <Icon name={PROMPT_TYPE_ICON[t]} size={13} />}
+                      {t}
+                    </button>
+                  );
+                })}
               </span>
               <span
                 style={{
@@ -1642,18 +1758,41 @@ function TrialEntryEditor({
           <Icon name="plus" size={13} /> Add row
         </button>
       </div>
-      <div style={{ width: 200 }}>
+      <div>
         <label className="label">Failed attempts</label>
         <input
           className="input"
-          type="number"
-          min={0}
-          placeholder={`${trialFailedAuto(entry)} (auto-calculated)`}
-          style={{ background: "color-mix(in srgb, var(--color-background-danger) 55%, transparent)" }}
+          type="text"
+          inputMode="numeric"
+          placeholder={`${trialFailedAuto(entry)}`}
+          title="Auto-calculated (Trials − successful) unless you type a value"
+          style={{ width: 42, background: "color-mix(in srgb, var(--color-background-danger) 55%, transparent)" }}
           value={entry.failed}
-          onChange={(e) => onChange({ failed: e.target.value })}
+          onChange={(e) => onChange({ failed: e.target.value.replace(/\D/g, "") })}
         />
       </div>
+      </>
+      )}
+      {(successRows.length > 0 || failedCount > 0) && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+          {successRows.map((r, i) => (
+            <span key={i} style={chip(true)}>
+              <Icon name="check" size={12} />
+              <strong>{Number(r.count)}</strong>
+              {LEVEL_ABBR[r.level] ?? r.level}
+              {r.types.map((t) =>
+                PROMPT_TYPE_ICON[t] ? <Icon key={t} name={PROMPT_TYPE_ICON[t]} size={13} /> : null,
+              )}
+            </span>
+          ))}
+          {failedCount > 0 && (
+            <span style={chip(false)}>
+              <Icon name="x" size={12} />
+              <strong>{failedCount}</strong>
+            </span>
+          )}
+        </div>
+      )}
       {err ? (
         <p style={{ margin: 0, fontSize: 12, color: "var(--color-text-warning)" }}>{err}</p>
       ) : preview ? (
@@ -1662,6 +1801,131 @@ function TrialEntryEditor({
           {preview}
         </p>
       ) : null}
+    </div>
+  );
+}
+
+// Live ("trial-by-trial") entry: set the current prompt, then tap ✓/✗ per trial.
+// Order is not stored — every change is collapsed into the aggregate TrialEntry
+// (via eventsToPatch), so the note output is identical to Summary mode.
+function LiveTrialFields({
+  entry,
+  onChange,
+}: {
+  entry: TrialEntry;
+  onChange: (patch: Partial<TrialEntry>) => void;
+}) {
+  // Seed the tap list from the existing aggregate so switching into live mode
+  // never loses prior counts. Held locally; only the aggregate is persisted.
+  const [events, setEvents] = useState<TrialEvent[]>(() => expandEntryToEvents(entry));
+  const [level, setLevel] = useState("no support");
+  const [types, setTypes] = useState<string[]>([]);
+  const noSupport = level === "no support";
+
+  const commit = (next: TrialEvent[]) => {
+    setEvents(next);
+    onChange(eventsToPatch(next));
+  };
+  const tap = (ok: boolean) =>
+    commit([...events, ok ? { level, types: [...types], ok: true } : { level: "", types: [], ok: false }]);
+  const toggleType = (t: string) =>
+    setTypes((prev) =>
+      prev.includes(t) ? prev.filter((x) => x !== t) : TRIAL_SUPPORT_TYPES.filter((x) => prev.includes(x) || x === t),
+    );
+
+  const okCount = events.filter((e) => e.ok).length;
+  const tapBtn = (bg: string) => ({
+    flex: 1,
+    padding: "10px 24px",
+    fontSize: 14,
+    background: `color-mix(in srgb, var(${bg}) 70%, transparent)`,
+    border: "0.5px solid var(--color-border-tertiary)",
+  });
+  const lvlBtn = (active: boolean) => ({
+    padding: "3px 9px",
+    fontSize: 12,
+    borderRadius: "var(--border-radius-md)",
+    border: active ? "0.5px solid var(--color-border-secondary)" : "0.5px solid transparent",
+    background: active ? "var(--color-background-pill)" : "transparent",
+    color: active ? "var(--color-text-primary)" : "var(--color-text-secondary)",
+    fontWeight: active ? 500 : 400,
+  });
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <label className="label" style={{ marginBottom: -8 }}>
+        Current prompting
+      </label>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        {TRIAL_SUPPORT_LEVELS.map((l) => (
+          <button key={l} className="button" style={lvlBtn(level === l)} onClick={() => setLevel(l)}>
+            {l}
+          </button>
+        ))}
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", paddingLeft: 4 }}>
+        <span style={{ display: "inline-flex", gap: 6, flexWrap: "wrap" }}>
+          {TRIAL_SUPPORT_TYPES.map((t) => (
+            <button
+              key={t}
+              type="button"
+              className="button"
+              disabled={noSupport}
+              style={toggleBtnStyle(types.includes(t), noSupport)}
+              onClick={() => toggleType(t)}
+            >
+              {PROMPT_TYPE_ICON[t] && <Icon name={PROMPT_TYPE_ICON[t]} size={13} />}
+              {t}
+            </button>
+          ))}
+        </span>
+      </div>
+      <div style={{ display: "flex", gap: 10 }}>
+        <button className="button" style={tapBtn("--color-background-success")} onClick={() => tap(true)}>
+          ✓ Correct
+        </button>
+        <button className="button" style={tapBtn("--color-background-danger")} onClick={() => tap(false)}>
+          ✗ Incorrect
+        </button>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 13, color: "var(--color-text-secondary)" }}>
+        <span>
+          <strong style={{ color: "var(--color-text-primary)" }}>{okCount}</strong> / {events.length} correct
+        </span>
+        {events.length > 0 && (
+          <>
+            <button className="button button--ghost button--small" onClick={() => commit(events.slice(0, -1))}>
+              Undo
+            </button>
+            <button className="button button--ghost button--small" onClick={() => commit([])}>
+              Clear
+            </button>
+          </>
+        )}
+      </div>
+      {events.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+          {events.map((ev, i) => (
+            <span
+              key={i}
+              title={ev.ok ? [ev.level, ev.types.join(" + ")].filter(Boolean).join(" ") || "no support" : "incorrect"}
+              style={{
+                width: 22,
+                height: 22,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                borderRadius: "var(--border-radius-md)",
+                fontSize: 12,
+                background: `color-mix(in srgb, var(${ev.ok ? "--color-background-success" : "--color-background-danger"}) 70%, transparent)`,
+                color: ev.ok ? "var(--color-text-success)" : "var(--color-text-danger)",
+              }}
+            >
+              {ev.ok ? "✓" : "✗"}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -1739,7 +2003,7 @@ function RegularStudentCard({
           <div
             style={{
               fontSize: 15,
-              fontWeight: 400,
+              fontWeight: def ? 400 : 600,
               color: def ? "var(--color-text-primary)" : "var(--color-text-danger)",
               marginBottom: 6,
             }}

@@ -41,6 +41,17 @@ const ICONS = {
   sparkles:
     "<path d='M16 18a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2z'/><path d='M16 6a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2z'/><path d='M9 18a6 6 0 0 1 6 -6a6 6 0 0 1 -6 -6a6 6 0 0 1 -6 6a6 6 0 0 1 6 6z'/>",
   x: "<path d='M18 6l-12 12'/><path d='M6 6l12 12'/>",
+  // Prompting-type symbols: verbal (speech), tactile (pointing finger),
+  // gestural (open hand), modeled (a person to imitate). visual reuses `eye`.
+  message:
+    "<path d='M8 9h8'/><path d='M8 13h6'/><path d='M18 4a3 3 0 0 1 3 3v8a3 3 0 0 1 -3 3h-5l-5 3v-3h-2a3 3 0 0 1 -3 -3v-8a3 3 0 0 1 3 -3h12z'/>",
+  "hand-finger":
+    "<path d='M8 13v-7.5a1.5 1.5 0 0 1 3 0v6.5'/><path d='M11 5.5v-2a1.5 1.5 0 1 1 3 0v8.5'/><path d='M14 5.5a1.5 1.5 0 0 1 3 0v6.5'/><path d='M17 7.5a1.5 1.5 0 0 1 3 0v8.5a6 6 0 0 1 -6 6h-2h.208a6 6 0 0 1 -5.012 -2.7a69.74 69.74 0 0 1 -.196 -.3c-.312 -.479 -1.407 -2.388 -3.286 -5.728a1.5 1.5 0 0 1 .536 -2.022a1.867 1.867 0 0 1 2.28 .28l1.27 1.32'/>",
+  // Tabler hand-finger-right (gestural prompt).
+  "hand-finger-right":
+    "<path d='M12 8h8.5a1.5 1.5 0 0 1 0 3h-7.5'/><path d='M13.5 11h2a1.5 1.5 0 0 1 0 3h-2.5'/><path d='M14.5 14a1.5 1.5 0 0 1 0 3h-1.5'/><path d='M13.5 17a1.5 1.5 0 1 1 0 3h-4.5a6 6 0 0 1 -6 -6v-2v.208a6 6 0 0 1 2.7 -5.012l.3 -.196q .718 -.468 5.728 -3.286a1.5 1.5 0 0 1 2.022 .536c.44 .734 .325 1.674 -.28 2.28l-1.47 1.47'/>",
+  user:
+    "<path d='M8 7a4 4 0 1 0 8 0a4 4 0 0 0 -8 0'/><path d='M6 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2'/>",
 } as const;
 
 export type IconName = keyof typeof ICONS;

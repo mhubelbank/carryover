@@ -34,6 +34,10 @@ export function trialEntryAction(e: TrialEntry): string {
 
 export interface TrialData {
   enabled: boolean;
+  // How counts are entered: "summary" = type the totals; "live" = tap each trial
+  // ✓/✗ as it happens. Both produce the SAME aggregate TrialEntry — order is not
+  // stored. Defaults to "summary".
+  method: "summary" | "live";
   entries: TrialEntry[];
 }
 
@@ -42,7 +46,7 @@ export function blankTrialEntry(goalId = "", verb = "", noun = ""): TrialEntry {
 }
 
 export function blankTrials(): TrialData {
-  return { enabled: false, entries: [] };
+  return { enabled: false, method: "summary", entries: [] };
 }
 
 const num = (s: string) => {
@@ -60,6 +64,47 @@ export function trialFailedAuto(e: TrialEntry): number {
 
 export function trialFailed(e: TrialEntry): number {
   return e.failed.trim() !== "" ? num(e.failed) : trialFailedAuto(e);
+}
+
+// One tapped trial in "live" entry. A failure carries no support (failures only
+// feed "did not do so on N trials"). Not persisted — order is recomputed from
+// the aggregate when entering live mode and discarded when saving.
+export interface TrialEvent {
+  level: string;
+  types: string[];
+  ok: boolean;
+}
+
+// Expand a measurement's aggregate counts into an equivalent (order-arbitrary)
+// list of tapped trials, so live mode can be entered without losing prior data.
+export function expandEntryToEvents(e: TrialEntry): TrialEvent[] {
+  const events: TrialEvent[] = [];
+  for (const r of e.rows ?? []) {
+    const n = num(r.count);
+    for (let i = 0; i < n; i++) events.push({ level: r.level, types: [...r.types], ok: true });
+  }
+  const failed = trialFailed(e);
+  for (let i = 0; i < failed; i++) events.push({ level: "", types: [], ok: false });
+  return events;
+}
+
+// Collapse a tap list back into the aggregate fields (total/rows/failed),
+// grouping successes by their support. This is the only thing that's stored.
+export function eventsToPatch(events: TrialEvent[]): Pick<TrialEntry, "rows" | "total" | "failed"> {
+  const ok = events.filter((e) => e.ok);
+  const map = new Map<string, TrialSupportRow>();
+  for (const e of ok) {
+    const key = `${e.level}|${e.types.join(",")}`;
+    const row = map.get(key);
+    if (row) row.count = String(num(row.count) + 1);
+    else map.set(key, { level: e.level, types: [...e.types], count: "1" });
+  }
+  const rows = [...map.values()];
+  return {
+    rows: rows.length ? rows : [{ level: "minimal", types: [], count: "" }],
+    total: events.length ? String(events.length) : "",
+    failed: String(events.length - ok.length),
+  };
 }
 
 // A measurement is "started" once she's entered a total or any count — used to
