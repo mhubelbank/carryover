@@ -29,10 +29,11 @@ export const LEVEL_FULL: Record<string, string> = {
 
 // Fade scale: least support (independent) = green, increasing support warms to
 // red; failed trials are grey. Used for the support-breakdown bars.
+// Mixed toward the surface (not literal white) so the shades adapt in dark mode.
 export const LEVEL_COLOR: Record<string, string> = {
-  "no support": "color-mix(in srgb, var(--color-text-success) 55%, white)",
-  minimal: "color-mix(in srgb, var(--color-text-warning) 30%, white)",
-  moderate: "color-mix(in srgb, var(--color-text-warning) 65%, white)",
-  maximum: "color-mix(in srgb, var(--color-text-danger) 55%, white)",
+  "no support": "color-mix(in srgb, var(--color-text-success) 55%, var(--color-background-primary))",
+  minimal: "color-mix(in srgb, var(--color-text-warning) 30%, var(--color-background-primary))",
+  moderate: "color-mix(in srgb, var(--color-text-warning) 65%, var(--color-background-primary))",
+  maximum: "color-mix(in srgb, var(--color-text-danger) 55%, var(--color-background-primary))",
 };
 export const FAILED_COLOR = "var(--color-background-tertiary)";

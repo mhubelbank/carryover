@@ -2,7 +2,7 @@ import type { Student } from "../domain/student";
 
 // Circular student avatar: the chosen emoji on a warm brown background, falling
 // back to the first (+ last) initial when no emoji is set.
-const AVATAR_BG = "#dfc5b4";
+const AVATAR_BG = "#e1c8b8";
 export function StudentAvatar({
   student,
   size = 32,
@@ -26,7 +26,8 @@ export function StudentAvatar({
         flexShrink: 0,
         borderRadius: "50%",
         background: AVATAR_BG,
-        color: "#fff",
+        // Fixed dark text — the circle is always light tan, in light and dark mode.
+        color: "#46362a",
         display: "inline-flex",
         alignItems: "center",
         justifyContent: "center",

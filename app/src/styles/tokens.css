@@ -31,3 +31,35 @@
   --border-radius-md: 8px;
   --border-radius-lg: 12px;
 }
+
+/* Dark theme — a warm dark to match the cream light palette. Applied via
+   data-theme="dark" on <html> (set by clients/theme.ts). Page bg = tertiary,
+   cards = primary (elevated, lighter), per the light-mode relationship. */
+:root[data-theme="dark"] {
+  --color-background-primary: #2b2925;
+  --color-background-secondary: #232220;
+  --color-background-tertiary: #1a1916;
+  --color-background-pill: #35312b;
+  --color-background-info: #16283a;
+  --color-background-success: #1c2b14;
+  --color-background-warning: #2e2510;
+  --color-background-danger: #331717;
+
+  --color-text-primary: #eceae6;
+  --color-text-secondary: #b0ada5;
+  --color-text-tertiary: #87847c;
+  --color-text-info: #7fb4ec;
+  --color-text-success: #9fcf78;
+  --color-text-warning: #e0b066;
+  --color-text-danger: #e88a8a;
+
+  --color-border-tertiary: rgba(255, 255, 255, 0.1);
+  --color-border-secondary: rgba(255, 255, 255, 0.18);
+  --color-border-primary: rgba(255, 255, 255, 0.28);
+  --color-border-info: #2d567f;
+  --color-border-success: #3a5e22;
+  --color-border-warning: #6b5320;
+  --color-border-danger: #7a3636;
+
+  color-scheme: dark;
+}

@@ -758,9 +758,9 @@ function StudentRow({
   const flag = ageFlag(age);
   const ageStyle: CSSProperties =
     flag === "alert"
-      ? { background: "#FCEBEB", color: "#501313", fontWeight: 500 }
+      ? { background: "var(--color-background-danger)", color: "var(--color-text-danger)", fontWeight: 500 }
       : flag === "warn"
-        ? { background: "#FAEEDA", color: "#633806", fontWeight: 500 }
+        ? { background: "var(--color-background-warning)", color: "var(--color-text-warning)", fontWeight: 500 }
         : {};
   return (
     <tr style={{ borderTop: border }}>
