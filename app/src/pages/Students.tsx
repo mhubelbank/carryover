@@ -49,6 +49,11 @@ export function Students({ onNavigate, target, onTargetConsumed }: Props) {
   const go = (v: View) => {
     if (confirmNavAway()) setView(v);
   };
+  // Reset scroll when switching sub-views (detail ↔ goals ↔ review all stay on
+  // the "students" page, so App's page-level reset doesn't fire).
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [view.kind, "id" in view ? view.id : ""]);
   useEffect(() => {
     if (target) {
       setView(

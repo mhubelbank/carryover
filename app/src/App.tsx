@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { confirmNavAway } from "./hooks/useUnsavedGuard";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { TermProvider, useTerm } from "./context/TermContext";
@@ -40,6 +40,12 @@ function Pages() {
   // Settings with existing data). The empty/first-run case renders it directly.
   const [newTerm, setNewTerm] = useState(false);
   const { state } = useTerm();
+
+  // Reset scroll to top when the page changes — it's a single document, so the
+  // window scroll otherwise carries over between screens.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [page, newTerm]);
 
   // All navigation goes through `nav` so an editor with unsaved changes can
   // prompt before the page switches out from under it (the SaveBar's mount
