@@ -313,7 +313,6 @@ export function IepReview({
         </button>
       </div>
 
-      {/* Next review date. */}
       <div
         style={{
           padding: "14px 16px",

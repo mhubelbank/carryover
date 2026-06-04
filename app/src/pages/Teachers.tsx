@@ -30,7 +30,6 @@ type View = { kind: "list" } | { kind: "detail"; id: string } | { kind: "create"
 export function Teachers({ onNavigate, openTeacherId, onOpenConsumed, onOpenStudent }: Props) {
   const { state } = useTerm();
   const [view, setView] = useState<View>({ kind: "list" });
-  // Reset scroll when switching between the list and a teacher's detail.
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [view.kind, "id" in view ? view.id : ""]);

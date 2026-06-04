@@ -190,8 +190,9 @@ interface FormDraft {
   studentState: Record<string, StudentState>;
   sessionSig: string;
 }
-// v3: bumped after the filming→news rename (v2) and the per-goal Trials rework
-// (v3) so pre-change drafts with an incompatible shape are ignored, not restored.
+// Version-bumped whenever the draft's shape changes (filming→news rename, the
+// per-goal Trials rework, the trial verb/noun split) so incompatible old drafts
+// are ignored rather than restored into a crashing form.
 const FORM_DRAFT_KEY = "generate_form_draft_v4";
 function loadFormDraft(): FormDraft | null {
   try {
@@ -236,7 +237,7 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
   const [studentState, setStudentState] = useState<Record<string, StudentState>>(
     () => initialDraft?.studentState ?? {},
   );
-  // Student ids whose section is collapsed in the form (UI-only, not persisted).
+  // UI-only, not persisted (unlike the auto-saved form state).
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const toggleCollapsed = (id: string) =>
     setCollapsed((prev) => {
@@ -246,13 +247,11 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
       return next;
     });
   const [phase, setPhase] = useState<"form" | "running" | "results">("form");
-  // Reset scroll when moving between the form and the results screen.
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [phase]);
   const [results, setResults] = useState<ResultRow[]>([]);
   const [error, setError] = useState<string | null>(null);
-  // Cached notes for the chosen session (offered as a restore on the form).
   const [restorable, setRestorable] = useState<CachedNote[]>([]);
   // While generating: which note (1-based) and which pipeline pass is in flight.
   const [progress, setProgress] = useState<{ current: number; total: number; pass: Pass } | null>(
@@ -473,7 +472,6 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
   // The activities offered in the dropdown: this teacher's catalog activities
   // plus the reserved ad-hoc "Other".
   const activityOptions = teacher ? activityOptionsForGenerate(teacher, catalog) : [];
-  // The teacher's news roles, resolved from the shared catalog.
   const roleOptions = teacher ? resolveRoles(teacher, roleCatalog) : [];
 
   function setStudent(id: string, patch: Partial<StudentState>) {
@@ -634,7 +632,6 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
     }
     setPhase("running");
     setError(null);
-    // Initialize result rows so the UI can show per-student progress.
     // The all-notes block uses the disambiguated display name (scoped to the
     // students actually in this session), so two "Aiden"s on the same caseload
     // render as "Aiden M." vs "Aiden R." before the colon.
@@ -2039,7 +2036,6 @@ function RegularStudentCard({
           >
           {(() => {
             const trialsOn = !!inputs[i]?.trials?.enabled;
-            // The goals this activity targets — the measurement options in the panel.
             const activityGoals = studentGoals.filter((g) => (inputs[i]?.goals ?? []).includes(g.id));
             const setTrials = (on: boolean) => {
               const cur = inputs[i]?.trials ?? blankTrials();
