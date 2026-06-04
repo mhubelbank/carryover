@@ -36,7 +36,7 @@ export function Nav({ current, onNavigate }: NavProps) {
     >
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <Icon name="notebook" size={18} />
-        <span style={{ fontWeight: 500, fontSize: 15 }}>SESIS</span>
+        <span style={{ fontWeight: 500, fontSize: 15 }}>Carryover</span>
       </div>
       <div style={{ display: "flex", gap: 4, flex: 1 }}>
         {TABS.map((tab) => {

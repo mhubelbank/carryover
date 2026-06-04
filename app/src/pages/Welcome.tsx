@@ -54,7 +54,7 @@ export function Welcome() {
       <div className="card" style={{ padding: "2rem 2.5rem" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
           <Icon name="notebook" size={22} />
-          <h1 style={{ fontSize: 22 }}>Welcome to SESIS Notes</h1>
+          <h1 style={{ fontSize: 22 }}>Welcome to Carryover</h1>
         </div>
         <p style={{ color: "var(--color-text-secondary)", fontSize: 14, marginBottom: "1.75rem" }}>
           Add two keys, then you'll start adding students.
@@ -84,7 +84,7 @@ export function Welcome() {
             <>
               So your roster and notes save between sessions.{" "}
               <a
-                href="https://github.com/settings/tokens/new?scopes=repo&description=SESIS+Notes"
+                href="https://github.com/settings/tokens/new?scopes=repo&description=Carryover"
                 target="_blank"
                 rel="noreferrer"
               >
