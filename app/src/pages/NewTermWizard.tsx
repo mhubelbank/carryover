@@ -61,6 +61,7 @@ function blankStudent(): Student {
     middle: "",
     lastName: "",
     pronouns: "",
+    emoji: "",
     teacherId: "",
     birthday: null,
     age: null,

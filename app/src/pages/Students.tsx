@@ -25,6 +25,7 @@ import {
 } from "../domain/generate";
 import { StudentGoals } from "./Goals";
 import { IepReview as IepReviewScreen } from "./IepReview";
+import { StudentAvatar, firstGrapheme } from "../components/StudentAvatar";
 
 interface Props {
   onNavigate: (page: NavPage) => void;
@@ -332,7 +333,8 @@ function StudentsList({
                   }}
                 >
                   <td style={td()}>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 12 }}>
+                      <StudentAvatar student={s} size={26} />
                       {departedRow && (
                         <span
                           title={`Past last day (${s.lastDay ?? ""})`}
@@ -416,6 +418,8 @@ function StudentDetail({
   // Archive prompt: collects the student's last day (defaults to today) before
   // archiving. null = closed.
   const [archiveDate, setArchiveDate] = useState<string | null>(null);
+  // Emoji avatar picker open state (click the avatar → focus an input → ⌘⌃Space).
+  const [emojiEditing, setEmojiEditing] = useState(false);
 
   useEffect(() => {
     if (isNew || !client) {
@@ -512,7 +516,6 @@ function StudentDetail({
   }
 
   const headerName = fullName(draft).trim() || "New student";
-  const initial = draft.firstName.trim().charAt(0).toUpperCase() || "?";
   const departedNow = isDeparted(draft);
 
   return (
@@ -539,21 +542,50 @@ function StudentDetail({
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <div
-            style={{
-              width: 44,
-              height: 44,
-              borderRadius: "50%",
-              background: "var(--color-background-info)",
-              color: "var(--color-text-info)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontWeight: 500,
-              fontSize: 15,
-            }}
-          >
-            {initial}
+          <div style={{ position: "relative" }}>
+            <button
+              type="button"
+              onClick={() => setEmojiEditing((v) => !v)}
+              title="Click to set an emoji (⌘⌃Space), or clear for the initial"
+              style={{ border: "none", background: "transparent", padding: 0, cursor: "pointer", borderRadius: "50%", display: "block" }}
+            >
+              <StudentAvatar student={draft} size={44} />
+            </button>
+            {emojiEditing && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: "100%",
+                  left: 0,
+                  marginTop: 6,
+                  zIndex: 30,
+                  width: 260,
+                  background: "var(--color-background-primary)",
+                  border: "0.5px solid var(--color-border-secondary)",
+                  borderRadius: "var(--border-radius-md)",
+                  boxShadow: "0 2px 12px rgba(0,0,0,0.12)",
+                  padding: 10,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                }}
+              >
+                <input
+                  autoFocus
+                  className="input"
+                  style={{ width: "100%", textAlign: "center", fontSize: 20 }}
+                  value={draft.emoji}
+                  onChange={(e) => set({ emoji: firstGrapheme(e.target.value) })}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === "Escape") setEmojiEditing(false);
+                  }}
+                  onBlur={() => setEmojiEditing(false)}
+                />
+                <span style={{ fontSize: 11, color: "var(--color-text-tertiary)", lineHeight: 1.4 }}>
+                  Press ⌘⌃Space for the emoji picker. Delete to use the initial.
+                </span>
+              </div>
+            )}
           </div>
           <div>
             <h1
@@ -1136,6 +1168,7 @@ function blankStudent(): Student {
     middle: "",
     lastName: "",
     pronouns: "",
+    emoji: "",
     teacherId: "",
     birthday: null,
     age: null,
