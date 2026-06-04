@@ -17,7 +17,7 @@ Flag, do NOT change the note (these need a clinician):
 
 {{teacher.streamlineAppend}}{{/if}}
 
-Keep all clinical content. Do not invent or remove information.
+Keep all clinical content. Do not invent or remove information. Never alter a trial count or total (e.g. "6/10") — preserve every number exactly as written.
 
 Output format (strict):
 - Output the note text only — corrected for the "fix silently" items. Never put commentary, headings, labels, or separators inside the note.

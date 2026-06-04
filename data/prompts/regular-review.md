@@ -24,4 +24,6 @@ Fix any of the following if present:
 
 {{teacher.reviewAppend}}{{/if}}
 
+Never change any trial count or total (e.g. "6/10"): if the note states trial data, preserve every number exactly.
+
 Do not fabricate information. Only reword what is in the note. Return only the corrected note.

@@ -8,7 +8,7 @@ import { loadSessions } from "../domain/data";
 import { groupByLongTerm, type Goal } from "../domain/goal";
 import { fullName } from "../domain/student";
 import { goalUsageCounts } from "../domain/session";
-import { suggestShortnames } from "../domain/shortnames";
+import { suggestGoalLabels, type GoalLabels } from "../domain/shortnames";
 
 // Per-student goals hub: the editable list (view) and the Add-goals workflow.
 // Reached from a student's detail page (Students flow).
@@ -103,15 +103,18 @@ function GoalsView({
 
   const setShortName = (id: string, v: string) =>
     setDraft((d) => d.map((g) => (g.id === id ? { ...g, shortName: v } : g)));
+  const setMeasured = (id: string, patch: { measuredVerb?: string; measuredNoun?: string }) =>
+    setDraft((d) => d.map((g) => (g.id === id ? { ...g, ...patch } : g)));
   const setShortTermGoal = (id: string, v: string) =>
     setDraft((d) => d.map((g) => (g.id === id ? { ...g, shortTermGoal: v } : g)));
   const toggleArchived = (id: string) =>
     setDraft((d) => d.map((g) => (g.id === id ? { ...g, archived: !g.archived } : g)));
   const removeGoal = (id: string) => setDraft((d) => d.filter((g) => g.id !== id));
 
-  // Re-suggest shortnames for every active goal — one Claude call per long-term
-  // group, fed the full short-term text (falling back to the current shortname
-  // for legacy goals). Updates the draft; she reviews and saves via the SaveBar.
+  // Re-suggest shortnames + measured actions for every active goal — one Claude
+  // call per long-term group, fed the full short-term text (falling back to the
+  // current shortname for legacy goals). Updates the draft; she reviews and saves
+  // via the SaveBar.
   async function reSuggestAll() {
     if (!apiKey) {
       setError("No Anthropic API key set — add one in Settings.");
@@ -121,18 +124,18 @@ function GoalsView({
     setError(null);
     try {
       const groups = groupByLongTerm(draft.filter((g) => !g.archived));
-      const updates = new Map<string, string>();
+      const updates = new Map<string, GoalLabels>();
       for (const group of groups) {
-        const names = await suggestShortnames(apiKey, {
+        const labels = await suggestGoalLabels(apiKey, {
           longTermGoal: group.longTermGoal,
           shortTerms: group.goals.map((g) => g.shortTermGoal.trim() || g.shortName),
           current: group.goals.map((g) => g.shortName),
         });
-        group.goals.forEach((g, i) => updates.set(g.id, names[i] ?? g.shortName));
+        group.goals.forEach((g, i) => labels[i] && updates.set(g.id, labels[i]));
       }
-      setDraft((d) => d.map((g) => (updates.has(g.id) ? { ...g, shortName: updates.get(g.id)! } : g)));
+      setDraft((d) => d.map((g) => (updates.has(g.id) ? { ...g, ...updates.get(g.id)! } : g)));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Couldn't re-suggest shortnames.");
+      setError(e instanceof Error ? e.message : "Couldn't re-suggest labels.");
     } finally {
       setSuggesting(false);
     }
@@ -274,6 +277,7 @@ function GoalsView({
                         <input
                           className="input"
                           style={{ flex: 1, height: 32 }}
+                          placeholder="shortname — terse skill label, e.g. answer WH questions"
                           value={goal.shortName}
                           onChange={(e) => setShortName(goal.id, e.target.value)}
                         />
@@ -304,6 +308,25 @@ function GoalsView({
                         onChange={(e) => setShortTermGoal(goal.id, e.target.value)}
                         style={{ fontSize: 12, color: "var(--color-text-secondary)" }}
                       />
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 11, color: "var(--color-text-tertiary)", flexShrink: 0 }}>
+                          measured as
+                        </span>
+                        <input
+                          className="input"
+                          style={{ width: 170, height: 28, fontSize: 12 }}
+                          placeholder="past-tense verb"
+                          value={goal.measuredVerb}
+                          onChange={(e) => setMeasured(goal.id, { measuredVerb: e.target.value })}
+                        />
+                        <input
+                          className="input"
+                          style={{ flex: 1, height: 28, fontSize: 12 }}
+                          placeholder="noun (falls back to shortname for Trials)"
+                          value={goal.measuredNoun}
+                          onChange={(e) => setMeasured(goal.id, { measuredNoun: e.target.value })}
+                        />
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -387,6 +410,8 @@ interface ReviewItem {
   ltg: string;
   stText: string;
   shortName: string;
+  measuredVerb: string;
+  measuredNoun: string;
 }
 
 export function AddGoals({
@@ -431,12 +456,19 @@ export function AddGoals({
       for (const c of clusters) {
         const sts = splitLines(c.stText);
         if (sts.length === 0) continue;
-        const names = await suggestShortnames(apiKey, {
+        const labels = await suggestGoalLabels(apiKey, {
           longTermGoal: c.ltg,
           shortTerms: sts,
         });
         sts.forEach((st, i) =>
-          items.push({ id: crypto.randomUUID(), ltg: c.ltg, stText: st, shortName: names[i] ?? st }),
+          items.push({
+            id: crypto.randomUUID(),
+            ltg: c.ltg,
+            stText: st,
+            shortName: labels[i]?.shortName ?? st,
+            measuredVerb: labels[i]?.measuredVerb ?? "",
+            measuredNoun: labels[i]?.measuredNoun ?? "",
+          }),
         );
       }
       if (items.length === 0) {
@@ -466,20 +498,27 @@ export function AddGoals({
         }
         const updated: ReviewItem[] = [];
         for (const [ltg, items] of byLtg) {
-          const names = await suggestShortnames(apiKey, {
+          const labels = await suggestGoalLabels(apiKey, {
             longTermGoal: ltg,
             shortTerms: items.map((i) => i.stText),
             current: items.map((i) => i.shortName),
             feedback,
           });
-          items.forEach((it, i) => updated.push({ ...it, shortName: names[i] ?? it.shortName }));
+          items.forEach((it, i) =>
+            updated.push({
+              ...it,
+              shortName: labels[i]?.shortName ?? it.shortName,
+              measuredVerb: labels[i]?.measuredVerb ?? it.measuredVerb,
+              measuredNoun: labels[i]?.measuredNoun ?? it.measuredNoun,
+            }),
+          );
         }
         updated.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
         setReview(updated);
       } else {
         const item = review.find((it) => it.id === modalTarget);
         if (item) {
-          const names = await suggestShortnames(apiKey, {
+          const labels = await suggestGoalLabels(apiKey, {
             longTermGoal: item.ltg,
             shortTerms: [item.stText],
             current: [item.shortName],
@@ -487,7 +526,14 @@ export function AddGoals({
           });
           setReview((r) =>
             (r ?? []).map((it) =>
-              it.id === modalTarget ? { ...it, shortName: names[0] ?? it.shortName } : it,
+              it.id === modalTarget
+                ? {
+                    ...it,
+                    shortName: labels[0]?.shortName ?? it.shortName,
+                    measuredVerb: labels[0]?.measuredVerb ?? it.measuredVerb,
+                    measuredNoun: labels[0]?.measuredNoun ?? it.measuredNoun,
+                  }
+                : it,
             ),
           );
         }
@@ -509,6 +555,8 @@ export function AddGoals({
       longTermGoal: it.ltg.trim(),
       shortTermGoal: it.stText.trim(),
       shortName: it.shortName.trim(),
+      measuredVerb: it.measuredVerb.trim(),
+      measuredNoun: it.measuredNoun.trim(),
       archived: false,
     }));
     if (newGoals.some((g) => g.longTermGoal === "" || g.shortName === "")) {
@@ -715,6 +763,7 @@ export function AddGoals({
                         <input
                           className="input"
                           style={{ flex: 1, height: 32 }}
+                          placeholder="terse skill label, e.g. answer WH questions"
                           value={item.shortName}
                           onChange={(e) =>
                             setReview((r) =>
@@ -733,6 +782,39 @@ export function AddGoals({
                         >
                           <Icon name="refresh" size={14} />
                         </button>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span
+                          style={{ fontSize: 11, color: "var(--color-text-tertiary)", flexShrink: 0 }}
+                        >
+                          measured as
+                        </span>
+                        <input
+                          className="input"
+                          style={{ width: 170, height: 32 }}
+                          placeholder="past-tense verb"
+                          value={item.measuredVerb}
+                          onChange={(e) =>
+                            setReview((r) =>
+                              (r ?? []).map((it) =>
+                                it.id === item.id ? { ...it, measuredVerb: e.target.value } : it,
+                              ),
+                            )
+                          }
+                        />
+                        <input
+                          className="input"
+                          style={{ flex: 1, height: 32 }}
+                          placeholder="noun (falls back to shortname)"
+                          value={item.measuredNoun}
+                          onChange={(e) =>
+                            setReview((r) =>
+                              (r ?? []).map((it) =>
+                                it.id === item.id ? { ...it, measuredNoun: e.target.value } : it,
+                              ),
+                            )
+                          }
+                        />
                       </div>
                     </div>
                   ))}

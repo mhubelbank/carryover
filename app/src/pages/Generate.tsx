@@ -76,6 +76,20 @@ import { displayName, fullName, isActiveOn, studentContext, type Student } from 
 import { teacherColor, type Activity, type Mode, type Role, type SessionCapture, type Teacher } from "../domain/teacher";
 import { getSessionNotes, saveNotes, type CachedNote } from "../clients/noteCache";
 import { storage } from "../clients/storage";
+import {
+  blankTrialEntry,
+  blankTrials,
+  trialEntryAction,
+  trialEntrySentence,
+  trialEntryStarted,
+  trialError,
+  trialFailedAuto,
+  TRIAL_SUPPORT_LEVELS,
+  TRIAL_SUPPORT_TYPES,
+  type TrialData,
+  type TrialEntry,
+  type TrialSupportRow,
+} from "../domain/trial";
 
 // Human-readable label for each generation pass, shown in the progress status.
 const PASS_LABEL: Record<Pass, string> = {
@@ -135,6 +149,7 @@ function blankRegularInput(): ActivityInput {
     additionalNotes: "",
     captures: {},
     options: [],
+    trials: blankTrials(),
   };
 }
 
@@ -154,9 +169,9 @@ interface FormDraft {
   studentState: Record<string, StudentState>;
   sessionSig: string;
 }
-// v2: bumped after the filming→news rename so pre-rename drafts (old `filming`
-// shape) are ignored rather than restored into the News card.
-const FORM_DRAFT_KEY = "generate_form_draft_v2";
+// v3: bumped after the filming→news rename (v2) and the per-goal Trials rework
+// (v3) so pre-change drafts with an incompatible shape are ignored, not restored.
+const FORM_DRAFT_KEY = "generate_form_draft_v4";
 function loadFormDraft(): FormDraft | null {
   try {
     const s = storage.get(FORM_DRAFT_KEY);
@@ -200,6 +215,15 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
   const [studentState, setStudentState] = useState<Record<string, StudentState>>(
     () => initialDraft?.studentState ?? {},
   );
+  // Student ids whose section is collapsed in the form (UI-only, not persisted).
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
+  const toggleCollapsed = (id: string) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   const [phase, setPhase] = useState<"form" | "running" | "results">("form");
   const [results, setResults] = useState<ResultRow[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -379,7 +403,11 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
       const next: Record<string, StudentState> = {};
       for (const s of caseload) {
         const old = prev[s.id];
-        const regular = activities.map((_, i) => old?.regular[i] ?? blankRegularInput());
+        // Spread over a blank so older restored drafts gain any newer fields
+        // (e.g. `trials`) rather than leaving them undefined.
+        const regular = activities.map((_, i) =>
+          old?.regular[i] ? { ...blankRegularInput(), ...old.regular[i] } : blankRegularInput(),
+        );
         if (old && !sessionChanged) {
           // Normalize possibly-stale shapes (e.g. a restored pre-rename draft that
           // still has `filming`/`filmingGoalIds`) so the News card never reads undefined.
@@ -919,6 +947,10 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
           const st = studentState[student.id];
           if (!st) return null;
           const studentGoals = goals.filter((g) => g.studentId === student.id && !g.archived);
+          const isCollapsed = collapsed.has(student.id);
+          // The body shows (and the arrow points down) only when expanded AND
+          // present — marking absent reads as collapsed too.
+          const expanded = !isCollapsed && !st.absent;
           return (
             <div
               key={student.id}
@@ -933,10 +965,28 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "space-between",
-                  marginBottom: !st.absent ? 12 : 0,
+                  marginBottom: !st.absent && !isCollapsed ? 12 : 0,
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <button
+                    className="button button--ghost button--small"
+                    onClick={() => toggleCollapsed(student.id)}
+                    title={expanded ? "Collapse" : "Expand"}
+                    aria-expanded={expanded}
+                    disabled={st.absent}
+                    style={{ padding: 4, color: "var(--color-text-tertiary)", display: "flex" }}
+                  >
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        transform: expanded ? "rotate(90deg)" : "none",
+                        transition: "transform 0.15s",
+                      }}
+                    >
+                      <Icon name="chevron-right" size={16} />
+                    </span>
+                  </button>
                   <span style={{ fontSize: 16, fontWeight: 600, color: "var(--color-text-primary)" }}>{fullName(student)}</span>
                   <span style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>
                     {student.pronouns}
@@ -962,7 +1012,7 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
                 </div>
               </div>
 
-              {st.included && !st.absent && (
+              {st.included && !st.absent && !isCollapsed && (
                 <CapturePanel
                   teacher={teacher}
                   student={student}
@@ -973,7 +1023,7 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
                 />
               )}
 
-              {st.included && !st.absent && mode === "regular" && (
+              {st.included && !st.absent && !isCollapsed && mode === "regular" && (
                 <RegularStudentCard
                   activities={activities}
                   options={activityOptions}
@@ -988,7 +1038,7 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
                 />
               )}
 
-              {st.included && !st.absent && mode === "news-day" && (
+              {st.included && !st.absent && !isCollapsed && mode === "news-day" && (
                 <NewsStudentCard
                   roles={roleOptions}
                   state={st}
@@ -1353,6 +1403,269 @@ function ActivityCaptureFields({
   );
 }
 
+// Trials data-capture panel (per student per activity): a list of per-goal
+// measurements. The live preview on each is the contract — what she sees is what
+// the note says.
+function TrialsPanel({
+  studentName,
+  pronoun,
+  goals,
+  value,
+  onChange,
+}: {
+  studentName: string;
+  pronoun: string;
+  goals: { id: string; shortName: string; measuredVerb: string; measuredNoun: string }[];
+  value: TrialData;
+  onChange: (t: TrialData) => void;
+}) {
+  const entries = value.entries ?? [];
+  const setEntry = (ei: number, patch: Partial<TrialEntry>) =>
+    onChange({ ...value, entries: entries.map((e, j) => (j === ei ? { ...e, ...patch } : e)) });
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {entries.length === 0 && (
+        <p style={{ margin: 0, fontSize: 12, color: "var(--color-text-tertiary)" }}>
+          No measurements yet — add one per goal you're counting.
+        </p>
+      )}
+      {entries.map((entry, ei) => (
+        <TrialEntryEditor
+          key={ei}
+          studentName={studentName}
+          pronoun={pronoun}
+          goals={goals}
+          entry={entry}
+          onChange={(patch) => setEntry(ei, patch)}
+          onRemove={() => onChange({ ...value, entries: entries.filter((_, j) => j !== ei) })}
+        />
+      ))}
+      <button
+        className="button button--small"
+        style={{ alignSelf: "flex-start" }}
+        onClick={() => onChange({ ...value, entries: [...entries, blankTrialEntry()] })}
+      >
+        <Icon name="plus" size={13} /> Add measurement
+      </button>
+    </div>
+  );
+}
+
+// One per-goal measurement within the Trials panel.
+function TrialEntryEditor({
+  studentName,
+  pronoun,
+  goals,
+  entry,
+  onChange,
+  onRemove,
+}: {
+  studentName: string;
+  pronoun: string;
+  goals: { id: string; shortName: string; measuredVerb: string; measuredNoun: string }[];
+  entry: TrialEntry;
+  onChange: (patch: Partial<TrialEntry>) => void;
+  onRemove: () => void;
+}) {
+  const rows = entry.rows ?? [];
+  const setRow = (ri: number, patch: Partial<TrialSupportRow>) =>
+    onChange({ rows: rows.map((r, j) => (j === ri ? { ...r, ...patch } : r)) });
+  const preview = trialEntrySentence(studentName, pronoun, entry);
+  const err = trialError(entry);
+  return (
+    <div
+      style={{
+        border: "0.5px solid var(--color-border-tertiary)",
+        borderRadius: "var(--border-radius-md)",
+        padding: 10,
+        background: "var(--color-background-primary)",
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+      }}
+    >
+      <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+        <div style={{ flex: 1 }}>
+          <label className="label">Goal</label>
+          <select
+            className="select"
+            style={{ width: "100%" }}
+            value={entry.goalId}
+            onChange={(e) => {
+              const g = goals.find((x) => x.id === e.target.value);
+              // Seed the verb/noun from the goal's measured action only when the
+              // entry's are still blank, so a manual edit is never overwritten.
+              const seed = g && trialEntryAction(entry) === "";
+              onChange({
+                goalId: e.target.value,
+                ...(seed ? { verb: g!.measuredVerb, noun: g!.measuredNoun } : {}),
+              });
+            }}
+          >
+            <option value="">— no goal —</option>
+            {goals.map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.shortName}
+              </option>
+            ))}
+          </select>
+        </div>
+        <button
+          className="button button--ghost button--small"
+          style={{ padding: 6, color: "var(--color-text-tertiary)" }}
+          title="Remove measurement"
+          onClick={onRemove}
+        >
+          <Icon name="x" size={14} />
+        </button>
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
+        <div style={{ width: 80 }}>
+          <label className="label">Trials</label>
+          <input
+            className="input"
+            type="number"
+            min={0}
+            value={entry.total}
+            onChange={(e) => onChange({ total: e.target.value })}
+          />
+        </div>
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <label className="label">What is being measured? E.g. [ answered ] [ WH questions ]</label>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input
+              className="input"
+              style={{ width: 190 }}
+              placeholder="past-tense verb"
+              value={entry.verb}
+              onChange={(e) => onChange({ verb: e.target.value })}
+            />
+            <input
+              className="input"
+              style={{ flex: 1, minWidth: 120 }}
+              placeholder="plural noun"
+              value={entry.noun}
+              onChange={(e) => onChange({ noun: e.target.value })}
+            />
+          </div>
+        </div>
+      </div>
+      <div>
+        <label className="label">Successful attempts</label>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {rows.map((row, ri) => (
+            <div key={ri} style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+              <input
+                className="input"
+                type="number"
+                min={0}
+                style={{ width: 60, background: "color-mix(in srgb, var(--color-background-success) 55%, transparent)" }}
+                placeholder="0"
+                value={row.count}
+                onChange={(e) => setRow(ri, { count: e.target.value })}
+              />
+              <span style={{ fontSize: 13, fontStyle: "italic", color: "var(--color-text-secondary)" }}>of</span>
+              <span
+                title="Total trials"
+                style={{
+                  minWidth: 26,
+                  textAlign: "center",
+                  padding: "4px 8px",
+                  borderRadius: "var(--border-radius-md)",
+                  background: "var(--color-background-secondary)",
+                  color: "var(--color-text-secondary)",
+                  fontSize: 13,
+                }}
+              >
+                {entry.total.trim() || "—"}
+              </span>
+              <span style={{ fontSize: 13, fontStyle: "italic", color: "var(--color-text-secondary)" }}>with</span>
+              <select
+                className="select"
+                style={{ width: 130 }}
+                value={row.level}
+                onChange={(e) => setRow(ri, { level: e.target.value })}
+              >
+                {TRIAL_SUPPORT_LEVELS.map((l) => (
+                  <option key={l} value={l}>
+                    {l}
+                  </option>
+                ))}
+              </select>
+              <span style={{ display: "inline-flex", gap: 8, flexWrap: "wrap" }}>
+                {TRIAL_SUPPORT_TYPES.map((t) => (
+                  <label
+                    key={t}
+                    style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 12, opacity: row.level === "no support" ? 0.4 : 1 }}
+                  >
+                    <input
+                      type="checkbox"
+                      disabled={row.level === "no support"}
+                      checked={row.types.includes(t)}
+                      onChange={(e) =>
+                        setRow(ri, { types: e.target.checked ? [...row.types, t] : row.types.filter((x) => x !== t) })
+                      }
+                    />
+                    {t}
+                  </label>
+                ))}
+              </span>
+              <span
+                style={{
+                  fontSize: 13,
+                  marginLeft: 4,
+                  fontStyle: "italic",
+                  color: "var(--color-text-secondary)",
+                  opacity: row.level === "no support" ? 0.4 : 1,
+                }}
+              >
+                prompting
+              </span>
+              {rows.length > 1 && (
+                <button
+                  className="button button--ghost button--small"
+                  style={{ padding: 6, color: "var(--color-text-tertiary)" }}
+                  title="Remove row"
+                  onClick={() => onChange({ rows: rows.filter((_, j) => j !== ri) })}
+                >
+                  <Icon name="x" size={14} />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+        <button
+          className="button button--small"
+          style={{ marginTop: 6 }}
+          onClick={() => onChange({ rows: [...rows, { level: "minimal", types: [], count: "" }] })}
+        >
+          <Icon name="plus" size={13} /> Add row
+        </button>
+      </div>
+      <div style={{ width: 200 }}>
+        <label className="label">Failed attempts</label>
+        <input
+          className="input"
+          type="number"
+          min={0}
+          placeholder={`${trialFailedAuto(entry)} (auto-calculated)`}
+          style={{ background: "color-mix(in srgb, var(--color-background-danger) 55%, transparent)" }}
+          value={entry.failed}
+          onChange={(e) => onChange({ failed: e.target.value })}
+        />
+      </div>
+      {err ? (
+        <p style={{ margin: 0, fontSize: 12, color: "var(--color-text-warning)" }}>{err}</p>
+      ) : preview ? (
+        <p style={{ margin: 0, fontSize: 12, color: "var(--color-text-secondary)" }}>
+          <span style={{ color: "var(--color-text-tertiary)" }}>Preview: </span>
+          {preview}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function RegularStudentCard({
   activities,
   options,
@@ -1423,8 +1736,15 @@ function RegularStudentCard({
         const caps = def ? activityCapturesFor(teacher, { id: def.id, name: def.name }) : [];
         return (
         <div key={i} style={{ borderTop: i > 0 ? "0.5px solid var(--color-border-tertiary)" : undefined, paddingTop: i > 0 ? 10 : 0 }}>
-          <div style={{ fontSize: 15, fontWeight: 400, color: "var(--color-text-primary)", marginBottom: 6 }}>
-            {def?.name || `Activity ${i + 1}`}
+          <div
+            style={{
+              fontSize: 15,
+              fontWeight: 400,
+              color: def ? "var(--color-text-primary)" : "var(--color-text-danger)",
+              marginBottom: 6,
+            }}
+          >
+            {def?.name || "Select an activity"}
           </div>
           {caps.length > 0 && (
             <ActivityCaptureFields
@@ -1443,22 +1763,111 @@ function RegularStudentCard({
           )}
           <CheckGroup
             label="Goals"
-            options={studentGoals.map((g) => ({ value: g.id, label: g.shortName }))}
+            options={studentGoals.map((g) => ({
+              value: g.id,
+              label: g.shortName,
+              title: g.shortTermGoal.trim() || undefined,
+            }))}
             selected={inputs[i]?.goals ?? []}
             onChange={(goals) => onChange(i, { goals })}
           />
-          <CheckGroup
-            label="Prompting level"
-            options={PROMPTING_LEVELS.map((v) => ({ value: v, label: v }))}
-            selected={inputs[i]?.promptingLevel ?? []}
-            onChange={(promptingLevel) => onChange(i, { promptingLevel })}
-          />
-          <CheckGroup
-            label="Prompting type"
-            options={PROMPTING_TYPES.map((v) => ({ value: v, label: v }))}
-            selected={inputs[i]?.promptingType ?? []}
-            onChange={(promptingType) => onChange(i, { promptingType })}
-          />
+          <div
+            style={{
+              margin: "12px 0",
+              border: "0.5px solid var(--color-border-secondary)",
+              borderRadius: "var(--border-radius-md)",
+              padding: "8px 10px 10px",
+              background: "color-mix(in srgb, var(--color-background-secondary) 55%, transparent)",
+              display: "flex",
+              flexDirection: "column",
+              gap: 6,
+            }}
+          >
+          {(() => {
+            const trialsOn = !!inputs[i]?.trials?.enabled;
+            // The goals this activity targets — the measurement options in the panel.
+            const activityGoals = studentGoals.filter((g) => (inputs[i]?.goals ?? []).includes(g.id));
+            const setTrials = (on: boolean) => {
+              const cur = inputs[i]?.trials ?? blankTrials();
+              // On first turn-on, seed one measurement per selected goal (or one
+              // blank if none selected yet) so the per-goal layout is obvious.
+              const entries =
+                on && (cur.entries ?? []).length === 0
+                  ? activityGoals.length > 0
+                    ? activityGoals.map((g) => blankTrialEntry(g.id, g.measuredVerb, g.measuredNoun))
+                    : [blankTrialEntry()]
+                  : cur.entries;
+              onChange(i, { trials: { ...cur, enabled: on, entries } });
+            };
+            const seg = (active: boolean) => ({
+              border: "none",
+              borderRadius: 0,
+              padding: "2px 10px",
+              height: "auto",
+              fontSize: 12,
+              lineHeight: 1.4,
+              background: active ? "var(--color-background-primary)" : "transparent",
+              color: active ? "var(--color-text-primary)" : "var(--color-text-secondary)",
+              fontWeight: active ? 500 : 400,
+            });
+            return (
+              <div
+                role="group"
+                aria-label="Data capture mode"
+                style={{
+                  display: "inline-flex",
+                  alignSelf: "flex-start",
+                  border: "0.5px solid var(--color-border-secondary)",
+                  borderRadius: "var(--border-radius-md)",
+                  overflow: "hidden",
+                  margin: 0,
+                }}
+              >
+                <button className="button button--small" style={seg(!trialsOn)} onClick={() => setTrials(false)}>
+                  Checklist
+                </button>
+                <button
+                  className="button button--small"
+                  style={{ ...seg(trialsOn), borderLeft: "0.5px solid var(--color-border-secondary)" }}
+                  onClick={() => setTrials(true)}
+                >
+                  Trials
+                </button>
+              </div>
+            );
+          })()}
+          {inputs[i]?.trials?.enabled ? (
+            <TrialsPanel
+              studentName={fullName(student)}
+              pronoun={student.pronouns.split("/")[0]?.trim() || student.pronouns}
+              goals={studentGoals
+                .filter((g) => (inputs[i]?.goals ?? []).includes(g.id))
+                .map((g) => ({
+                  id: g.id,
+                  shortName: g.shortName,
+                  measuredVerb: g.measuredVerb,
+                  measuredNoun: g.measuredNoun,
+                }))}
+              value={inputs[i]!.trials}
+              onChange={(trials) => onChange(i, { trials })}
+            />
+          ) : (
+            <>
+              <CheckGroup
+                label="Prompting level"
+                options={PROMPTING_LEVELS.map((v) => ({ value: v, label: v }))}
+                selected={inputs[i]?.promptingLevel ?? []}
+                onChange={(promptingLevel) => onChange(i, { promptingLevel })}
+              />
+              <CheckGroup
+                label="Prompting type"
+                options={PROMPTING_TYPES.map((v) => ({ value: v, label: v }))}
+                selected={inputs[i]?.promptingType ?? []}
+                onChange={(promptingType) => onChange(i, { promptingType })}
+              />
+            </>
+          )}
+          </div>
           <CheckGroup
             label="Redirection"
             options={REDIRECTION_LEVELS.map((v) => ({ value: v, label: v }))}
@@ -1713,7 +2122,11 @@ function NewsStudentCard({
 
       <CheckGroup
         label="Goals"
-        options={studentGoals.map((g) => ({ value: g.id, label: g.shortName }))}
+        options={studentGoals.map((g) => ({
+          value: g.id,
+          label: g.shortName,
+          title: g.shortTermGoal.trim() || undefined,
+        }))}
         selected={st.newsGoalIds}
         onChange={onGoalsChange}
       />
@@ -1728,7 +2141,9 @@ function CheckGroup({
   onChange,
 }: {
   label: string;
-  options: { value: string; label: string }[];
+  // `title`, when set, shows on hover (native tooltip) and gives the label a
+  // subtle dotted underline so it's discoverable — used for goals' full text.
+  options: { value: string; label: string; title?: string }[];
   selected: string[];
   onChange: (next: string[]) => void;
 }) {
@@ -1748,7 +2163,13 @@ function CheckGroup({
                 checked={selected.includes(o.value)}
                 onChange={(e) => toggle(o.value, e.target.checked)}
               />
-              {o.label}
+              {o.title ? (
+                <span title={o.title} style={{ cursor: "help" }}>
+                  {o.label}
+                </span>
+              ) : (
+                o.label
+              )}
             </label>
           ))
         )}
@@ -2310,7 +2731,7 @@ function buildContext(
     const caps = { ...st.captures, ...(st.regular[i]?.captures ?? {}) };
     const selectedOptions = st.regular[i]?.options ?? [];
     return applyActivityRewrite(teacher, student, activity, def.additionalInfo, caps, fallback, selectedOptions);
-  });
+  }, student.firstName, pronoun);
   return regularContext({
     studentName: student.firstName,
     pronouns: student.pronouns,
@@ -2340,8 +2761,16 @@ function buildSessionMetadata(
           : Array.from(new Set(st.regular.flatMap((r) => r.goals)));
       // Persist absence so Today/Schedule can mark it; omit the key when present
       // to keep files tidy. Absent students carry no goalIds.
-      return st.absent
-        ? { studentId: s.id, goalIds: [], mode, absent: true }
+      if (st.absent) return { studentId: s.id, goalIds: [], mode, absent: true };
+      // Per-goal trial measurements (auditable count data) across the activities.
+      const trials =
+        mode === "news-day"
+          ? []
+          : st.regular.flatMap((r) =>
+              r.trials?.enabled ? (r.trials.entries ?? []).filter(trialEntryStarted) : [],
+            );
+      return trials.length > 0
+        ? { studentId: s.id, goalIds, mode, trials }
         : { studentId: s.id, goalIds, mode };
     }),
   };

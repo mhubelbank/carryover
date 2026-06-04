@@ -6,8 +6,9 @@ Activity {{@index_plus_one}}: {{this.description}}{{#if this.segmentName}}
    Segment name: {{this.segmentName}}{{/if}}
    Language domains: {{this.domains}}
    IEP goals — name these (and only these): {{this.goals}}{{#if this.goalDetails}}
-   Goal details (context only — understand the target; do NOT quote): {{this.goalDetails}}{{/if}}
-   Prompting: {{this.promptingLevel}} {{this.promptingType}}
+   Goal details (context only — understand the target; do NOT quote): {{this.goalDetails}}{{/if}}{{#if this.trials}}
+   Trial data — write this sentence VERBATIM, changing no number, and do not separately describe prompting for this activity: {{this.trials}}{{else}}
+   Prompting: {{this.promptingLevel}} {{this.promptingType}}{{/if}}
    Redirection: {{this.redirection}}
    Student response: {{this.response}}
    Additional notes: {{this.additionalNotes | default: "none"}}
@@ -31,6 +32,7 @@ Language conventions (non-negotiable):
 - Redirection is written as "redirection to task." Never just "redirection."
 - Goals are named using the exact short labels in "IEP goals" — never the full "Goal details" sentences, and never vague phrases like "her communication goals." The goal-details text is background only; it must not appear in the note.
 - If a session field is empty or shows no value, do not mention that category at all.
+- When an activity provides "Trial data," reproduce that sentence exactly — every count and total unchanged — and do not write a separate prompting clause for that activity (the trial sentence already states the support given).
 
 Do NOT:
 - Invent details not in the data — no specific questions asked, no percentages, no observations, no fabricated behaviors. If the data says "getting-to-know-you questions," do not write "questions about their interests and background."

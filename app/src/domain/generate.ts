@@ -1,5 +1,6 @@
 import type { Role, Teacher } from "./teacher";
 import type { TemplateContext } from "./notes";
+import { trialSentence, TRIAL_SUPPORT_TYPES, type TrialData } from "./trial";
 
 // ---------------------------------------------------------------------------
 // Option lists (confirmed from her existing TSX files; identical across teachers)
@@ -13,7 +14,9 @@ export const PROMPTING_LEVELS = [
   "one to one para support",
 ] as const;
 
-export const PROMPTING_TYPES = ["verbal", "visual", "tactile"] as const;
+// Same set as Trials' support types — kept as one source of truth so the
+// qualitative checklist and the structured trial rows can't drift apart.
+export const PROMPTING_TYPES = TRIAL_SUPPORT_TYPES;
 
 export const REDIRECTION_LEVELS = ["no", "regular", "occasional", "continuous"] as const;
 
@@ -86,6 +89,9 @@ export interface ActivityInput {
   captures: Record<string, Record<string, string | boolean | string[]>>;
   // The student's chosen subset of the activity's `perStudentOptions.options`.
   options: string[];
+  // Trials mode (off by default). When enabled, the note uses the generated
+  // trial sentence and the qualitative prompting selections collapse.
+  trials: TrialData;
 }
 
 // One entry of the `activities` array the regular templates iterate over.
@@ -95,6 +101,9 @@ export interface RenderedActivity {
   domains: string;
   goals: string;
   goalDetails: string;
+  // The precise trial data sentence (Trials mode); "" when off. When present the
+  // note uses it verbatim instead of describing prompting separately.
+  trials: string;
   promptingLevel: string;
   promptingType: string;
   redirection: string;
@@ -111,6 +120,8 @@ export function buildRegularActivities(
   defs: ActivityDef[],
   inputs: ActivityInput[],
   describe: (def: ActivityDef, index: number) => string,
+  studentName: string,
+  pronoun: string,
 ): RenderedActivity[] {
   const out: RenderedActivity[] = [];
   defs.forEach((def, i) => {
@@ -118,12 +129,14 @@ export function buildRegularActivities(
     const description = describe(def, i).trim();
     if (!description) return;
     const input = inputs[i];
+    const trials = input?.trials ? trialSentence(studentName, pronoun, input.trials) : "";
     out.push({
       description,
       segmentName: def.segmentName || "",
       domains: def.domains.join(", "),
       goals: (input?.goals ?? []).join(", "),
       goalDetails: (input?.goalDetails ?? []).join("; "),
+      trials,
       promptingLevel: (input?.promptingLevel ?? []).join(", "),
       promptingType: (input?.promptingType ?? []).join(", "),
       redirection: (input?.redirection ?? []).join(", "),
