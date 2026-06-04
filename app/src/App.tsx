@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import { TermProvider, useTerm } from "./context/TermContext";
 import { Banner } from "./components/Banner";
 import { Nav, type NavPage } from "./components/Nav";
+import { storage, StorageKeys } from "./clients/storage";
 import { Welcome } from "./pages/Welcome";
 import { Settings } from "./pages/Settings";
 import { Today } from "./pages/Today";
@@ -27,8 +28,14 @@ function Router() {
 // State-driven page selection (no router yet). Students/Teachers keep their own
 // list-vs-detail sub-state internally, so the top-level route stays a flat tab.
 // Goals are reached per-student from within Students, not as a top-level tab.
+const NAV_PAGES: NavPage[] = ["today", "generate", "students", "teachers", "activities", "schedule", "settings"];
+function loadStoredPage(): NavPage {
+  const v = storage.get(StorageKeys.page);
+  return v && (NAV_PAGES as string[]).includes(v) ? (v as NavPage) : "today";
+}
+
 function Pages() {
-  const [page, setPage] = useState<NavPage>("today");
+  const [page, setPage] = useState<NavPage>(loadStoredPage);
   const [studentTarget, setStudentTarget] = useState<
     { id: string; view: "detail" | "goals" | "iep-review" } | null
   >(null);
@@ -46,6 +53,11 @@ function Pages() {
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [page, newTerm]);
+
+  // Remember the current tab so a refresh lands on the same page.
+  useEffect(() => {
+    storage.set(StorageKeys.page, page);
+  }, [page]);
 
   // All navigation goes through `nav` so an editor with unsaved changes can
   // prompt before the page switches out from under it (the SaveBar's mount
