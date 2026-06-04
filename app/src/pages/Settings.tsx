@@ -8,6 +8,7 @@ import { useTerm } from "../context/TermContext";
 import { triggerDownload, downloadText, zipStore } from "../clients/download";
 import { buildXlsx } from "../clients/xlsx";
 import { clearNotes, getAllNotes } from "../clients/noteCache";
+import { loadThemePref, setThemePref, type ThemePref } from "../clients/theme";
 import { backupJson, csvBundleEntries, recentNotesTxt, termSlug, workbookSheets } from "../domain/export";
 import { formatShort, parseDate, startOfDay, toISODate } from "../domain/dates";
 import { termLabel, type ArchivedTerm, type StudentSnapshot } from "../domain/term";
@@ -30,6 +31,7 @@ export function Settings({ onNavigate, onStartNewTerm }: SettingsProps) {
       </p>
 
       <TermSection onStartNewTerm={onStartNewTerm} />
+      <AppearanceSection />
       <CatalogsSection onNavigate={onNavigate} />
       <KeysSection />
       <ExportSection />
@@ -348,6 +350,57 @@ function TermSnapshotDetail({ students }: { students: StudentSnapshot[] }) {
           </p>
         </div>
       ))}
+    </div>
+  );
+}
+
+function AppearanceSection() {
+  const [pref, setPref] = useState<ThemePref>(loadThemePref);
+  const choose = (p: ThemePref) => {
+    setPref(p);
+    setThemePref(p);
+  };
+  const options: { value: ThemePref; label: string }[] = [
+    { value: "system", label: "System" },
+    { value: "light", label: "Light" },
+    { value: "dark", label: "Dark" },
+  ];
+  return (
+    <div className="card" style={{ marginBottom: "1rem" }}>
+      <h3 className="card__title">Appearance</h3>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <div
+          role="group"
+          aria-label="Theme"
+          style={{
+            display: "inline-flex",
+            border: "0.5px solid var(--color-border-secondary)",
+            borderRadius: "var(--border-radius-md)",
+            overflow: "hidden",
+          }}
+        >
+          {options.map((o, i) => (
+            <button
+              key={o.value}
+              className="button button--small"
+              onClick={() => choose(o.value)}
+              style={{
+                border: "none",
+                borderRadius: 0,
+                borderLeft: i > 0 ? "0.5px solid var(--color-border-secondary)" : "none",
+                background: pref === o.value ? "var(--color-background-secondary)" : "transparent",
+                color: pref === o.value ? "var(--color-text-primary)" : "var(--color-text-secondary)",
+                fontWeight: pref === o.value ? 500 : 400,
+              }}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+        <span style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>
+          System follows your device and switches automatically.
+        </span>
+      </div>
     </div>
   );
 }
