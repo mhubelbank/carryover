@@ -1,10 +1,11 @@
 import type { ReactNode } from "react";
 import { useUnsavedGuard } from "../hooks/useUnsavedGuard";
 
-// Floating "unsaved changes" bar, pinned to the bottom of the viewport with a
-// muted amber tint so it stands out over the cream tables/cards. Shared across
-// every page that has a save flow. `extra` slots a control before the buttons
-// (e.g. the Schedule "Apply from" date).
+// Floating "unsaved changes" bar, fixed to the bottom of the viewport (so it
+// stays visible on long pages, not just when scrolled to the end) with a muted
+// amber tint. Centered and width-matched to the .shell content (max-width 880,
+// 1.5rem side padding). Shared across every page that has a save flow. `extra`
+// slots a control before the buttons (e.g. the Schedule "Apply from" date).
 export function SaveBar({
   message,
   saving,
@@ -29,9 +30,14 @@ export function SaveBar({
   return (
     <div
       style={{
-        position: "sticky",
+        position: "fixed",
+        left: 0,
+        right: 0,
         bottom: 16,
-        marginTop: 16,
+        margin: "0 auto",
+        width: "calc(100% - 3rem)",
+        maxWidth: "calc(880px - 3rem)",
+        zIndex: 50,
         padding: "10px 16px",
         background: "var(--color-background-warning)",
         border: "0.5px solid var(--color-border-tertiary)",

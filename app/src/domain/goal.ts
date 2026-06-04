@@ -12,6 +12,12 @@ export interface Goal {
   // Empty for goals from before this was tracked; Trials falls back to shortName.
   measuredVerb: string;
   measuredNoun: string;
+  // Mastery criterion for the Progress view: "{targetPercent}% correct at
+  // {targetLevel} support or better". 0 = no target → no threshold evaluation.
+  // `targetLevel` is a TRIAL_SUPPORT_LEVELS value ("no support" = fully
+  // independent); only meaningful when targetPercent > 0.
+  targetPercent: number;
+  targetLevel: string;
   archived: boolean;
 }
 

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Icon, type IconName } from "../components/Icon";
+import { Icon } from "../components/Icon";
+import { PROMPT_TYPE_ICON, LEVEL_ABBR } from "../components/promptSymbols";
 import { Nav, type NavPage } from "../components/Nav";
 import { useAuth } from "../context/AuthContext";
 import { useTerm } from "../context/TermContext";
@@ -93,21 +94,6 @@ import {
   type TrialEvent,
   type TrialSupportRow,
 } from "../domain/trial";
-
-// Symbol + short label per prompting/support type, for compact trial displays.
-const PROMPT_TYPE_ICON: Record<string, IconName> = {
-  verbal: "message",
-  visual: "eye",
-  tactile: "hand-finger",
-  gestural: "hand-finger-right",
-  modeled: "user",
-};
-const LEVEL_ABBR: Record<string, string> = {
-  "no support": "Indep",
-  minimal: "Min",
-  moderate: "Mod",
-  maximum: "Max",
-};
 
 // Shared style for a toggle button (prompting types) — active = filled pill.
 function toggleBtnStyle(active: boolean, disabled = false) {
