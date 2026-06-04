@@ -28,4 +28,5 @@ export const StorageKeys = {
   anthropicApiKey: "anthropic_api_key",
   githubToken: "github_token",
   theme: "theme",
+  page: "page",
 } as const;
