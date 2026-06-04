@@ -31,19 +31,9 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-// Dev-only convenience: seed keys from .env.local (VITE_DEV_*) so local
-// development can skip the Welcome screen. Guarded by import.meta.env.DEV, so
-// the whole branch is stripped from production builds.
-const devEnvKeys = import.meta.env.DEV
-  ? {
-      anthropicApiKey: import.meta.env.VITE_DEV_ANTHROPIC_KEY || null,
-      githubToken: import.meta.env.VITE_DEV_GITHUB_TOKEN || null,
-    }
-  : { anthropicApiKey: null, githubToken: null };
-
 function loadKeys(): Keys | null {
-  const anthropicApiKey = storage.get(StorageKeys.anthropicApiKey) ?? devEnvKeys.anthropicApiKey;
-  const githubToken = storage.get(StorageKeys.githubToken) ?? devEnvKeys.githubToken;
+  const anthropicApiKey = storage.get(StorageKeys.anthropicApiKey);
+  const githubToken = storage.get(StorageKeys.githubToken);
   if (!anthropicApiKey || !githubToken) return null;
   return { anthropicApiKey, githubToken };
 }
