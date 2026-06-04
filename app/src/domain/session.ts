@@ -1,4 +1,5 @@
 import type { Mode } from "./teacher";
+import type { TrialEntry } from "./trial";
 
 export interface SessionStudentEntry {
   studentId: string;
@@ -7,6 +8,10 @@ export interface SessionStudentEntry {
   // Marked absent in Generate for this session. Absent students still get a row
   // (so Today/Schedule can show the absence) but their note is just "X was absent."
   absent?: boolean;
+  // Per-goal trial measurements captured this session (each carries its goalId
+  // for longitudinal progress data). Note text is still not stored. Absent/empty
+  // when no trials were taken.
+  trials?: TrialEntry[];
 }
 
 export interface SessionMetadata {
