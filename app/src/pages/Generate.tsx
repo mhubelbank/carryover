@@ -246,6 +246,10 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
       return next;
     });
   const [phase, setPhase] = useState<"form" | "running" | "results">("form");
+  // Reset scroll when moving between the form and the results screen.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [phase]);
   const [results, setResults] = useState<ResultRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   // Cached notes for the chosen session (offered as a restore on the form).
