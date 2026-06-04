@@ -527,20 +527,20 @@ function ExportSection() {
 
   const downloadBackup = () => {
     if (!data) return;
-    downloadText(`sesis-${slug}-backup.json`, backupJson(data), "application/json");
+    downloadText(`carryover-${slug}-backup.json`, backupJson(data), "application/json");
   };
 
   const downloadBundle = () => {
     if (!data) return;
     const bytes = zipStore(csvBundleEntries(data));
-    triggerDownload(`sesis-${slug}-data.zip`, new Blob([bytes], { type: "application/zip" }));
+    triggerDownload(`carryover-${slug}-data.zip`, new Blob([bytes], { type: "application/zip" }));
   };
 
   const downloadExcel = () => {
     if (!data) return;
     const bytes = buildXlsx(workbookSheets(data));
     triggerDownload(
-      `sesis-${slug}.xlsx`,
+      `carryover-${slug}.xlsx`,
       new Blob([bytes], {
         type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       }),
@@ -555,7 +555,7 @@ function ExportSection() {
       setNotesMsg("No generated notes are cached yet — generate some first.");
       return;
     }
-    downloadText(`sesis-${slug}-recent-notes.txt`, recentNotesTxt(notes));
+    downloadText(`carryover-${slug}-recent-notes.txt`, recentNotesTxt(notes));
   };
 
   return (

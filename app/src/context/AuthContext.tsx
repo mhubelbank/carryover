@@ -4,7 +4,7 @@ import { storage, StorageKeys } from "../clients/storage";
 
 export const REPO_CONFIG = {
   owner: "mhubelbank",
-  repo: "emily-sesis",
+  repo: "carryover",
   // App data (students/goals/schedule/sessions) is committed to its own branch,
   // keeping the code history on the default branch clean and preventing the
   // Cloudflare Pages production deploy from rebuilding on every save.

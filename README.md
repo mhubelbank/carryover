@@ -1,7 +1,6 @@
-# SESIS Notes
+# Carryover
 
-A note-writing app for Emily's caseload. Replaces seven near-duplicate
-TSX-in-Artifacts files plus a Google Sheet with one configurable web app.
+A note-writing app for Emily's speech-language pathology caseload.
 
 ## How it runs
 
@@ -26,7 +25,7 @@ Student data is FERPA-protected. With this setup:
 ## Repo layout
 
 ```
-mhubelbank/emily-sesis     (private)
+mhubelbank/carryover     (private)
 ├── app/                    Vite + React + TypeScript app source
 └── data/                   Emily's roster, goals, schedule, prompts (live data)
     └── sessions/           Append-only generated note history
@@ -78,7 +77,7 @@ Add Emily as a collaborator with write access so her token can reach the data
 (GitHub → repo **Settings → Collaborators → Add people**), or run:
 
 ```
-gh api -X PUT repos/mhubelbank/emily-sesis/collaborators/<her-username> -f permission=push
+gh api -X PUT repos/mhubelbank/carryover/collaborators/<her-username> -f permission=push
 ```
 
 She accepts the emailed invite. Required: a classic `repo` token only reaches
