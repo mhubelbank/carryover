@@ -80,8 +80,8 @@ function blankStudent(): Student {
 }
 
 // The new-term setup wizard (replaces the empty-state placeholder). Step 1
-// (Year) creates the term, step 2 reviews the teacher roster; steps 3–5 (students,
-// schedule, goals) are built out incrementally — placeholders for now.
+// (Year) creates the term, step 2 reviews the teacher roster, steps 3–5 cover
+// students, schedule, and goals.
 export function NewTermWizard({ onNavigate, onClose }: Props) {
   const { state, saveTerm, saveTeachers, saveStudents, saveSchedule, reload, archiveTermToHistory } =
     useTerm();
@@ -565,7 +565,6 @@ function StudentsStep({
 
   return (
     <div>
-      {/* Continuing / New tabs */}
       <div style={{ display: "flex", gap: 4, marginBottom: "1.25rem" }}>
         {(["continuing", "new"] as const).map((t) => (
           <button

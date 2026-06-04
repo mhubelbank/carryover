@@ -1435,7 +1435,6 @@ function formatHour(h: number): string {
   return `${hour12}:00`;
 }
 
-// Whether a week cell's students match the usual template's for that cell.
 // Students offered in the cell editor: drop archived everywhere, and in week
 // mode drop anyone whose enrollment window doesn't include the column's date.
 function editorStudents(students: Student[], weekDate: Date | null, day: Weekday): Student[] {
