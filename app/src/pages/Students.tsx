@@ -37,7 +37,7 @@ interface Props {
 type View =
   | { kind: "list" }
   | { kind: "detail"; id: string }
-  | { kind: "goals"; id: string }
+  | { kind: "goals"; id: string; expand?: string }
   | { kind: "iep-review"; id: string }
   | { kind: "create"; student: Student };
 
@@ -97,6 +97,7 @@ export function Students({ onNavigate, target, onTargetConsumed }: Props) {
     return (
       <StudentGoals
         studentId={view.id}
+        expandGoalId={view.expand}
         onBack={() => go({ kind: "detail", id: view.id })}
         onNavigate={onNavigate}
       />
@@ -602,7 +603,7 @@ function StudentDetail({
         {!isNew && (
           <div style={{ display: "flex", gap: 8 }}>
             <button className="button button--small" onClick={onViewGoals}>
-              View goals
+              Goals & progress
               <Icon name="chevron-right" size={14} />
             </button>
             <button

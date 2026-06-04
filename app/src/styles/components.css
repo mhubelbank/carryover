@@ -145,7 +145,8 @@ input[type="radio"] {
 .shell {
   max-width: 880px;
   margin: 0 auto;
-  padding: 1.5rem 1.5rem 4rem 1.5rem;
+  /* generous bottom padding so the fixed SaveBar never covers the last row */
+  padding: 1.5rem 1.5rem 5.5rem 1.5rem;
 }
 
 /* Schedule time-axis blocks: lift a block above its neighbors when hovered or

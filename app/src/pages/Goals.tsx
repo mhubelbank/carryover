@@ -1,23 +1,40 @@
 import { useEffect, useState } from "react";
 import { Icon } from "../components/Icon";
-import { useUnsavedGuard } from "../hooks/useUnsavedGuard";
+import { SaveBar } from "../components/SaveBar";
 import { Nav, type NavPage } from "../components/Nav";
+import {
+  GoalScorecard,
+  Metric,
+  Sparkline,
+  StatusChip,
+  SupportTypeBars,
+  sumByType,
+  criterionMetPct,
+  shortDate,
+  ACCURACY_COLOR,
+  INDEPENDENCE_COLOR,
+  ACCURACY_DEF,
+  INDEPENDENCE_DEF,
+} from "../components/GoalScorecard";
 import { useAuth } from "../context/AuthContext";
 import { useTerm } from "../context/TermContext";
-import { loadSessions } from "../domain/data";
+import { loadSessions, loadIepHistory } from "../domain/data";
 import { groupByLongTerm, type Goal } from "../domain/goal";
+import { TRIAL_SUPPORT_LEVELS } from "../domain/trial";
 import { fullName } from "../domain/student";
-import { goalUsageCounts } from "../domain/session";
+import { studentGoalProgress, overallTrend, type GoalProgress } from "../domain/progress";
 import { suggestGoalLabels, type GoalLabels } from "../domain/shortnames";
 
 // Per-student goals hub: the editable list (view) and the Add-goals workflow.
 // Reached from a student's detail page (Students flow).
 export function StudentGoals({
   studentId,
+  expandGoalId,
   onBack,
   onNavigate,
 }: {
   studentId: string;
+  expandGoalId?: string;
   onBack: () => void;
   onNavigate: (page: NavPage) => void;
 }) {
@@ -35,6 +52,7 @@ export function StudentGoals({
   return (
     <GoalsView
       studentId={studentId}
+      expandGoalId={expandGoalId}
       onBack={onBack}
       onAdd={(ltg) => setAdding({ ltg })}
       onNavigate={onNavigate}
@@ -44,16 +62,18 @@ export function StudentGoals({
 
 function GoalsView({
   studentId,
+  expandGoalId,
   onBack,
   onAdd,
   onNavigate,
 }: {
   studentId: string;
+  expandGoalId?: string;
   onBack: () => void;
   onAdd: (ltg: string) => void;
   onNavigate: (page: NavPage) => void;
 }) {
-  const { state, teacherById, studentById, client, saveGoals } = useTerm();
+  const { state, teacherById, studentById, client, saveGoals, termHistory } = useTerm();
   const { keys } = useAuth();
   const apiKey = keys?.anthropicApiKey ?? "";
   const ownGoals = () =>
@@ -63,7 +83,12 @@ function GoalsView({
   const [draft, setDraft] = useState<Goal[]>(ownGoals);
   const [baseline, setBaseline] = useState<Goal[]>(ownGoals);
   const [showArchived, setShowArchived] = useState(false);
-  const [usage, setUsage] = useState<Map<string, number> | null>(null);
+  const [progress, setProgress] = useState<Map<string, GoalProgress>>(new Map());
+  const [iepDates, setIepDates] = useState<string[]>([]);
+  // Goal ids whose inline Progress panel is expanded (seeded from a deep-link).
+  const [expanded, setExpanded] = useState<Set<string>>(() =>
+    expandGoalId ? new Set([expandGoalId]) : new Set(),
+  );
   const [saving, setSaving] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,18 +96,40 @@ function GoalsView({
   useEffect(() => {
     if (!client) return;
     let cancelled = false;
-    setUsage(null);
     loadSessions(client)
       .then((s) => {
-        if (!cancelled) setUsage(goalUsageCounts(s));
+        if (!cancelled) setProgress(studentGoalProgress(s, studentId));
       })
-      .catch(() => {
-        if (!cancelled) setUsage(new Map());
-      });
+      .catch(() => {});
+    loadIepHistory(client, studentId)
+      .then((h) => {
+        if (!cancelled) setIepDates(h.map((r) => r.date).filter(Boolean));
+      })
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, [client]);
+  }, [client, studentId]);
+
+  // Term dividers for the progress sparklines: each term's first day, current +
+  // archived, newest-first deduped by date.
+  const terms = (() => {
+    const cur = state.status === "ready" ? state.data.term : null;
+    const list = [
+      ...(cur ? [{ label: cur.label, firstDay: cur.firstDay }] : []),
+      ...termHistory.map((t) => ({ label: t.label, firstDay: t.firstDay })),
+    ];
+    const seen = new Set<string>();
+    return list.filter((t) => t.firstDay && !seen.has(t.firstDay) && seen.add(t.firstDay));
+  })();
+
+  const toggleExpanded = (id: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   const data = state.status === "ready" ? state.data : null;
   const student = studentById.get(studentId);
@@ -104,6 +151,8 @@ function GoalsView({
   const setShortName = (id: string, v: string) =>
     setDraft((d) => d.map((g) => (g.id === id ? { ...g, shortName: v } : g)));
   const setMeasured = (id: string, patch: { measuredVerb?: string; measuredNoun?: string }) =>
+    setDraft((d) => d.map((g) => (g.id === id ? { ...g, ...patch } : g)));
+  const setTarget = (id: string, patch: { targetPercent?: number; targetLevel?: string }) =>
     setDraft((d) => d.map((g) => (g.id === id ? { ...g, ...patch } : g)));
   const setShortTermGoal = (id: string, v: string) =>
     setDraft((d) => d.map((g) => (g.id === id ? { ...g, shortTermGoal: v } : g)));
@@ -193,7 +242,7 @@ function GoalsView({
         }}
       >
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 500, margin: 0 }}>{fullName(student)}'s goals</h1>
+          <h1 style={{ fontSize: 22, fontWeight: 500, margin: 0 }}>{fullName(student)}'s goals & progress</h1>
           <p style={{ margin: "4px 0 0 0", color: "var(--color-text-secondary)", fontSize: 14 }}>
             {activeCount} short-term goal{activeCount === 1 ? "" : "s"} across {activeGroups.length}{" "}
             long-term area{activeGroups.length === 1 ? "" : "s"}
@@ -218,6 +267,12 @@ function GoalsView({
           </button>
         </div>
       </div>
+
+      <ProgressOverview
+        goals={draft.filter((g) => !g.archived)}
+        progress={progress}
+        termStart={state.status === "ready" ? state.data.term.firstDay : ""}
+      />
 
       {groups.length === 0 && emptiedLtgs.length === 0 ? (
         <div
@@ -249,7 +304,7 @@ function GoalsView({
                 Long-term goal
               </p>
               <p style={{ margin: "0 0 12px 0", fontSize: 14, lineHeight: 1.6 }}>{group.longTermGoal}</p>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                 {group.goals.map((goal, idx) => (
                   <div
                     key={goal.id}
@@ -272,61 +327,160 @@ function GoalsView({
                     >
                       {idx + 1}
                     </div>
-                    <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <input
-                          className="input"
-                          style={{ flex: 1, height: 32 }}
-                          placeholder="shortname — terse skill label, e.g. answer WH questions"
-                          value={goal.shortName}
-                          onChange={(e) => setShortName(goal.id, e.target.value)}
-                        />
-                        <span style={{ flexShrink: 0 }}>
-                          <UsageLabel usage={usage} goal={goal} />
-                        </span>
-                        <button
-                          className="button button--ghost button--small"
-                          style={{ flexShrink: 0 }}
-                          onClick={() => toggleArchived(goal.id)}
-                        >
-                          {goal.archived ? "Unarchive" : "Archive"}
-                        </button>
-                        <button
-                          className="button button--ghost button--small"
-                          style={{ flexShrink: 0, padding: 6, color: "var(--color-text-tertiary)" }}
-                          title="Remove goal"
-                          onClick={() => removeGoal(goal.id)}
-                        >
-                          <Icon name="x" size={14} />
-                        </button>
-                      </div>
-                      <textarea
-                        className="textarea"
-                        rows={2}
-                        placeholder="Full short-term goal — sent to the note generator (falls back to the shortname if left blank)"
-                        value={goal.shortTermGoal}
-                        onChange={(e) => setShortTermGoal(goal.id, e.target.value)}
-                        style={{ fontSize: 12, color: "var(--color-text-secondary)" }}
-                      />
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <span style={{ fontSize: 11, color: "var(--color-text-tertiary)", flexShrink: 0 }}>
-                          measured as
-                        </span>
-                        <input
-                          className="input"
-                          style={{ width: 170, height: 28, fontSize: 12 }}
-                          placeholder="past-tense verb"
-                          value={goal.measuredVerb}
-                          onChange={(e) => setMeasured(goal.id, { measuredVerb: e.target.value })}
-                        />
-                        <input
-                          className="input"
-                          style={{ flex: 1, height: 28, fontSize: 12 }}
-                          placeholder="noun (falls back to shortname for Trials)"
-                          value={goal.measuredNoun}
-                          onChange={(e) => setMeasured(goal.id, { measuredNoun: e.target.value })}
-                        />
-                      </div>
+                    <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8, minWidth: 0 }}>
+                      {(() => {
+                        const gp = progress.get(goal.id);
+                        const isOpen = expanded.has(goal.id);
+                        const target = { percent: goal.targetPercent, level: goal.targetLevel };
+                        const has = !!gp && gp.points.length > 0;
+                        const series = has
+                          ? target.percent > 0
+                            ? gp!.points.map((p) => criterionMetPct(p, target.level))
+                            : gp!.points.map((p) => p.independencePct)
+                          : [];
+                        const lastV = has ? series[series.length - 1]! : 0;
+                        const atGoal = has && target.percent > 0 && lastV >= target.percent;
+                        return (
+                          <>
+                            {/* Collapsed header: rename inline + at-a-glance coverage. */}
+                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                              <button
+                                className="button button--ghost button--small"
+                                onClick={() => toggleExpanded(goal.id)}
+                                title={isOpen ? "Hide details" : "Show details & progress"}
+                                style={{ flexShrink: 0, padding: 4, color: "var(--color-text-tertiary)", display: "flex" }}
+                              >
+                                <span
+                                  style={{
+                                    display: "inline-flex",
+                                    transform: isOpen ? "rotate(90deg)" : "none",
+                                    transition: "transform 0.15s",
+                                  }}
+                                >
+                                  <Icon name="chevron-right" size={14} />
+                                </span>
+                              </button>
+                              <input
+                                className="input"
+                                style={{ flex: 1, height: 32 }}
+                                placeholder="shortname — terse skill label, e.g. answer WH questions"
+                                value={goal.shortName}
+                                onChange={(e) => setShortName(goal.id, e.target.value)}
+                              />
+                              {has ? (
+                                <>
+                                  <Sparkline values={series} color={INDEPENDENCE_COLOR} w={60} h={18} />
+                                  <span style={{ flexShrink: 0, fontSize: 13, fontWeight: 500 }}>{lastV}%</span>
+                                  <StatusChip values={series} atGoal={atGoal} />
+                                </>
+                              ) : (
+                                <span style={{ flexShrink: 0, fontSize: 12, color: "var(--color-text-tertiary)" }}>
+                                  no data
+                                </span>
+                              )}
+                              <button
+                                className="button button--ghost button--small"
+                                style={{ flexShrink: 0 }}
+                                onClick={() => toggleArchived(goal.id)}
+                              >
+                                {goal.archived ? "Unarchive" : "Archive"}
+                              </button>
+                              <button
+                                className="button button--ghost button--small"
+                                style={{ flexShrink: 0, padding: 6, color: "var(--color-text-tertiary)" }}
+                                title="Remove goal"
+                                onClick={() => removeGoal(goal.id)}
+                              >
+                                <Icon name="x" size={14} />
+                              </button>
+                            </div>
+                            {/* Expanded: config fields + full scorecard. */}
+                            {isOpen && (
+                              <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingLeft: 30 }}>
+                                <textarea
+                                  className="textarea"
+                                  rows={2}
+                                  placeholder="Full short-term goal — sent to the note generator (falls back to the shortname if left blank)"
+                                  value={goal.shortTermGoal}
+                                  onChange={(e) => setShortTermGoal(goal.id, e.target.value)}
+                                  style={{ fontSize: 12, color: "var(--color-text-secondary)" }}
+                                />
+                                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                  <span style={{ fontSize: 11, color: "var(--color-text-tertiary)", flexShrink: 0 }}>
+                                    measured as
+                                  </span>
+                                  <input
+                                    className="input"
+                                    style={{ width: 170, height: 28, fontSize: 12 }}
+                                    placeholder="past-tense verb"
+                                    value={goal.measuredVerb}
+                                    onChange={(e) => setMeasured(goal.id, { measuredVerb: e.target.value })}
+                                  />
+                                  <input
+                                    className="input"
+                                    style={{ flex: 1, height: 28, fontSize: 12 }}
+                                    placeholder="noun (falls back to shortname for Trials)"
+                                    value={goal.measuredNoun}
+                                    onChange={(e) => setMeasured(goal.id, { measuredNoun: e.target.value })}
+                                  />
+                                </div>
+                                <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                                  <span style={{ fontSize: 11, color: "var(--color-text-tertiary)", flexShrink: 0 }}>
+                                    mastery target
+                                  </span>
+                                  <input
+                                    className="input"
+                                    type="text"
+                                    inputMode="numeric"
+                                    style={{ width: 52, height: 28, fontSize: 12 }}
+                                    placeholder="—"
+                                    value={goal.targetPercent ? String(goal.targetPercent) : ""}
+                                    onChange={(e) =>
+                                      setTarget(goal.id, {
+                                        targetPercent: Math.min(100, Number(e.target.value.replace(/\D/g, "")) || 0),
+                                      })
+                                    }
+                                  />
+                                  <span style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>% correct at</span>
+                                  <select
+                                    className="select"
+                                    style={{ width: "auto", height: 28, fontSize: 12 }}
+                                    value={goal.targetLevel || "no support"}
+                                    onChange={(e) => setTarget(goal.id, { targetLevel: e.target.value })}
+                                  >
+                                    {TRIAL_SUPPORT_LEVELS.map((l) => (
+                                      <option key={l} value={l}>
+                                        {l}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <span style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>
+                                    or better — optional; enables mastery tracking
+                                  </span>
+                                </div>
+                                {has && (
+                                  <div
+                                    style={{
+                                      marginTop: 2,
+                                      padding: "10px 12px",
+                                      border: "0.5px solid var(--color-border-tertiary)",
+                                      borderRadius: "var(--border-radius-md)",
+                                      background: "color-mix(in srgb, var(--color-background-secondary) 55%, transparent)",
+                                    }}
+                                  >
+                                    <GoalScorecard
+                                      progress={gp!}
+                                      target={target}
+                                      terms={terms}
+                                      iepDates={iepDates}
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
                 ))}
@@ -386,7 +540,7 @@ function GoalsView({
 
       {dirty && (
         <SaveBar
-          label="Unsaved changes"
+          message="Unsaved changes"
           saving={saving}
           onDiscard={() => {
             setDraft(baseline.map(cloneGoal));
@@ -549,16 +703,33 @@ export function AddGoals({
 
   async function handleSave() {
     if (!review) return;
-    const newGoals: Goal[] = review.map((it) => ({
-      id: `g_${crypto.randomUUID()}`,
-      studentId,
-      longTermGoal: it.ltg.trim(),
-      shortTermGoal: it.stText.trim(),
-      shortName: it.shortName.trim(),
-      measuredVerb: it.measuredVerb.trim(),
-      measuredNoun: it.measuredNoun.trim(),
-      archived: false,
-    }));
+    // ID guard: if a pasted goal's full text matches an existing goal for this
+    // student (active OR archived), reuse that goal's id so its trial history
+    // carries over instead of starting a fresh, disconnected goal. Match on the
+    // normalized short-term text (falling back to shortname).
+    const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
+    const existingByText = new Map<string, Goal>();
+    for (const g of data!.goals) {
+      if (g.studentId !== studentId) continue;
+      const key = norm(g.shortTermGoal || g.shortName);
+      if (key && !existingByText.has(key)) existingByText.set(key, g);
+    }
+    const newGoals: Goal[] = review.map((it) => {
+      const match = existingByText.get(norm(it.stText || it.shortName));
+      return {
+        id: match ? match.id : `g_${crypto.randomUUID()}`,
+        studentId,
+        longTermGoal: it.ltg.trim(),
+        shortTermGoal: it.stText.trim(),
+        shortName: it.shortName.trim(),
+        measuredVerb: it.measuredVerb.trim(),
+        measuredNoun: it.measuredNoun.trim(),
+        // Preserve an existing goal's target when re-adding it; new goals start unset.
+        targetPercent: match ? match.targetPercent : 0,
+        targetLevel: match ? match.targetLevel : "no support",
+        archived: false, // re-adding revives an archived goal
+      };
+    });
     if (newGoals.some((g) => g.longTermGoal === "" || g.shortName === "")) {
       setError("Each goal needs a long-term goal and a shortname before saving.");
       return;
@@ -570,10 +741,13 @@ export function AddGoals({
     }
     setBusy(true);
     setError(null);
-    // Re-populating an emptied long-term goal replaces its existing rows rather
-    // than appending alongside them.
+    // Replace any goals we reused-by-id (the matched existing rows) and any rows
+    // in an emptied long-term group, then append the (re)built goals.
+    const reusedIds = new Set(newGoals.map((g) => g.id));
     const kept = data!.goals.filter(
-      (g) => !(initialLtg !== "" && g.studentId === studentId && g.longTermGoal === initialLtg),
+      (g) =>
+        !reusedIds.has(g.id) &&
+        !(initialLtg !== "" && g.studentId === studentId && g.longTermGoal === initialLtg),
     );
     try {
       await saveGoals([...kept, ...newGoals]);
@@ -925,43 +1099,100 @@ function ReSuggestModal({
   );
 }
 
-function SaveBar({
-  label,
-  saveLabel,
-  saving,
-  onDiscard,
-  onSave,
+// Caseload-level summary shown at the top of the Goals & progress view: headline
+// stats + an all-goals trend. Hidden until there's any trial data.
+function ProgressOverview({
+  goals,
+  progress,
+  termStart,
 }: {
-  label: string;
-  saveLabel: string;
-  saving: boolean;
-  onDiscard: () => void;
-  onSave: () => void;
+  goals: Goal[];
+  progress: Map<string, GoalProgress>;
+  termStart: string;
 }) {
-  // Mounted only while there are unsaved goal edits — warn on leaving.
-  useUnsavedGuard();
-  return (
-    <div
-      style={{
-        marginTop: "1.25rem",
-        padding: "12px 16px",
-        background: "var(--color-background-secondary)",
-        borderRadius: "var(--border-radius-md)",
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        gap: 12,
-      }}
-    >
-      <p style={{ margin: 0, fontSize: 13, color: "var(--color-text-secondary)" }}>{label}</p>
-      <div style={{ display: "flex", gap: 8 }}>
-        <button className="button button--small" onClick={onDiscard} disabled={saving}>
-          Discard
-        </button>
-        <button className="button button--small button--primary" onClick={onSave} disabled={saving}>
-          {saving ? "Saving…" : saveLabel}
-        </button>
+  const ptsOf = (id: string) => progress.get(id)?.points ?? [];
+  const withData = goals.filter((g) => ptsOf(g.id).length > 0);
+  if (withData.length === 0) return null;
+  const lastPt = (id: string) => ptsOf(id)[ptsOf(id).length - 1]!;
+  const targeted = withData.filter((g) => g.targetPercent > 0);
+  const atGoal = targeted.filter((g) => criterionMetPct(lastPt(g.id), g.targetLevel) >= g.targetPercent).length;
+  const avgIndep = Math.round(
+    withData.reduce((s, g) => s + lastPt(g.id).independencePct, 0) / withData.length,
+  );
+  const avgAcc = Math.round(
+    withData.reduce((s, g) => s + lastPt(g.id).accuracyPct, 0) / withData.length,
+  );
+  const lastLogged = withData
+    .map((g) => lastPt(g.id).date)
+    .sort()
+    .pop();
+  // This-term coverage: goals with ≥1 session since the term start, and the
+  // number of distinct session days logged this term.
+  const usedThisTerm = termStart
+    ? goals.filter((g) => ptsOf(g.id).some((p) => p.date >= termStart)).length
+    : withData.length;
+  const sessionDaysThisTerm = termStart
+    ? new Set(withData.flatMap((g) => ptsOf(g.id).filter((p) => p.date >= termStart).map((p) => p.date))).size
+    : 0;
+  const trend = overallTrend(progress);
+  const allByType = sumByType(withData.flatMap((g) => ptsOf(g.id)));
+  const anyTypes = Object.values(allByType).reduce((s, n) => s + n, 0) > 0;
+  const stat = (label: string, value: string, color?: string, hint?: string) => (
+    <div>
+      <div
+        style={{ fontSize: 12, color: "var(--color-text-secondary)", cursor: hint ? "help" : undefined }}
+        title={hint}
+      >
+        {label}
       </div>
+      <div style={{ fontSize: 22, fontWeight: 500, color }}>{value}</div>
+    </div>
+  );
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 14 }}>
+      <div className="card" style={{ display: "flex", flexWrap: "wrap", gap: "10px 32px" }}>
+        {stat(termStart ? "Goals used this term" : "Goals measured", `${usedThisTerm} / ${goals.length}`)}
+        {termStart && stat("Sessions this term", `${sessionDaysThisTerm}`)}
+        {stat("Avg accuracy", `${avgAcc}%`, ACCURACY_COLOR, ACCURACY_DEF)}
+        {stat("Avg independence", `${avgIndep}%`, INDEPENDENCE_COLOR, INDEPENDENCE_DEF)}
+        {targeted.length > 0 && stat("At goal", `${atGoal} / ${targeted.length}`)}
+        {lastLogged && stat("Last logged", shortDate(lastLogged))}
+      </div>
+      {(trend.length > 1 || anyTypes) && (
+        <div className="card">
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "16px 36px", alignItems: "flex-start" }}>
+            {trend.length > 1 && (
+              <div style={{ flex: "0 0 auto", display: "flex", flexDirection: "column", gap: 12 }}>
+                <div style={{ fontSize: 14, fontWeight: 500 }}>Overall trend — all goals</div>
+                <Metric
+                  name="Accuracy"
+                  color={ACCURACY_COLOR}
+                  hint={ACCURACY_DEF}
+                  values={trend.map((p) => p.accuracyPct)}
+                  latest={trend[trend.length - 1]!.accuracyPct}
+                  delta={trend[trend.length - 1]!.accuracyPct - trend[trend.length - 2]!.accuracyPct}
+                  single={false}
+                />
+                <Metric
+                  name="Independence"
+                  color={INDEPENDENCE_COLOR}
+                  hint={INDEPENDENCE_DEF}
+                  values={trend.map((p) => p.independencePct)}
+                  latest={trend[trend.length - 1]!.independencePct}
+                  delta={trend[trend.length - 1]!.independencePct - trend[trend.length - 2]!.independencePct}
+                  single={false}
+                />
+              </div>
+            )}
+            {anyTypes && (
+              <div style={{ flex: "1 1 220px", minWidth: 200, maxWidth: 320 }}>
+                <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 16 }}>Support types needed</div>
+                <SupportTypeBars byType={allByType} />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

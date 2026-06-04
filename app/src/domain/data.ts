@@ -210,7 +210,7 @@ export function writeStudents(
   );
 }
 
-const GOAL_COLUMNS = ["id", "studentId", "longTermGoal", "shortTermGoal", "shortName", "measuredVerb", "measuredNoun", "archived"];
+const GOAL_COLUMNS = ["id", "studentId", "longTermGoal", "shortTermGoal", "shortName", "measuredVerb", "measuredNoun", "targetPercent", "targetLevel", "archived"];
 
 export function goalsToCsv(goals: Goal[]): string {
   const rows = goals.map((g) => [
@@ -221,6 +221,8 @@ export function goalsToCsv(goals: Goal[]): string {
     g.shortName,
     g.measuredVerb,
     g.measuredNoun,
+    g.targetPercent ? String(g.targetPercent) : "",
+    g.targetLevel || "no support",
     g.archived ? "true" : "false",
   ]);
   return serializeCsv(GOAL_COLUMNS, rows);
@@ -679,6 +681,8 @@ function toGoal(row: Record<string, string>): Goal {
     shortName: row.shortName ?? "",
     measuredVerb: row.measuredVerb ?? "",
     measuredNoun: row.measuredNoun ?? "",
+    targetPercent: Number(row.targetPercent) || 0,
+    targetLevel: row.targetLevel || "no support",
     archived: isTrue(row.archived),
   };
 }
