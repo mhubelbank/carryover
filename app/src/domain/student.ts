@@ -8,6 +8,8 @@ export interface Student {
   middle: string;
   lastName: string;
   pronouns: string;
+  // Optional emoji avatar (shown on a brown circle). Empty = initial fallback.
+  emoji: string;
   teacherId: string;
   // YYYY-MM-DD. When present, `age` is computed from this; otherwise the legacy
   // stored `age` is shown as a fallback.
