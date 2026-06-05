@@ -54,7 +54,8 @@ function scheduleSheet(data: TermData): Sheet {
     for (const e of data.schedule) {
       if (e.dayOfWeek !== day) continue;
       const list = slots.get(e.timeSlot) ?? [];
-      list.push(nameById.get(e.studentId) ?? e.studentId);
+      // Keep empty-slot markers as an empty row (slot exists, no students yet).
+      if (e.studentId) list.push(nameById.get(e.studentId) ?? e.studentId);
       slots.set(e.timeSlot, list);
     }
     const ordered = [...slots.entries()].sort(

@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 import { Icon } from "../components/Icon";
 import { Nav, type NavPage } from "../components/Nav";
 import { useTerm } from "../context/TermContext";
@@ -7,6 +7,8 @@ import { buildTermSnapshot, termLabel, type ArchivedTerm, type TermType } from "
 import { teacherColor, type ColorKey, type Teacher } from "../domain/teacher";
 import { ageFlag, computedAge, fullName, type Student } from "../domain/student";
 import type { Goal } from "../domain/goal";
+import { emptySlotMarkers, type ScheduleEntry } from "../domain/schedule";
+import { ScheduleGrid } from "../components/ScheduleGrid";
 import { ColorPicker } from "./Teachers";
 
 interface Props {
@@ -102,6 +104,12 @@ export function NewTermWizard({ onNavigate, onClose }: Props) {
   );
   const [continuingBase] = useState(() => JSON.stringify(continuing));
   const [newStudents, setNewStudents] = useState<Student[]>([]);
+  // Schedule draft: last term's slots carried over but emptied of students, to be
+  // filled in here. New-slot/empty markers (blank studentId) hold a slot in the
+  // grid until students are assigned. Saved as-is on finish.
+  const [schedule, setSchedule] = useState<ScheduleEntry[]>(() =>
+    ready ? emptySlotMarkers(ready.schedule) : [],
+  );
   const archivedPrev = ready?.students.filter((s) => s.archived) ?? [];
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -157,8 +165,13 @@ export function NewTermWizard({ onNavigate, onClose }: Props) {
         const newFinal = cleanedNew.map((s) => ({ ...s, firstDay: s.firstDay ?? firstDay }));
         await saveStudents([...archivedPrev, ...continuingFinal, ...newFinal]);
       }
-      // A new term's schedule starts empty (no carry-forward); clear the old one.
-      if ((ready?.schedule.length ?? 0) > 0) await saveSchedule([]);
+      // Save the schedule built in step 4, dropping any slot left without students
+      // (the carried-over slots are a scaffold; unfilled ones shouldn't persist).
+      // Also write when the result is empty, to clear the old term's schedule.
+      const filledSchedule = schedule.filter((e) => e.studentId);
+      if ((ready?.schedule.length ?? 0) > 0 || filledSchedule.length > 0) {
+        await saveSchedule(filledSchedule);
+      }
       // Term now exists → the app reloads into its normal (ready) state.
       reload();
       onClose?.();
@@ -201,7 +214,15 @@ export function NewTermWizard({ onNavigate, onClose }: Props) {
             onNew={setNewStudents}
           />
         ) : step === 4 ? (
-          <ScheduleStep hadSchedule={(ready?.schedule.length ?? 0) > 0} />
+          <ScheduleStep
+            schedule={schedule}
+            onChange={setSchedule}
+            students={[
+              ...continuing.filter((s) => !s.archived),
+              ...newStudents.filter((s) => s.firstName.trim()),
+            ]}
+            teachers={teachers}
+          />
         ) : (
           <GoalsStep
             students={[
@@ -544,26 +565,6 @@ function StudentsStep({
     return true;
   });
 
-  async function paste() {
-    try {
-      const text = await navigator.clipboard.readText();
-      const rows = text
-        .split(/\r?\n/)
-        .map((l) => l.trim())
-        .filter(Boolean)
-        .map((line) => {
-          const cols = line.split(/\t|,/).map((c) => c.trim());
-          const s = blankStudent();
-          s.firstName = cols[0] ?? "";
-          if (cols[1] && /^\d{4}-\d{2}-\d{2}$/.test(cols[1])) s.birthday = cols[1];
-          return s;
-        });
-      if (rows.length) onNew([...newStudents, ...rows]);
-    } catch {
-      // Clipboard read denied — silently ignore.
-    }
-  }
-
   return (
     <div>
       <div style={{ display: "flex", gap: 4, marginBottom: "1.25rem" }}>
@@ -637,9 +638,6 @@ function StudentsStep({
       ) : (
         <>
           <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-            <button className="button button--small" onClick={paste}>
-              Paste from clipboard
-            </button>
             <button className="button button--small" onClick={() => onNew([...newStudents, blankStudent()])}>
               <Icon name="plus" size={13} /> Add row
             </button>
@@ -648,7 +646,7 @@ function StudentsStep({
           <StudentTable
             students={newStudents}
             teachers={teachers}
-            emptyText="No new students yet — paste a list or add a row."
+            emptyText="No new students yet — add a row."
             onPatch={(id, patch) => patchIn(newStudents, onNew, id, patch)}
             onToggleRemove={(id) => onNew(newStudents.filter((s) => s.id !== id))}
           />
@@ -812,20 +810,37 @@ function StudentRow({
   );
 }
 
-function ScheduleStep({ hadSchedule }: { hadSchedule: boolean }) {
+// Embedded weekly-schedule editor. Last term's slots arrive pre-loaded but empty
+// (markers); here she assigns this term's students, and adds/removes slots. The
+// draft lives in the wizard and is saved on finish — no trip to the Schedule tab.
+function ScheduleStep({
+  schedule,
+  onChange,
+  students,
+  teachers,
+}: {
+  schedule: ScheduleEntry[];
+  onChange: (next: ScheduleEntry[]) => void;
+  students: Student[];
+  teachers: Teacher[];
+}) {
+  const studentById = useMemo(() => new Map(students.map((s) => [s.id, s] as const)), [students]);
+  const teacherById = useMemo(() => new Map(teachers.map((t) => [t.id, t] as const)), [teachers]);
   return (
-    <div style={{ textAlign: "center", padding: "2rem 1rem", color: "var(--color-text-tertiary)" }}>
-      <Icon name="calendar-plus" size={28} />
-      <p style={{ fontSize: 14, margin: "10px 0 0 0", color: "var(--color-text-secondary)" }}>
-        A new term starts with an empty schedule.
+    <div>
+      <p style={{ margin: "0 0 4px 0", fontSize: 14, fontWeight: 500 }}>Weekly schedule</p>
+      <p style={{ margin: "0 0 16px 0", fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 1.5 }}>
+        Last term's time slots carry over, emptied. Click a slot to assign this term's students, or add
+        and remove slots per day.
       </p>
-      <p style={{ fontSize: 13, margin: "8px auto 0", maxWidth: 460, lineHeight: 1.5 }}>
-        {hadSchedule
-          ? "Finishing clears last term's schedule. "
-          : ""}
-        Build the new weekly schedule on the Schedule tab afterward — add time slots and drop students
-        into each day.
-      </p>
+      <ScheduleGrid
+        draft={schedule}
+        onChange={onChange}
+        teachers={teachers}
+        students={students}
+        studentById={studentById}
+        teacherById={teacherById}
+      />
     </div>
   );
 }

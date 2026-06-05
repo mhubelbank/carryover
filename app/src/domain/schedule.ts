@@ -78,6 +78,23 @@ export function setCellRoster(
   return [...others, ...cell];
 }
 
+// Reduce a schedule to its time-slot structure: one marker per distinct (day,
+// slot), keeping that slot's teacher but clearing students. Used to carry last
+// term's slots into the new-term wizard, where the roster is picked fresh but the
+// slot stays teacher-specific. Roster builders ignore these markers (the empty
+// studentId matches no student); only the slot grid reads them.
+export function emptySlotMarkers(entries: ScheduleEntry[]): ScheduleEntry[] {
+  const seen = new Set<string>();
+  const markers: ScheduleEntry[] = [];
+  for (const e of entries) {
+    const key = `${e.dayOfWeek}|${e.timeSlot}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    markers.push({ teacherId: e.teacherId, dayOfWeek: e.dayOfWeek, timeSlot: e.timeSlot, studentId: "" });
+  }
+  return markers;
+}
+
 // Order-independent fingerprint for comparing two schedules (a week vs. the
 // usual template) for divergence/convergence.
 export function scheduleFingerprint(entries: ScheduleEntry[]): string {
