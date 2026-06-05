@@ -344,7 +344,7 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate, on
 
       {!inTerm ? (
         <div style={emptyBoxStyle}>
-          {formatLong(selected)} is outside the {term.label}
+          {formatLong(selected)} is outside the active {term.label} term
           {firstDay && lastDay ? ` (${formatShort(firstDay)} – ${formatShort(lastDay)})` : ""}.
         </div>
       ) : isClosed ? (
