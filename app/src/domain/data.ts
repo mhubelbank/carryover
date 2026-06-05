@@ -52,6 +52,7 @@ const PATHS = {
   newsRoles: "data/news-roles.json",
   studentFields: "data/student-fields.json",
   feedbackRules: "data/feedback-rules.md",
+  goldenExamples: "data/golden_output.txt",
 } as const;
 
 const SESSIONS_DIR = "data/sessions";
@@ -365,6 +366,13 @@ export function writeStudentFields(
 // every draft prompt. Empty string when the file doesn't exist yet.
 export async function loadFeedbackRules(client: GitHubClient): Promise<string> {
   const file = await client.readFile(PATHS.feedbackRules);
+  return file?.text ?? "";
+}
+
+// data/golden_output.txt — example notes Emily likes, given to the draft pass as
+// a style/structure reference. Empty string when the file doesn't exist.
+export async function loadGoldenExamples(client: GitHubClient): Promise<string> {
+  const file = await client.readFile(PATHS.goldenExamples);
   return file?.text ?? "";
 }
 
