@@ -309,7 +309,7 @@ function StudentsList({
               <th style={th(22)}>Name</th>
               <th style={th(14)}>Teacher</th>
               <th style={th(8)}>Age</th>
-              <th style={th(10)}>Pronouns</th>
+              <th style={th(12)}>Mandate</th>
               <th style={th(7)}>Goals</th>
               <th style={th(12)}>Next IEP</th>
               <th style={{ width: "5%" }} />
@@ -350,7 +350,7 @@ function StudentsList({
                     {teacherById.get(s.teacherId)?.name ?? "—"}
                   </td>
                   <td style={td(ageColorOf(age))}>{age ?? "—"}</td>
-                  <td style={td("var(--color-text-secondary)")}>{s.pronouns || "—"}</td>
+                  <td style={td("var(--color-text-secondary)")}>{s.mandate || "—"}</td>
                   <td
                     style={{
                       ...td(
