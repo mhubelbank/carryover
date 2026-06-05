@@ -1,6 +1,7 @@
 import { callAnthropic, AnthropicError, DEFAULT_MODEL } from "../clients/anthropic";
 import type { GitHubClient } from "../clients/github";
 import type { Mode } from "./teacher";
+import { normalizeAcronyms } from "./text";
 
 // Token ceilings ported from her existing TSX files (bump if she sees truncation).
 export const MAX_TOKENS_BY_MODE: Record<Mode, number> = {
@@ -328,8 +329,9 @@ export async function generateNote(
     renderTemplate(prompts.streamline, { ...ctx, draftNote: draft, reviewedNote: reviewed }),
   );
   const { note, warnings } = splitWarnings(streamlined);
-  // Post-processing (e.g. a teacher append) applies to the note, not warnings.
-  const final = opts.postProcess ? opts.postProcess(note) : note;
+  // Post-processing (e.g. a teacher append) applies to the note, not warnings;
+  // then force acronym casing (e.g. "wh" → "WH").
+  const final = normalizeAcronyms(opts.postProcess ? opts.postProcess(note) : note);
 
   return { draft, reviewed, final, warnings };
 }

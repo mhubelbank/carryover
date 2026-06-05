@@ -14,13 +14,13 @@ describe("trialEntrySentence", () => {
   it("renders the data sentence verbatim with an auto-failed clause", () => {
     const s = trialEntrySentence("Joel", "he", entry([{ level: "minimal", types: ["verbal"], count: "6" }], "10"));
     expect(s).toBe(
-      "Joel correctly answered wh questions 6/10 given minimal verbal prompting. He did not do so on 4/10 trials.",
+      "Joel correctly answered WH questions 6/10 given minimal verbal prompting. He did not do so on 4/10 trials.",
     );
   });
 
   it("uses 'no support' phrasing and omits the failed clause at 100%", () => {
     const s = trialEntrySentence("Mia", "she", entry([{ level: "no support", types: [], count: "5" }], "5"));
-    expect(s).toBe("Mia correctly answered wh questions 5/5 given no support.");
+    expect(s).toBe("Mia correctly answered WH questions 5/5 given no support.");
   });
 });
 
