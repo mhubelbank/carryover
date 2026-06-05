@@ -235,6 +235,12 @@ export interface GenerateOptions {
   maxTokens?: number;
   // Contents of data/feedback-rules.md — appended to the DRAFT prompt only.
   feedbackRules?: string;
+  // Example notes Emily likes (data/golden_output.txt) — appended to the DRAFT
+  // prompt as a style/structure reference.
+  goldenExamples?: string;
+  // Per-session variety instruction (date-derived) appended to the DRAFT prompt,
+  // so the same student's notes don't read identically week to week.
+  varietyNote?: string;
   // Deterministic per-teacher post-processing applied to the final note text
   // (e.g. Robin's Spanish-support sentence). No API call.
   postProcess?: (finalNote: string) => string;
@@ -285,9 +291,22 @@ export async function generateNote(
   const maxTokens = opts.maxTokens ?? 1500;
 
   let draftPrompt = renderTemplate(prompts.draft, ctx);
-  if (opts.feedbackRules && opts.feedbackRules.trim() !== "") {
-    draftPrompt += `\n\nAdditional rules from prior feedback:\n${opts.feedbackRules.trim()}`;
+  const appends: string[] = [];
+  if (opts.feedbackRules?.trim()) {
+    appends.push(`Additional rules from prior feedback:\n${opts.feedbackRules.trim()}`);
   }
+  if (opts.goldenExamples?.trim()) {
+    appends.push(
+      "Below are example notes whose style and structure to follow. Use the SAME structure and " +
+        "templated phrasing for every student in a session — vary only each student's specific details; " +
+        "do not reach for synonyms or reword for variety between students.\n\n" +
+        opts.goldenExamples.trim(),
+    );
+  }
+  if (opts.varietyNote?.trim()) {
+    appends.push(opts.varietyNote.trim());
+  }
+  if (appends.length > 0) draftPrompt += "\n\n" + appends.join("\n\n");
   opts.onPhase?.("draft");
   const draft = await callPass(apiKey, "draft", model, maxTokens, draftPrompt);
 

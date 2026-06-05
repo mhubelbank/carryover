@@ -8,6 +8,7 @@ import {
   appendFeedbackRule,
   deleteWeekSchedule,
   loadFeedbackRules,
+  loadGoldenExamples,
   loadSession,
   loadWeekSchedule,
   writeSessionMetadata,
@@ -118,6 +119,41 @@ const PASS_LABEL: Record<Pass, string> = {
   review: "Reviewing",
   streamline: "Streamlining",
 };
+
+// How many students' note pipelines run at once. Each pipeline is 3 sequential
+// API calls; a small cap keeps total in-flight requests under rate limits.
+const GENERATE_CONCURRENCY = 4;
+
+// Run `worker` over `items` with a fixed concurrency cap.
+async function runPool<T>(items: T[], concurrency: number, worker: (item: T) => Promise<void>): Promise<void> {
+  let next = 0;
+  const run = async (): Promise<void> => {
+    const i = next++;
+    if (i >= items.length) return;
+    await worker(items[i]!);
+    await run();
+  };
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, run));
+}
+
+// Three ways to order a note's content. A session picks one by its week, so a
+// teacher's students that day read consistently while the same student's note
+// differs week to week — without changing vocabulary or the per-student template.
+const VARIETY_VARIANTS = [
+  "describe the activities in the order they occurred",
+  "lead with the student's overall engagement and affect, then the activities",
+  "lead with the primary activity and its result, then the rest",
+];
+function buildVarietyNote(date: string): string {
+  const d = parseDate(date);
+  if (!d) return "";
+  const week = Math.floor(mondayOf(d).getTime() / (7 * 86_400_000));
+  const variant = VARIETY_VARIANTS[((week % VARIETY_VARIANTS.length) + VARIETY_VARIANTS.length) % VARIETY_VARIANTS.length]!;
+  return (
+    `Week-to-week variety: so this note doesn't read identically to the same student's notes from other weeks, ${variant}. ` +
+    "Keep the same clinical vocabulary and the same per-student template — only the opening and the order of sections should differ across weeks."
+  );
+}
 
 interface Props {
   onNavigate: (page: NavPage) => void;
@@ -253,10 +289,9 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
   const [results, setResults] = useState<ResultRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [restorable, setRestorable] = useState<CachedNote[]>([]);
-  // While generating: which note (1-based) and which pipeline pass is in flight.
-  const [progress, setProgress] = useState<{ current: number; total: number; pass: Pass } | null>(
-    null,
-  );
+  // While generating: how many of the batch have finished (notes run in parallel,
+  // so there's no single "current pass" to show).
+  const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
   // The schedule slot this session targets. Drives the default roster and the
   // schedule write-back on generate. Set from the deep-link, or chosen manually.
   const [timeSlot, setTimeSlot] = useState<string>(() => initialDraft?.timeSlot ?? "");
@@ -653,38 +688,47 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
     // Emily's accumulated note corrections, applied to every draft. Non-fatal if
     // the file doesn't exist yet.
     const feedbackRules = await loadFeedbackRules(client).catch(() => "");
+    const goldenExamples = await loadGoldenExamples(client).catch(() => "");
+    const varietyNote = buildVarietyNote(date);
 
     const apiKey = keys.anthropicApiKey;
     const total = includedStudents.length;
-    // Run students sequentially to keep the API call cadence gentle; failures
-    // per student show on their card without aborting the batch.
-    for (let i = 0; i < includedStudents.length; i++) {
-      const student = includedStudents[i]!;
+    let done = 0;
+    // Absent students get a fixed note immediately; the rest run in parallel
+    // (capped). A failure shows on that student's card without aborting the batch.
+    const pending = includedStudents.filter((student) => {
+      if (!studentState[student.id]!.absent) return true;
+      updateResult(student.id, {
+        result: {
+          draft: "",
+          reviewed: "",
+          final: absentNote(displayName(student, includedStudents)),
+          warnings: [],
+        },
+      });
+      done++;
+      return false;
+    });
+    setProgress({ current: done, total });
+    await runPool(pending, GENERATE_CONCURRENCY, async (student) => {
       const st = studentState[student.id]!;
-      if (st.absent) {
-        updateResult(student.id, {
-          result: {
-            draft: "",
-            reviewed: "",
-            final: absentNote(displayName(student, includedStudents)),
-            warnings: [],
-          },
-        });
-        continue;
-      }
       try {
         const ctx = buildContext(mode, teacher, student, st, activities, goals, catalog, roleCatalog);
         const result = await generateNote(apiKey, prompts, ctx, {
           maxTokens: MAX_TOKENS_BY_MODE[mode],
           postProcess: buildPostProcess(teacher, student),
           feedbackRules,
-          onPhase: (pass) => setProgress({ current: i + 1, total, pass }),
+          goldenExamples,
+          varietyNote,
         });
         updateResult(student.id, { result });
       } catch (e) {
         updateResult(student.id, { error: e instanceof Error ? e.message : "Failed" });
+      } finally {
+        done++;
+        setProgress({ current: done, total });
       }
-    }
+    });
     setProgress(null);
 
     // Persist session metadata (goalIds per student, mode). Note text is never stored.
@@ -749,29 +793,37 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
     const persisted = await loadFeedbackRules(client).catch(() => "");
     // Persisted rules plus this round's one-off note feed the draft pass.
     const feedbackRules = [persisted, feedback.trim()].filter(Boolean).join("\n");
-    for (const studentId of studentIds) {
-      const row = results.find((r) => r.studentId === studentId);
-      const st = studentState[studentId];
-      const student = students.find((s) => s.id === studentId);
-      if (!row || !st || !student || row.absent) continue;
-      updateResult(studentId, { regenerating: true, regenPhase: "draft", error: undefined });
+    const goldenExamples = await loadGoldenExamples(client).catch(() => "");
+    const varietyNote = buildVarietyNote(date);
+    const targets = studentIds
+      .map((id) => ({
+        id,
+        row: results.find((r) => r.studentId === id),
+        st: studentState[id],
+        student: students.find((s) => s.id === id),
+      }))
+      .filter((t) => t.row && t.st && t.student && !t.row.absent);
+    await runPool(targets, GENERATE_CONCURRENCY, async ({ id, st, student }) => {
+      updateResult(id, { regenerating: true, regenPhase: "draft", error: undefined });
       try {
-        const ctx = buildContext(mode, teacher, student, st, activities, goals, catalog, roleCatalog);
+        const ctx = buildContext(mode, teacher, student!, st!, activities, goals, catalog, roleCatalog);
         const result = await generateNote(apiKey, prompts, ctx, {
           maxTokens: MAX_TOKENS_BY_MODE[mode],
-          postProcess: buildPostProcess(teacher, student),
+          postProcess: buildPostProcess(teacher, student!),
           feedbackRules,
-          onPhase: (pass) => updateResult(studentId, { regenPhase: pass }),
+          goldenExamples,
+          varietyNote,
+          onPhase: (pass) => updateResult(id, { regenPhase: pass }),
         });
-        updateResult(studentId, { result, regenerating: false, regenPhase: undefined });
+        updateResult(id, { result, regenerating: false, regenPhase: undefined });
       } catch (e) {
-        updateResult(studentId, {
+        updateResult(id, {
           regenerating: false,
           regenPhase: undefined,
           error: e instanceof Error ? e.message : "Failed",
         });
       }
-    }
+    });
     if (saveAsRule && feedback.trim()) await appendFeedbackRule(client, feedback);
   }
 
@@ -1140,7 +1192,7 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
         >
           {phase === "running"
             ? progress
-              ? `Note ${progress.current} of ${progress.total} · ${PASS_LABEL[progress.pass]}…`
+              ? `Generating… ${progress.current} of ${progress.total} done`
               : "Generating…"
             : `Generate ${includedStudents.length} note${includedStudents.length === 1 ? "" : "s"}`}
         </button>
@@ -2037,17 +2089,26 @@ function RegularStudentCard({
           {(() => {
             const trialsOn = !!inputs[i]?.trials?.enabled;
             const activityGoals = studentGoals.filter((g) => (inputs[i]?.goals ?? []).includes(g.id));
+            // Checklist and Trials are mutually exclusive: toggling clears the
+            // other mode's data so only one is ever populated (otherwise stale
+            // checklist prompting can leak into a trials note, and vice versa).
             const setTrials = (on: boolean) => {
+              if (!on) {
+                onChange(i, { trials: blankTrials() });
+                return;
+              }
               const cur = inputs[i]?.trials ?? blankTrials();
               // On first turn-on, seed one measurement per selected goal (or one
               // blank if none selected yet) so the per-goal layout is obvious.
               const entries =
-                on && (cur.entries ?? []).length === 0
+                (cur.entries ?? []).length === 0
                   ? activityGoals.length > 0
                     ? activityGoals.map((g) => blankTrialEntry(g.id, g.measuredVerb, g.measuredNoun))
                     : [blankTrialEntry()]
                   : cur.entries;
-              onChange(i, { trials: { ...cur, enabled: on, entries } });
+              // Drop the checklist-only prompting fields (redirection/response are
+              // shared between modes, so they're kept).
+              onChange(i, { trials: { ...cur, enabled: true, entries }, promptingLevel: [], promptingType: [] });
             };
             const seg = (active: boolean) => ({
               border: "none",
