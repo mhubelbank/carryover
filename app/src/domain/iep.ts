@@ -6,5 +6,7 @@ export interface IepReview {
   retired?: number;
   kept?: number;
   nothingChanged?: boolean;
+  // The new service mandate set at this review, when it changed. Audit only.
+  mandate?: string;
   note?: string;
 }

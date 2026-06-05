@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { type CSSProperties, useEffect, useMemo, useState } from "react";
 import { Icon } from "../components/Icon";
 import { Nav, type NavPage } from "../components/Nav";
 import { useTerm } from "../context/TermContext";
@@ -30,6 +30,12 @@ export function IepReview({
   // Per-goal retire/keep overrides applied on finish (id → archived?).
   const [override, setOverride] = useState<Map<string, boolean>>(() => new Map());
   const [nextDate, setNextDate] = useState<string>("");
+  // Mandate + triennial are prefilled from the student once it loads (see effect
+  // below), then edited here. The new mandate is what shows as their mandate
+  // going forward; the current one stays for reference.
+  const [newMandate, setNewMandate] = useState("");
+  const [triennial, setTriennial] = useState("");
+  const [prefilled, setPrefilled] = useState(false);
   const [usage, setUsage] = useState<Map<string, number> | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,6 +72,16 @@ export function IepReview({
       cancelled = true;
     };
   }, [client]);
+
+  // Prefill mandate/triennial from the student once (it may be absent on the
+  // first render before data loads).
+  useEffect(() => {
+    if (student && !prefilled) {
+      setNewMandate(student.newMandate ?? "");
+      setTriennial(student.nextTriennial ?? "");
+      setPrefilled(true);
+    }
+  }, [student, prefilled]);
 
   const studentGoals = useMemo(
     () => (data?.goals ?? []).filter((g) => g.studentId === studentId),
@@ -111,11 +127,27 @@ export function IepReview({
     await saveGoals([...others, ...finalGoals]);
   }
 
-  async function setNextReviewDate() {
-    const value = nextDate || null;
-    if (value === (student!.nextIepReview ?? null)) return;
+  const mandateValue = newMandate.trim() || null;
+  const mandateChanged = mandateValue !== (student.newMandate ?? null);
+
+  // Persist the IEP-review outcome fields in a single write: the next review date
+  // (blank clears the overdue nudge), the new mandate, and the next triennial.
+  async function persistStudentFields() {
+    const iepValue = nextDate || null;
+    const triValue = triennial || null;
+    const cur = student!;
+    if (
+      iepValue === (cur.nextIepReview ?? null) &&
+      mandateValue === (cur.newMandate ?? null) &&
+      triValue === (cur.nextTriennial ?? null)
+    )
+      return;
     await saveStudents(
-      data!.students.map((s) => (s.id === studentId ? { ...s, nextIepReview: value } : s)),
+      data!.students.map((s) =>
+        s.id === studentId
+          ? { ...s, nextIepReview: iepValue, newMandate: mandateValue, nextTriennial: triValue }
+          : s,
+      ),
     );
   }
 
@@ -123,8 +155,13 @@ export function IepReview({
     setSaving(true);
     setError(null);
     try {
-      if (client) await appendIepReview(client, studentId, { date: today, nothingChanged: true });
-      await setNextReviewDate();
+      if (client)
+        await appendIepReview(client, studentId, {
+          date: today,
+          nothingChanged: true,
+          ...(mandateChanged && mandateValue ? { mandate: mandateValue } : {}),
+        });
+      await persistStudentFields();
       onBack();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't save the review.");
@@ -142,13 +179,17 @@ export function IepReview({
       const retired = [...openActiveIds].filter((id) => !finalActive.has(id)).length;
       const kept = [...openActiveIds].filter((id) => finalActive.has(id)).length;
       if (client) {
+        const base =
+          added === 0 && retired === 0
+            ? { date: today, nothingChanged: true }
+            : { date: today, added, retired, kept };
         await appendIepReview(
           client,
           studentId,
-          added === 0 && retired === 0 ? { date: today, nothingChanged: true } : { date: today, added, retired, kept },
+          mandateChanged && mandateValue ? { ...base, mandate: mandateValue } : base,
         );
       }
-      await setNextReviewDate();
+      await persistStudentFields();
       onBack();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't save the review.");
@@ -157,6 +198,16 @@ export function IepReview({
   }
 
   const name = fullName(student);
+
+  const reviewRow: CSSProperties = {
+    padding: "14px 16px",
+    background: "var(--color-background-secondary)",
+    borderRadius: "var(--border-radius-md)",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+  };
 
   return (
     <div className="shell">
@@ -297,49 +348,70 @@ export function IepReview({
       </div>
 
       {/* Add goals entry (routes to the paste tool). */}
-      <div
-        className="card"
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 12,
-          marginBottom: "1.5rem",
-        }}
-      >
+      <div style={{ ...reviewRow, marginBottom: "1.5rem" }}>
         <p style={{ margin: 0, fontSize: 14, fontWeight: 500 }}>Add goals from updated IEP</p>
         <button className="button button--small" onClick={() => setAdding(true)}>
           <Icon name="plus" size={14} /> Add goals
         </button>
       </div>
 
-      <div
-        style={{
-          padding: "14px 16px",
-          background: "var(--color-background-secondary)",
-          borderRadius: "var(--border-radius-md)",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: 12,
-          marginBottom: "1.5rem",
-        }}
-      >
-        <div>
-          <p style={{ margin: 0, fontSize: 13, color: "var(--color-text-secondary)" }}>
-            Set next IEP review date
-          </p>
-          <p style={{ margin: "2px 0 0 0", fontSize: 11, color: "var(--color-text-tertiary)" }}>
-            Can be left blank — set it later if you don't know yet.
-          </p>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: "1.5rem" }}>
+        {/* Service mandate: current (read-only) + the new one decided at review. */}
+        <div style={reviewRow}>
+          <div>
+            <p style={{ margin: 0, fontSize: 13, color: "var(--color-text-secondary)" }}>
+              Service mandate
+            </p>
+            <p style={{ margin: "2px 0 0 0", fontSize: 11, color: "var(--color-text-tertiary)" }}>
+              Current: {student.mandate || "—"}
+            </p>
+          </div>
+          <input
+            className="input"
+            style={{ width: 180 }}
+            placeholder="New mandate, e.g. 2:30:4"
+            value={newMandate}
+            onChange={(e) => setNewMandate(e.target.value)}
+          />
         </div>
-        <input
-          className="input"
-          type="date"
-          style={{ width: 180 }}
-          value={nextDate}
-          onChange={(e) => setNextDate(e.target.value)}
-        />
+
+        {/* Next IEP review date — blank clears the overdue nudge. */}
+        <div style={reviewRow}>
+          <div>
+            <p style={{ margin: 0, fontSize: 13, color: "var(--color-text-secondary)" }}>
+              Set next IEP review date
+            </p>
+            <p style={{ margin: "2px 0 0 0", fontSize: 11, color: "var(--color-text-tertiary)" }}>
+              Can be left blank — set it later if you don't know yet.
+            </p>
+          </div>
+          <input
+            className="input"
+            type="date"
+            style={{ width: 180 }}
+            value={nextDate}
+            onChange={(e) => setNextDate(e.target.value)}
+          />
+        </div>
+
+        {/* Next triennial date — editable, prefilled from the student. */}
+        <div style={reviewRow}>
+          <div>
+            <p style={{ margin: 0, fontSize: 13, color: "var(--color-text-secondary)" }}>
+              Next triennial date
+            </p>
+            <p style={{ margin: "2px 0 0 0", fontSize: 11, color: "var(--color-text-tertiary)" }}>
+              Update if the reevaluation date changed.
+            </p>
+          </div>
+          <input
+            className="input"
+            type="date"
+            style={{ width: 180 }}
+            value={triennial}
+            onChange={(e) => setTriennial(e.target.value)}
+          />
+        </div>
       </div>
 
       {error && (

@@ -68,6 +68,7 @@ function blankStudent(): Student {
     nextIepReview: null,
     nextTriennial: null,
     mandate: null,
+    newMandate: null,
     firstDay: null,
     lastDay: null,
     archived: false,

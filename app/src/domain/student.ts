@@ -21,6 +21,10 @@ export interface Student {
   nextIepReview: string | null;
   nextTriennial: string | null;
   mandate: string | null;
+  // The new service mandate decided at the upcoming/most-recent IEP review, when
+  // it differs from `mandate` (the current one). Shown as the student's mandate
+  // going forward; captured in the IEP review flow. Empty when unchanged.
+  newMandate: string | null;
   // Optional enrollment window. Students outside this window are skipped from
   // Today's session lists; past-`lastDay` triggers a "ready to archive" hint.
   firstDay: string | null;

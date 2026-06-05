@@ -350,7 +350,7 @@ function StudentsList({
                     {teacherById.get(s.teacherId)?.name ?? "—"}
                   </td>
                   <td style={td(ageColorOf(age))}>{age ?? "—"}</td>
-                  <td style={td("var(--color-text-secondary)")}>{s.mandate || "—"}</td>
+                  <td style={td("var(--color-text-secondary)")}>{s.newMandate || s.mandate || "—"}</td>
                   <td
                     style={{
                       ...td(
@@ -1175,6 +1175,7 @@ function blankStudent(): Student {
     nextIepReview: null,
     nextTriennial: null,
     mandate: null,
+    newMandate: null,
     firstDay: null,
     lastDay: null,
     archived: false,
