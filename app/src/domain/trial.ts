@@ -4,6 +4,7 @@
 // An activity can target multiple goals, and each goal is measured separately —
 // so trials are a *list of per-goal measurements* (each tied to a goalId), not a
 // single count for the whole activity.
+import { normalizeAcronyms } from "./text";
 
 export const TRIAL_SUPPORT_LEVELS = ["no support", "minimal", "moderate", "maximum"] as const;
 export const TRIAL_SUPPORT_TYPES = ["verbal", "visual", "tactile", "gestural", "modeled"] as const;
@@ -150,7 +151,7 @@ export function trialEntrySentence(studentName: string, pronoun: string, e: Tria
   let s = `${studentName} correctly ${action} ${parts.join(", ")}.`;
   const failed = trialFailed(e);
   if (failed > 0) s += ` ${Pron} did not do so on ${failed}/${total} trials.`;
-  return s;
+  return normalizeAcronyms(s);
 }
 
 // All of an activity's measurement sentences, joined (fed to the draft prompt).
