@@ -840,6 +840,7 @@ function ScheduleStep({
         students={students}
         studentById={studentById}
         teacherById={teacherById}
+        templateStripes
       />
     </div>
   );
