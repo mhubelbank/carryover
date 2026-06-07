@@ -189,7 +189,7 @@ export function resolveRolePhrase(role: Role, values: NewsFieldValues): string {
 
 // Build the pre-formatted `roleData` string (one performance line per row),
 // driven by the role's enabled field components. Wording is verbatim from the
-// original morgan-news-day.tsx / carter-news-day.tsx.
+// original news-day note templates.
 export function buildRoleData(role: Role, v: NewsFieldValues): string {
   const has = (key: string) => role.fields.includes(key);
   let out = "";
