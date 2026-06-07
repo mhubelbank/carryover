@@ -31,9 +31,9 @@ export function IepReview({
   const [override, setOverride] = useState<Map<string, boolean>>(() => new Map());
   const [nextDate, setNextDate] = useState<string>("");
   // Mandate + triennial are prefilled from the student once it loads (see effect
-  // below), then edited here. The new mandate is what shows as their mandate
-  // going forward; the current one stays for reference.
-  const [newMandate, setNewMandate] = useState("");
+  // below), then edited here. The mandate is overwritten in place on finish; the
+  // change is recorded in the iep-history log.
+  const [mandate, setMandate] = useState("");
   const [triennial, setTriennial] = useState("");
   const [prefilled, setPrefilled] = useState(false);
   const [usage, setUsage] = useState<Map<string, number> | null>(null);
@@ -77,7 +77,7 @@ export function IepReview({
   // first render before data loads).
   useEffect(() => {
     if (student && !prefilled) {
-      setNewMandate(student.newMandate ?? "");
+      setMandate(student.mandate ?? "");
       setTriennial(student.nextTriennial ?? "");
       setPrefilled(true);
     }
@@ -127,25 +127,26 @@ export function IepReview({
     await saveGoals([...others, ...finalGoals]);
   }
 
-  const mandateValue = newMandate.trim() || null;
-  const mandateChanged = mandateValue !== (student.newMandate ?? null);
+  const mandateValue = mandate.trim() || null;
+  const mandateChanged = mandateValue !== (student.mandate ?? null);
 
   // Persist the IEP-review outcome fields in a single write: the next review date
-  // (blank clears the overdue nudge), the new mandate, and the next triennial.
+  // (blank clears the overdue nudge), the mandate (overwritten in place), and the
+  // next triennial.
   async function persistStudentFields() {
     const iepValue = nextDate || null;
     const triValue = triennial || null;
     const cur = student!;
     if (
       iepValue === (cur.nextIepReview ?? null) &&
-      mandateValue === (cur.newMandate ?? null) &&
+      mandateValue === (cur.mandate ?? null) &&
       triValue === (cur.nextTriennial ?? null)
     )
       return;
     await saveStudents(
       data!.students.map((s) =>
         s.id === studentId
-          ? { ...s, nextIepReview: iepValue, newMandate: mandateValue, nextTriennial: triValue }
+          ? { ...s, nextIepReview: iepValue, mandate: mandateValue, nextTriennial: triValue }
           : s,
       ),
     );
@@ -356,22 +357,22 @@ export function IepReview({
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: "1.5rem" }}>
-        {/* Service mandate: current (read-only) + the new one decided at review. */}
+        {/* Service mandate — edit in place if it changed at the review. */}
         <div style={reviewRow}>
           <div>
             <p style={{ margin: 0, fontSize: 13, color: "var(--color-text-secondary)" }}>
               Service mandate
             </p>
             <p style={{ margin: "2px 0 0 0", fontSize: 11, color: "var(--color-text-tertiary)" }}>
-              Current: {student.mandate || "—"}
+              Update if it changed at this review.
             </p>
           </div>
           <input
             className="input"
             style={{ width: 180 }}
-            placeholder="New mandate, e.g. 2:30:4"
-            value={newMandate}
-            onChange={(e) => setNewMandate(e.target.value)}
+            placeholder="e.g. 2:30:4"
+            value={mandate}
+            onChange={(e) => setMandate(e.target.value)}
           />
         </div>
 

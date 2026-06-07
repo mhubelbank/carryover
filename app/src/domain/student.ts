@@ -20,11 +20,9 @@ export interface Student {
   age: number | null;
   nextIepReview: string | null;
   nextTriennial: string | null;
+  // Service mandate (e.g. "2:30:3"); overwritten in the IEP review when it
+  // changes — the change is recorded in the iep-history log.
   mandate: string | null;
-  // The new service mandate decided at the upcoming/most-recent IEP review, when
-  // it differs from `mandate` (the current one). Shown as the student's mandate
-  // going forward; captured in the IEP review flow. Empty when unchanged.
-  newMandate: string | null;
   // Optional enrollment window. Students outside this window are skipped from
   // Today's session lists; past-`lastDay` triggers a "ready to archive" hint.
   firstDay: string | null;
