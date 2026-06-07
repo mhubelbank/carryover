@@ -5,14 +5,14 @@
 A browser-only web app for one speech language pathologist (the developer's cousin 🙂) to write session notes quickly, alleviating
 the manual, tedious effort of writing 80 legally binding documents per week for NYC DOE's Special Education Student Information System (SESIS).
 
-UX: The clinician records what happened in a session: activity, goals targeted, prompting levels, trial counts; then,
-the app drafts a clinical note in their established voice with three-pass generation via the Anthropic API. The app also
-provides a database for students, teachers, and activities, as well as longitudinal goal progress tracking per student.
+**UX:** The clinician records the day's activities and per-student performance via a structured form; metrics can be entered in aggregate or trial-by-trial.
+Then, the app drafts a clinical note in the teacher's established voice with three-pass generation via the Anthropic API.
+In addition, the app is a hub for day-to-day tasks, providing user-friendly features for roster management, scheduling, and longitudinal student goal tracking.
 
-Stack: Vite + React + TypeScript. UI is plain React with CSS-token theming for light/dark modes. Hosted via Cloudflare SPA.
+**Stack:** Vite + React + TypeScript. UI is plain React with CSS-token theming for light/dark modes. Hosted via Cloudflare SPA.
 There is no backend: it runs entirely in the browser and brings its own keys. Domain logic is unit-tested.
 
-PII: 
+**PII note:**
 
 ## How it works
 
