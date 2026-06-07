@@ -6,6 +6,7 @@ import { useTerm } from "../context/TermContext";
 import {
   COLOR_KEYS,
   TEACHER_COLORS,
+  nextTeacherId,
   teacherColor,
   type ColorKey,
   type Mode,
@@ -74,7 +75,7 @@ export function Teachers({ onNavigate, openTeacherId, onOpenConsumed, onOpenStud
     <TeacherList
       onNavigate={onNavigate}
       onOpen={(id) => setView({ kind: "detail", id })}
-      onAdd={() => setView({ kind: "create", teacher: blankTeacher() })}
+      onAdd={() => setView({ kind: "create", teacher: blankTeacher(teachers) })}
     />
   );
 }
@@ -712,9 +713,9 @@ function cloneTeacher(t: Teacher): Teacher {
   };
 }
 
-function blankTeacher(): Teacher {
+function blankTeacher(existing: Teacher[]): Teacher {
   return {
-    id: `t_${crypto.randomUUID()}`,
+    id: nextTeacherId(existing),
     name: "",
     color: "purple",
     modes: ["regular"],

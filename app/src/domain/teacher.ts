@@ -40,6 +40,18 @@ export function teacherColor(key: string | undefined): TeacherColor {
   return TEACHER_COLORS.blue;
 }
 
+// Next sequential teacher id (`t_NNN`) — numeric, not name-derived, so teacher
+// names never appear in IDs (or session filenames) and same-named teachers can't
+// collide. Max existing + 1 over the live roster (mirrors nextStudentId).
+export function nextTeacherId(teachers: { id: string }[]): string {
+  let max = 0;
+  for (const t of teachers) {
+    const m = /^t_(\d+)$/.exec(t.id);
+    if (m) max = Math.max(max, parseInt(m[1] ?? "0", 10));
+  }
+  return `t_${String(max + 1).padStart(3, "0")}`;
+}
+
 // A shared-catalog activity (data/activities.json), referenced by teachers via
 // `activityIds`. The news-production curriculum is shared across teachers, so it
 // lives in one catalog rather than duplicated per teacher.

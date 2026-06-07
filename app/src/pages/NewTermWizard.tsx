@@ -4,7 +4,7 @@ import { Nav, type NavPage } from "../components/Nav";
 import { useTerm } from "../context/TermContext";
 import { startOfDay, toISODate } from "../domain/dates";
 import { buildTermSnapshot, termLabel, type ArchivedTerm, type TermType } from "../domain/term";
-import { teacherColor, type ColorKey, type Teacher } from "../domain/teacher";
+import { nextTeacherId, teacherColor, type ColorKey, type Teacher } from "../domain/teacher";
 import { ageFlag, computedAge, fullName, nextStudentId, type Student } from "../domain/student";
 import type { Goal } from "../domain/goal";
 import { emptySlotMarkers, type ScheduleEntry } from "../domain/schedule";
@@ -20,9 +20,9 @@ interface Props {
 
 const STEPS = ["Year", "Teachers", "Students", "Schedule", "Goals"] as const;
 
-function blankTeacher(): Teacher {
+function blankTeacher(existing: Teacher[]): Teacher {
   return {
-    id: `t_${crypto.randomUUID()}`,
+    id: nextTeacherId(existing),
     name: "",
     color: "purple",
     modes: ["regular"],
@@ -496,7 +496,7 @@ function TeachersStep({
           ))}
         </div>
       )}
-      <button className="button button--small" onClick={() => onChange([...teachers, blankTeacher()])}>
+      <button className="button button--small" onClick={() => onChange([...teachers, blankTeacher(teachers)])}>
         <Icon name="plus" size={13} /> Add a teacher
       </button>
 
