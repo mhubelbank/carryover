@@ -39,8 +39,14 @@ coverage/
 *.swp
 *.swo
 
-# Live app data lives on the `data` branch (fetched at runtime via the GitHub
-# API), not on main. Keep only the prompt templates here as the editable
-# source of truth; ignore everything else that might land in data/.
-/data/*
-!/data/prompts/
+# App data lives in a separate private repo (carryover-data), fetched at runtime
+# via the GitHub API — never in this repo. Ignore any local data/ scratch dir.
+/data/
+
+# Eval script output (generated notes for manual review)
+eval-output/
+
+# The npm package lives in app/ — guard against a stray root manifest/lockfile
+# (e.g. from running npm at the repo root, or Cloudflare auto-config).
+/package.json
+/package-lock.json

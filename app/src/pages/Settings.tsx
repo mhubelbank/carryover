@@ -9,10 +9,6 @@ import { triggerDownload, downloadText, zipStore } from "../clients/download";
 import { buildXlsx } from "../clients/xlsx";
 import { clearNotes, getAllNotes } from "../clients/noteCache";
 import { loadThemePref, setThemePref, type ThemePref } from "../clients/theme";
-import { generateNote, loadPromptSet } from "../domain/notes";
-import { loadGoldenExamples } from "../domain/data";
-import { FIXTURES } from "../eval/fixtures";
-import { CHECKS, type Status } from "../eval/checks";
 import { backupJson, csvBundleEntries, recentNotesTxt, termSlug, workbookSheets } from "../domain/export";
 import { formatShort, parseDate, startOfDay, toISODate } from "../domain/dates";
 import { termLabel, type ArchivedTerm, type StudentSnapshot } from "../domain/term";
@@ -22,10 +18,6 @@ interface SettingsProps {
   onStartNewTerm: () => void;
 }
 
-// The Quality eval is a dev/QA tool — hidden unless the URL has ?eval (e.g.
-// open the app at "…/?eval"). Flip to `true` to force it on while developing.
-const EVAL_ENABLED =
-  typeof window !== "undefined" && new URLSearchParams(window.location.search).has("eval");
 
 export function Settings({ onNavigate, onStartNewTerm }: SettingsProps) {
   const { signOut, enterTestMode } = useAuth();
@@ -44,7 +36,6 @@ export function Settings({ onNavigate, onStartNewTerm }: SettingsProps) {
       <CatalogsSection onNavigate={onNavigate} />
       <KeysSection />
       <ExportSection />
-      {EVAL_ENABLED && <EvalSection />}
       <ResetSection onSignOut={signOut} onTestMode={enterTestMode} />
     </div>
   );
@@ -411,147 +402,6 @@ function AppearanceSection() {
           System follows your device and switches automatically.
         </span>
       </div>
-    </div>
-  );
-}
-
-interface EvalCheck {
-  label: string;
-  status: Status;
-  detail?: string;
-}
-interface EvalRow {
-  name: string;
-  note?: string;
-  error?: string;
-  checks: EvalCheck[];
-}
-
-// In-app quality eval: runs sample notes through the live pipeline (your keys +
-// the current prompts on the data branch) and scores them against the rules.
-function EvalSection() {
-  const { keys } = useAuth();
-  const { state, client } = useTerm();
-  const [running, setRunning] = useState(false);
-  const [results, setResults] = useState<EvalRow[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  async function run() {
-    if (!keys || !client) return;
-    setRunning(true);
-    setError(null);
-    setResults(null);
-    try {
-      const prompts = await loadPromptSet(client, "regular");
-      const golden = await loadGoldenExamples(client).catch(() => "");
-      const rows = await Promise.all(
-        FIXTURES.map(async (fx): Promise<EvalRow> => {
-          try {
-            const r = await generateNote(keys.anthropicApiKey, prompts, fx.ctx, {
-              maxTokens: fx.maxTokens,
-              goldenExamples: golden,
-            });
-            return { name: fx.name, note: r.final, checks: CHECKS.map((c) => ({ label: c.label, ...c.run(r.final, fx) })) };
-          } catch (e) {
-            return { name: fx.name, error: e instanceof Error ? e.message : "Failed", checks: [] };
-          }
-        }),
-      );
-      setResults(rows);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Eval failed");
-    } finally {
-      setRunning(false);
-    }
-  }
-
-  return (
-    <div className="card" style={{ marginBottom: "1rem" }}>
-      <h3 className="card__title">Quality eval</h3>
-      <p style={{ fontSize: 13, color: "var(--color-text-secondary)", margin: "0 0 12px 0" }}>
-        Generates {FIXTURES.length} sample notes through the live pipeline and checks them against the rules
-        (trial counts preserved, no goal-text dump, redirection "to task", etc.). Uses your keys and the
-        current prompts — makes real API calls.
-      </p>
-      <button
-        className="button button--small button--primary"
-        disabled={running || !keys || state.status !== "ready"}
-        onClick={() => void run()}
-      >
-        {running ? "Running…" : "Run eval"}
-      </button>
-      {error && (
-        <p role="alert" style={{ marginTop: 10, fontSize: 13, color: "var(--color-text-danger)" }}>
-          {error}
-        </p>
-      )}
-      {results && (
-        <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 10 }}>
-          {results.map((r) => (
-            <EvalRowView key={r.name} row={r} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function EvalRowView({ row }: { row: EvalRow }) {
-  const passed = row.checks.filter((c) => c.status === "pass").length;
-  const scored = row.checks.filter((c) => c.status !== "na").length;
-  const allPass = !row.error && passed === scored;
-  return (
-    <div style={{ borderTop: "0.5px solid var(--color-border-tertiary)", paddingTop: 10 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-        <strong style={{ fontSize: 13 }}>{row.name}</strong>
-        <span
-          style={{
-            fontSize: 12,
-            color: row.error || !allPass ? "var(--color-text-danger)" : "var(--color-text-success)",
-          }}
-        >
-          {row.error ? "error" : `${passed}/${scored} passed`}
-        </span>
-      </div>
-      {row.error ? (
-        <p style={{ margin: "4px 0 0 0", fontSize: 12, color: "var(--color-text-danger)" }}>{row.error}</p>
-      ) : (
-        <>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px", marginTop: 6 }}>
-            {row.checks.map((c) => {
-              const icon = c.status === "pass" ? "✓" : c.status === "fail" ? "✗" : "–";
-              const color =
-                c.status === "pass"
-                  ? "var(--color-text-success)"
-                  : c.status === "fail"
-                    ? "var(--color-text-danger)"
-                    : "var(--color-text-tertiary)";
-              return (
-                <span key={c.label} title={c.detail ?? ""} style={{ fontSize: 12, color }}>
-                  {icon} {c.label}
-                </span>
-              );
-            })}
-          </div>
-          {row.note && (
-            <details style={{ marginTop: 6 }}>
-              <summary style={{ fontSize: 12, color: "var(--color-text-secondary)", cursor: "pointer" }}>
-                View note
-              </summary>
-              <pre
-                style={{
-                  whiteSpace: "pre-wrap",
-                  fontSize: 12,
-                  margin: "6px 0 0 0",
-                  color: "var(--color-text-secondary)",
-                }}
-              >
-                {row.note}
-              </pre>
-            </details>
-          )}
-        </>
-      )}
     </div>
   );
 }
