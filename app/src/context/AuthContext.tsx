@@ -5,11 +5,11 @@ import { clearNotes } from "../clients/noteCache";
 
 export const REPO_CONFIG = {
   owner: "mhubelbank",
-  repo: "carryover",
-  // App data (students/goals/schedule/sessions) is committed to its own branch,
-  // keeping the code history on the default branch clean and preventing the
-  // Cloudflare Pages production deploy from rebuilding on every save.
-  branch: "data",
+  // App data (roster/goals/schedule/sessions/prompts) lives in its own PRIVATE
+  // repo, separate from this (public) code repo, so contributors never see PII.
+  // Read/written at runtime via the GitHub API using the user's token.
+  repo: "carryover-data",
+  branch: "main",
 } as const;
 
 interface Keys {
