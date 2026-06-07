@@ -10,20 +10,9 @@ Then, the app drafts a clinical note in the teacher's established voice with thr
 In addition, the app is a hub for day-to-day tasks, providing user-friendly features for roster management, scheduling, and longitudinal student goal tracking.
 
 **Stack:** Vite + React + TypeScript. UI is plain React with CSS-token theming for light/dark modes. Hosted via Cloudflare SPA.
-There is no backend: it runs entirely in the browser and brings its own keys. Domain logic is unit-tested.
+There is no backend: it runs entirely in the browser (localStorage, IndexedDB) and brings its own keys. Domain logic is unit-tested.
 
-**PII note:**
-
-## How it works
-
-- **Two keys, in the browser.** On first run the user pastes an Anthropic API key (note generation, called directly from the browser)
-   and a GitHub personal access token (for data storage). Both live only in `localStorage`.
-- **Data on a branch, not a server.** App data (roster, goals, weekly schedule, term info, session history metadata)
-   lives on the repo's `data` branch, read and written at runtime via the GitHub API. Application code lives on `main`.
-- **Three-pass generation.** Each note runs draft -> review -> streamline. Prompts live in `data/prompts/`, one set per session "mode"
-  (e.g. regular vs. news-day). Per-student pipelines run in parallel.
-- **Notes are never stored.** Only session metadata (date, goals targeted, trial counts, prompting) is saved under `data/sessions/`.
-   the narrative is regenerated on demand and kept only in the browser.
+**PII note:** Zero Data Retention on the account
 
 ## Repo layout
 

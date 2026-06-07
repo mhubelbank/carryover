@@ -14,6 +14,7 @@ import {
   displayName,
   fullName,
   isDeparted,
+  nextStudentId,
   type Student,
 } from "../domain/student";
 import type { StudentField } from "../domain/studentField";
@@ -122,7 +123,7 @@ export function Students({ onNavigate, target, onTargetConsumed }: Props) {
     <StudentsList
       onNavigate={onNavigate}
       onOpen={(id) => go({ kind: "detail", id })}
-      onAdd={() => go({ kind: "create", student: blankStudent() })}
+      onAdd={() => go({ kind: "create", student: blankStudent(students) })}
     />
   );
 }
@@ -1161,9 +1162,9 @@ function cloneStudent(s: Student): Student {
   };
 }
 
-function blankStudent(): Student {
+function blankStudent(existing: Student[]): Student {
   return {
-    id: `s_${crypto.randomUUID()}`,
+    id: nextStudentId(existing),
     firstName: "",
     middle: "",
     lastName: "",

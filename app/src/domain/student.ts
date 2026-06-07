@@ -48,6 +48,18 @@ export function studentContext(student: Student): Record<string, unknown> {
   return { ...student, ...student.fields };
 }
 
+// Next sequential student id (`s_NNN`). Ids are numeric (not name-based) so they
+// carry no PII; the next one is max-existing + 1, computed over the live roster
+// (including unsaved rows) so concurrent additions don't collide.
+export function nextStudentId(students: Pick<Student, "id">[]): string {
+  let max = 0;
+  for (const s of students) {
+    const m = /^s_(\d+)$/.exec(s.id);
+    if (m) max = Math.max(max, parseInt(m[1] ?? "0", 10));
+  }
+  return `s_${String(max + 1).padStart(3, "0")}`;
+}
+
 export type AgeFlag = "ok" | "warn" | "alert";
 
 // NY eligibility: 21 is the final eligible year (warn); 22+ is a likely data

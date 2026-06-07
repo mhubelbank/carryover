@@ -5,7 +5,7 @@ import { useTerm } from "../context/TermContext";
 import { startOfDay, toISODate } from "../domain/dates";
 import { buildTermSnapshot, termLabel, type ArchivedTerm, type TermType } from "../domain/term";
 import { teacherColor, type ColorKey, type Teacher } from "../domain/teacher";
-import { ageFlag, computedAge, fullName, type Student } from "../domain/student";
+import { ageFlag, computedAge, fullName, nextStudentId, type Student } from "../domain/student";
 import type { Goal } from "../domain/goal";
 import { emptySlotMarkers, type ScheduleEntry } from "../domain/schedule";
 import { ScheduleGrid } from "../components/ScheduleGrid";
@@ -56,9 +56,9 @@ function cloneStudent(s: Student): Student {
   };
 }
 
-function blankStudent(): Student {
+function blankStudent(existing: Student[]): Student {
   return {
-    id: `s_${crypto.randomUUID()}`,
+    id: nextStudentId(existing),
     firstName: "",
     middle: "",
     lastName: "",
@@ -637,7 +637,7 @@ function StudentsStep({
       ) : (
         <>
           <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-            <button className="button button--small" onClick={() => onNew([...newStudents, blankStudent()])}>
+            <button className="button button--small" onClick={() => onNew([...newStudents, blankStudent([...continuing, ...newStudents])])}>
               <Icon name="plus" size={13} /> Add row
             </button>
           </div>
