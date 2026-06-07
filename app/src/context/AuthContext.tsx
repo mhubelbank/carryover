@@ -1,5 +1,6 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
 import { storage, StorageKeys } from "../clients/storage";
+import { clearNotes } from "../clients/noteCache";
 
 
 export const REPO_CONFIG = {
@@ -63,8 +64,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setKeys(next);
       },
       signOut: () => {
-        storage.remove(StorageKeys.anthropicApiKey);
-        storage.remove(StorageKeys.githubToken);
+        // Wipe all local state, not just the keys: the IndexedDB note cache and
+        // the namespaced localStorage (Generate form draft) hold student PII that
+        // shouldn't survive a sign-out on a shared device.
+        storage.clear();
+        void clearNotes().catch(() => {});
         setKeys(null);
         setTestMode(false);
       },
