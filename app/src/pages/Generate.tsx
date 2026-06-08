@@ -16,6 +16,8 @@ import {
 } from "../domain/data";
 import {
   formatLong,
+  formatShort,
+  isWeekend,
   mondayOf,
   parseDate,
   startOfDay,
@@ -262,9 +264,19 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
   // Restore an auto-saved in-progress form on a plain mount (refresh), but never
   // over a deep-link target — that's a deliberately fresh session from Today.
   const [initialDraft] = useState<FormDraft | null>(() => (target ? null : loadFormDraft()));
-  const [date, setDate] = useState(
-    () => initialDraft?.date ?? toISODate(toWeekday(startOfDay(new Date()))),
-  );
+  const [date, setDate] = useState(() => {
+    if (initialDraft?.date) return initialDraft.date;
+    // Default to today, but clamp into the term so first load lands on a real
+    // session day rather than an out-of-term date (e.g. after the term ends).
+    let d = startOfDay(new Date());
+    if (state.status === "ready") {
+      const first = parseDate(state.data.term.firstDay);
+      const last = parseDate(state.data.term.lastDay);
+      if (first && d.getTime() < first.getTime()) d = first;
+      if (last && d.getTime() > last.getTime()) d = last;
+    }
+    return toISODate(toWeekday(d));
+  });
   const [teacherId, setTeacherId] = useState<string>(() => initialDraft?.teacherId ?? "");
   const [mode, setMode] = useState<Mode>(() => initialDraft?.mode ?? "regular");
   const [activities, setActivities] = useState<ActivityDef[]>(
@@ -335,15 +347,35 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
     const d = parseDate(date);
     return d ? (weekdayName(d) as Weekday) : null;
   }, [date]);
+  // A session only exists within the term's date range — the weekly schedule
+  // doesn't apply outside it, so an out-of-term date shows "No sessions this day".
+  const inTerm = useMemo(() => {
+    const d = parseDate(date);
+    if (!d || state.status !== "ready") return false;
+    const first = parseDate(state.data.term.firstDay);
+    const last = parseDate(state.data.term.lastDay);
+    if (first && d.getTime() < first.getTime()) return false;
+    if (last && d.getTime() > last.getTime()) return false;
+    return true;
+  }, [date, state]);
+  // Days the clinician marked "no school" on the calendar (shared term.closures).
+  const isClosure = useMemo(
+    () => state.status === "ready" && (state.data.term.closures ?? []).includes(date),
+    [state, date],
+  );
   const timeSlotOptions = useMemo(
     () =>
-      teacher && weekday
+      teacher && weekday && inTerm && !isClosure
         ? sortedTimeSlots(
             effectiveSchedule.filter((e) => e.teacherId === teacher.id && e.dayOfWeek === weekday),
           )
         : [],
-    [effectiveSchedule, teacher, weekday],
+    [effectiveSchedule, teacher, weekday, inTerm, isClosure],
   );
+  // A session requires a scheduled slot for the chosen teacher on an in-term,
+  // non-closure day — no ad-hoc sessions here (she adds the slot on the Schedule).
+  // The activities/roster and generate action are hidden when there's no session.
+  const hasSession = !!teacher && timeSlotOptions.length > 0;
   const sessionStudentIds = useMemo(() => {
     const d = parseDate(date);
     if (!teacher || !weekday || !timeSlot || !d) return [];
@@ -375,7 +407,12 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
 
   // Keep the chosen slot valid for the current teacher/day; default to the first.
   useEffect(() => {
-    if (timeSlotOptions.length === 0) return;
+    if (timeSlotOptions.length === 0) {
+      // No session this day (wrong weekday, or out of term): clear any stale slot
+      // so the roster/session doesn't linger from a previous date.
+      if (timeSlot !== "") setTimeSlot("");
+      return;
+    }
     if (!timeSlotOptions.includes(timeSlot)) setTimeSlot(timeSlotOptions[0]!);
   }, [timeSlotOptions, timeSlot]);
 
@@ -385,10 +422,10 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
   useEffect(() => {
     if (state.status !== "ready") return;
     if (target) return;
-    if (teacherId) return;
+    if (teacher) return;
     const firstActive = state.data.teachers.find((t) => !t.archived);
     if (firstActive) setTeacherId(firstActive.id);
-  }, [state, teacherId, target]);
+  }, [state, teacher, target]);
 
   // Persist generated notes to the local cache (repo never stores narrative), so
   // they survive navigation/refresh and feed the recent-notes export. Re-saves
@@ -988,8 +1025,42 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
         </div>
       </div>
 
+      {/* No session for the chosen date/teacher — explain why (mirrors Today). A
+          session needs a scheduled slot, so this also covers an in-term weekday
+          with no slot: she adds one on the Schedule. */}
+      {teacher &&
+        !hasSession &&
+        (() => {
+          const d = parseDate(date);
+          const f = parseDate(state.data.term.firstDay);
+          const l = parseDate(state.data.term.lastDay);
+          const label = d ? formatLong(d) : "This day";
+          return (
+            <div
+              className="card"
+              style={{ marginBottom: "1rem", fontSize: 14, color: "var(--color-text-secondary)" }}
+            >
+              {!inTerm && d ? (
+                <>
+                  {label} is outside the active {state.data.term.label} term
+                  {f && l ? ` (${formatShort(f)} – ${formatShort(l)})` : ""}.
+                </>
+              ) : isClosure ? (
+                <>{label} is marked “No school” on the calendar.</>
+              ) : d && isWeekend(d) ? (
+                <>{label} is a weekend — school isn't in session.</>
+              ) : (
+                <>
+                  No session scheduled for {teacher.name} on {weekday ?? "this day"}. Add one on the
+                  Schedule, or pick another date or teacher.
+                </>
+              )}
+            </div>
+          );
+        })()}
+
       {/* Regular activities (session-level) */}
-      {mode === "regular" && teacher && (
+      {mode === "regular" && teacher && hasSession && (
         <div className="card" style={{ marginBottom: "1rem" }}>
           <div
             style={{
@@ -1143,6 +1214,7 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
 
       {/* Add a caseload student who isn't in this session's schedule. */}
       {teacher &&
+        hasSession &&
         (() => {
           const addable = caseload.filter((s) => !studentState[s.id]?.included);
           if (addable.length === 0) return null;
@@ -1184,19 +1256,21 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
         </p>
       )}
 
-      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 12, marginTop: 16 }}>
-        <button
-          className="button button--primary"
-          onClick={handleGenerate}
-          disabled={!canGenerate || phase === "running"}
-        >
-          {phase === "running"
-            ? progress
-              ? `Generating… ${progress.current} of ${progress.total} done`
-              : "Generating…"
-            : `Generate ${includedStudents.length} note${includedStudents.length === 1 ? "" : "s"}`}
-        </button>
-      </div>
+      {hasSession && (
+        <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 12, marginTop: 16 }}>
+          <button
+            className="button button--primary"
+            onClick={handleGenerate}
+            disabled={!canGenerate || phase === "running"}
+          >
+            {phase === "running"
+              ? progress
+                ? `Generating… ${progress.current} of ${progress.total} done`
+                : "Generating…"
+              : `Generate ${includedStudents.length} note${includedStudents.length === 1 ? "" : "s"}`}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
