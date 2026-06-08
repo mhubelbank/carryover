@@ -1,6 +1,6 @@
 import type { Role, Teacher } from "./teacher";
 import type { TemplateContext } from "./notes";
-import { trialSentence, TRIAL_SUPPORT_TYPES, type TrialData } from "./trial";
+import { trialSentence, trialToken, TRIAL_SUPPORT_TYPES, type TrialData } from "./trial";
 
 // ---------------------------------------------------------------------------
 // Option lists (confirmed from her existing TSX files; identical across teachers)
@@ -253,6 +253,15 @@ export interface RegularContextArgs {
 }
 
 export function regularContext(a: RegularContextArgs): TemplateContext {
+  // Swap each activity's trial sentence for an opaque token; generateNote splices
+  // the exact text back in after all passes (see spliceTrials). Keyed by index.
+  const trialReplacements: Record<string, string> = {};
+  const activities = a.activities.map((act, i) => {
+    if (!act.trials) return act;
+    const token = trialToken(i);
+    trialReplacements[token] = act.trials;
+    return { ...act, trials: token };
+  });
   return {
     student: {
       name: a.studentName,
@@ -261,8 +270,9 @@ export function regularContext(a: RegularContextArgs): TemplateContext {
       individualSession: a.individualSession,
     },
     teacher: teacherPromptContext(a.teacher),
-    activities: a.activities,
+    activities,
     additionalContext: a.additionalContext ?? "",
+    trialReplacements,
   };
 }
 

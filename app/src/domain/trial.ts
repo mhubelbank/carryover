@@ -162,3 +162,47 @@ export function trialSentence(studentName: string, pronoun: string, t: TrialData
     .filter(Boolean)
     .join(" ");
 }
+
+// Trial sentences are reproduced into the note verbatim, but LLMs can't be
+// trusted to copy prose exactly (they re-punctuate, fuse, or drop clauses). So
+// instead the note carries an opaque token per activity, which is replaced with
+// the exact sentence in code after all passes. The token is keyed by the
+// activity's index in the rendered list (guaranteed unique).
+export function trialToken(index: number): string {
+  return `[[TRIAL:${index}]]`;
+}
+
+const TRIAL_TOKEN_RE = /\[\[TRIAL:\d+\]\]/g;
+
+// Replace each [[TRIAL:n]] token in the note with its exact sentence. Tokens the
+// model dropped have their sentence appended (data is never lost); stray tokens
+// with no mapping are stripped. Returns the spliced note.
+export function spliceTrials(note: string, replacements: Record<string, string>): string {
+  // The token is a complete sentence, but the model sometimes mis-places it: as
+  // the object of "given" (a prompting phrase it isn't), or with a redundant
+  // period right after it (the trial text already ends in one). Normalize those
+  // boundaries before substituting so the spliced sentence reads cleanly.
+  let out = note
+    .replace(/\s*,?\s*\bgiven\s+(\[\[TRIAL:\d+\]\])/gi, ". $1")
+    .replace(/(\[\[TRIAL:\d+\]\])\s*\.(?=\s|$)/g, "$1");
+  const dropped: string[] = [];
+  for (const [token, sentence] of Object.entries(replacements)) {
+    if (out.includes(token)) {
+      out = out.split(token).join(sentence);
+    } else {
+      dropped.push(sentence);
+    }
+  }
+  // Any token without a mapping (shouldn't happen) — remove it cleanly.
+  out = out.replace(TRIAL_TOKEN_RE, "");
+  if (dropped.length > 0) {
+    console.warn(`spliceTrials: ${dropped.length} trial token(s) missing from the note; appending.`);
+    out = `${out.trim()} ${dropped.join(" ")}`;
+  }
+  // Tidy any leftover double spaces/periods or space-before-punctuation.
+  return out
+    .replace(/\.{2,}/g, ".")
+    .replace(/\s+([.,;])/g, "$1")
+    .replace(/ {2,}/g, " ")
+    .trim();
+}

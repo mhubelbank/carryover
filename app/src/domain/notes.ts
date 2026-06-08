@@ -2,6 +2,7 @@ import { callAnthropic, AnthropicError, DEFAULT_MODEL } from "../clients/anthrop
 import type { GitHubClient } from "../clients/github";
 import type { Mode } from "./teacher";
 import { normalizeAcronyms } from "./text";
+import { spliceTrials } from "./trial";
 
 // Token ceilings ported from her existing TSX files (bump if she sees truncation).
 export const MAX_TOKENS_BY_MODE: Record<Mode, number> = {
@@ -308,7 +309,10 @@ export async function generateNote(
     maxTokens,
     renderTemplate(prompts.streamline, { ...ctx, draftNote: draft, reviewedNote: reviewed }),
   );
-  const note = streamlined.trim();
+  // Splice the exact trial sentences back in for any [[TRIAL:n]] tokens the note
+  // carried through the passes (regularContext put them there).
+  const replacements = (ctx.trialReplacements as Record<string, string> | undefined) ?? {};
+  const note = spliceTrials(streamlined.trim(), replacements);
   // Post-processing (e.g. a teacher append), then force acronym casing ("wh" → "WH").
   const final = normalizeAcronyms(opts.postProcess ? opts.postProcess(note) : note);
 
