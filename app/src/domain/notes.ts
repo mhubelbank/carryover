@@ -215,10 +215,10 @@ export async function loadPromptSet(client: GitHubClient, mode: Mode): Promise<P
 export interface GenerateOptions {
   model?: string;
   maxTokens?: number;
-  // Contents of data/feedback-rules.md — appended to the DRAFT prompt only.
+  // Contents of data/prompts/feedback-rules.md — appended to the DRAFT prompt only.
   feedbackRules?: string;
-  // Example notes Emily likes (data/golden_output.txt) — appended to the DRAFT
-  // prompt as a style/structure reference.
+  // Example notes (data/prompts/golden_output.txt) — appended to the DRAFT prompt
+  // as a style/structure reference.
   goldenExamples?: string;
   // Per-session variety instruction (date-derived) appended to the DRAFT prompt,
   // so the same student's notes don't read identically week to week.

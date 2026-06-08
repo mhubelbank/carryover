@@ -81,7 +81,17 @@ export async function getPrompts(mode: Mode): Promise<PromptSet> {
 }
 
 // Golden examples (style guide appended to the draft prompt in production).
+// Lives alongside the prompts (data/prompts/golden_output.txt), so PROMPTS_DIR
+// supplies it locally; otherwise fetch from the data repo.
 export async function getGolden(): Promise<string> {
+  const dir = process.env.PROMPTS_DIR;
+  if (dir) {
+    try {
+      return readFileSync(`${dir}/golden_output.txt`, "utf8");
+    } catch {
+      return "";
+    }
+  }
   const client = dataClient();
   if (!client) return "";
   return loadGoldenExamples(client).catch(() => "");
