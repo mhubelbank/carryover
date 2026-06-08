@@ -5,16 +5,49 @@
 //   prompts             — either GITHUB_TOKEN (fetch from the private data repo)
 //                         or PROMPTS_DIR (local prompt files, for fast iteration)
 // Data-repo coords default to the live private repo; override via env.
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { GitHubClient } from "../src/clients/github";
 import { loadGoldenExamples } from "../src/domain/data";
 import { loadPromptSet, type PromptSet } from "../src/domain/notes";
 import type { Mode } from "../src/domain/teacher";
 
+// Load a gitignored .env.local so the eval scripts pick up keys without exporting
+// them on every run. Checks the app dir (scripts' cwd) then the repo root. Real
+// environment variables win — we never overwrite an already-set var. Returns the
+// file we loaded, or null if none exists.
+function loadEnvLocal(): string | null {
+  for (const path of [".env.local", "../.env.local"]) {
+    if (!existsSync(path)) continue;
+    for (const raw of readFileSync(path, "utf8").split("\n")) {
+      const line = raw.trim();
+      if (!line || line.startsWith("#")) continue;
+      const eq = line.indexOf("=");
+      if (eq === -1) continue;
+      const key = line.slice(0, eq).trim();
+      let val = line.slice(eq + 1).trim();
+      if (
+        (val.startsWith('"') && val.endsWith('"')) ||
+        (val.startsWith("'") && val.endsWith("'"))
+      ) {
+        val = val.slice(1, -1);
+      }
+      if (key && !(key in process.env)) process.env[key] = val;
+    }
+    return path;
+  }
+  return null;
+}
+const ENV_FILE = loadEnvLocal();
+
 export function requireEnv(name: string): string {
   const v = process.env[name];
   if (!v) {
     console.error(`✗ Missing required env var: ${name}`);
+    console.error(
+      ENV_FILE
+        ? `  Add ${name}=… to ${ENV_FILE}.`
+        : `  Create app/.env.local (copy app/.env.example) and add ${name}=…, or export it.`,
+    );
     process.exit(1);
   }
   return v;
