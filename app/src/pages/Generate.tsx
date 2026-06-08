@@ -471,7 +471,7 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
         studentId: n.studentId,
         name: n.studentName,
         absent: false,
-        result: { draft: "", reviewed: "", final: n.note, warnings: [] },
+        result: { draft: "", reviewed: "", final: n.note },
       })),
     );
     setPhase("results");
@@ -740,7 +740,6 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
           draft: "",
           reviewed: "",
           final: absentNote(displayName(student, includedStudents)),
-          warnings: [],
         },
       });
       done++;
@@ -2753,28 +2752,6 @@ function ResultsView({
               >
                 {r.result.final}
               </p>
-              {!r.regenerating && r.result.warnings.length > 0 && (
-                <div
-                  style={{
-                    marginTop: 10,
-                    padding: "8px 12px",
-                    background: "var(--color-background-warning)",
-                    border: "0.5px solid var(--color-border-warning)",
-                    borderRadius: "var(--border-radius-md)",
-                    fontSize: 12,
-                    color: "var(--color-text-warning)",
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 600, marginBottom: 4 }}>
-                    <Icon name="alert-circle" size={13} /> Needs your review
-                  </div>
-                  <ul style={{ margin: 0, paddingLeft: 18 }}>
-                    {r.result.warnings.map((w, i) => (
-                      <li key={i}>{w}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
               {r.showDrafts && (
                 <div style={{ marginTop: 10, fontSize: 12, color: "var(--color-text-secondary)" }}>
                   <details>

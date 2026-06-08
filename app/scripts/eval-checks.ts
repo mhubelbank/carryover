@@ -24,7 +24,6 @@ await mapPool(FIXTURES, 4, async (fx) => {
   try {
     const r = await generateNote(apiKey, prompts, fx.ctx, { maxTokens: fx.maxTokens, goldenExamples: golden });
     out += `\n${r.final}\n`;
-    if (r.warnings.length) out += `\n⚠ streamline warnings: ${r.warnings.join(" | ")}\n`;
     out += `\nchecks:\n`;
     for (const c of CHECKS) {
       const res = c.run(r.final, fx);
