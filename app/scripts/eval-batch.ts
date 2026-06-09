@@ -60,43 +60,35 @@ const ACTIVITIES = [
 // activity that shares a domain — keeping synthetic sessions plausible (e.g. an
 // articulation goal never lands on a reading-comprehension task) and the note's
 // domain label consistent with its goals.
+// Trials measure a base-form verb + a PLURAL count noun (measuredVerb/measuredNoun
+// in the real form), e.g. "answer" + "WH questions" → "answered 4/10 WH questions".
 const GOALS = [
-  { short: "answer WH questions", full: "Given a familiar story, the student will answer who, what, and where questions with no more than one prompt.", domains: ["receptive", "expressive"] },
-  { short: "sequence picture cards", full: "The student will sequence 3–4 picture cards to retell an event in the correct order.", domains: ["receptive", "expressive"] },
-  { short: "initiate requests", full: "The student will independently initiate a request using a three-word phrase in 4 of 5 opportunities.", domains: ["pragmatic", "expressive"] },
-  { short: "produce target sounds", full: "The student will produce /s/ in the initial position of words at the phrase level with 80% accuracy.", domains: ["expressive"] },
-  { short: "maintain a topic", full: "The student will maintain a conversational topic across three exchanges with no more than one redirection.", domains: ["pragmatic"] },
-  { short: "identify the main idea", full: "After a short text, the student will state the main idea in a complete sentence with no more than one cue.", domains: ["receptive"] },
+  { short: "answer WH questions", verb: "answer", noun: "WH questions", full: "Given a familiar story, the student will answer who, what, and where questions with no more than one prompt.", domains: ["receptive", "expressive"] },
+  { short: "sequence picture cards", verb: "sequence", noun: "picture cards", full: "The student will sequence 3–4 picture cards to retell an event in the correct order.", domains: ["receptive", "expressive"] },
+  { short: "initiate requests", verb: "initiate", noun: "requests", full: "The student will independently initiate a request using a three-word phrase in 4 of 5 opportunities.", domains: ["pragmatic", "expressive"] },
+  { short: "produce target sounds", verb: "produce", noun: "target sounds", full: "The student will produce target sounds in the initial position of words at the phrase level with 80% accuracy.", domains: ["expressive"] },
+  { short: "make on-topic comments", verb: "make", noun: "on-topic comments", full: "The student will make on-topic comments during a structured conversation in 4 of 5 opportunities.", domains: ["pragmatic"] },
+  { short: "identify the main idea", verb: "identify", noun: "main ideas", full: "After a short text, the student will identify the main idea in a complete sentence with no more than one cue.", domains: ["receptive"] },
 ];
 const LEVELS = ["minimal", "moderate", "significant"];
 const TYPES = ["verbal", "visual", "gestural", "tactile", "modeled"];
 const REDIRECTION = ["regular", "occasional", "continuous"];
 const RESPONSE = ["enthusiastic", "engaged", "alert", "distracted", "tired"];
 
-// Past tense of each goal's leading verb, so the trial sentence stays coherent
-// (e.g. "maintain a topic" → "maintained a topic", not a random "answered a topic").
-const PAST_TENSE: Record<string, string> = {
-  answer: "answered",
-  produce: "produced",
-  identify: "identified",
-  sequence: "sequenced",
-  initiate: "initiated",
-  maintain: "maintained",
-};
-
-function trialFor(goalShort: string): TrialEntry {
+function trialFor(goal: { short: string; verb: string; noun: string }): TrialEntry {
   const total = pick([5, 8, 10]);
-  const correct = Math.max(1, Math.round(total * (0.3 + rand() * 0.6)));
-  const sp = goalShort.indexOf(" ");
-  const lead = (sp === -1 ? goalShort : goalShort.slice(0, sp)).toLowerCase();
-  return {
-    goalId: goalShort,
-    verb: PAST_TENSE[lead] ?? lead,
-    noun: sp === -1 ? "" : goalShort.slice(sp + 1),
-    total: String(total),
-    rows: [{ level: pick(LEVELS), types: pickSome(TYPES, 1 + Math.floor(rand() * 2)), count: String(correct) }],
-    failed: "",
-  };
+  // Usually one support row; sometimes split successes across 2–3 distinct
+  // prompting conditions to exercise the multi-row sentence (descending list +
+  // miss clause). Each row gets ≥1; multi-row always leaves ≥1 miss.
+  const nRows = chance(0.5) ? 1 : chance(0.5) ? 3 : 2;
+  const levels = pickSome(LEVELS, Math.min(nRows, LEVELS.length));
+  let pool = Math.min(total - (levels.length >= 2 ? 1 : 0), Math.max(levels.length, Math.round(total * (0.5 + rand() * 0.4))));
+  const rows = levels.map((level, i) => {
+    const count = i === levels.length - 1 ? Math.max(1, pool) : Math.max(1, Math.floor(pool / (levels.length - i)));
+    pool -= count;
+    return { level, types: pickSome(TYPES, 1), count: String(count) };
+  });
+  return { goalId: goal.short, verb: goal.verb, noun: goal.noun, total: String(total), rows, failed: "" };
 }
 
 interface BuiltStudent {
@@ -119,7 +111,7 @@ function buildStudent(): BuiltStudent {
     const goals = pickSome(compatible, 1 + (chance(0.4) ? 1 : 0));
     const useTrials = chance(0.5);
     const trials: TrialData = useTrials
-      ? { enabled: true, method: "summary", entries: goals.map((g) => trialFor(g.short)) }
+      ? { enabled: true, method: "summary", entries: goals.map((g) => trialFor(g)) }
       : { enabled: false, method: "summary", entries: [] };
     const input: ActivityInput = {
       goals: goals.map((g) => g.short),
@@ -136,7 +128,9 @@ function buildStudent(): BuiltStudent {
     defs.push({ activityId: `a${i + 1}`, additionalInfo: "", segmentName: "", domains: a.domains });
     inputs.push(input);
     const metric = useTrials
-      ? `trials ${trials.entries.map((e) => `${e.rows[0]!.count}/${e.total} ${e.rows[0]!.level} ${e.rows[0]!.types.join("+")}`).join("; ")}`
+      ? `trials ${trials.entries
+          .map((e) => `${e.verb} ${e.noun} [${e.rows.map((r) => `${r.count}/${e.total} ${r.level} ${r.types.join("+")}`).join(", ")}]`)
+          .join("; ")}`
       : `prompting ${input.promptingLevel.join("")} ${input.promptingType.join("+")}`;
     summary.push(
       `${a.desc} — goals: ${goals.map((g) => g.short).join(", ")}; ${metric}` +

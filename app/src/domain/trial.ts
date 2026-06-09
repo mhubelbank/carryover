@@ -16,8 +16,9 @@ export interface TrialSupportRow {
 }
 
 // One measurement, tied to a goal (goalId "" = an unlinked/free count). What was
-// done correctly is split into a past-tense verb ("answered") and its object
-// ("wh questions") — mirroring the goal's measuredVerb/measuredNoun.
+// done correctly is split into a BASE-form verb ("answer") and its object
+// ("wh questions"). The sentence builder conjugates to past for the success
+// clause ("answered") and uses the base for the miss clause ("did not answer").
 export interface TrialEntry {
   goalId: string;
   verb: string;
@@ -138,27 +139,103 @@ export function trialSupportPhrase(row: TrialSupportRow): string {
   return phrase;
 }
 
+// Common irregular verbs a clinician might enter as a base measuredVerb.
+const IRREGULAR_PAST: Record<string, string> = {
+  make: "made",
+  give: "gave",
+  tell: "told",
+  retell: "retold",
+  write: "wrote",
+  read: "read",
+  say: "said",
+  choose: "chose",
+  take: "took",
+  hold: "held",
+  find: "found",
+  draw: "drew",
+  build: "built",
+  speak: "spoke",
+  understand: "understood",
+  spell: "spelled",
+  show: "showed",
+};
+
+// Conjugate a base-form verb to simple past (US spelling, no consonant doubling).
+// Tolerant: a value already in past tense (legacy data) is returned unchanged.
+export function pastTense(verb: string): string {
+  const w = verb.trim();
+  if (!w) return w;
+  if (IRREGULAR_PAST[w.toLowerCase()]) return IRREGULAR_PAST[w.toLowerCase()]!;
+  if (/ed$/i.test(w)) return w; // already past tense (legacy data)
+  if (/e$/i.test(w)) return `${w}d`; // produce → produced, sequence → sequenced
+  if (/[^aeiou]y$/i.test(w)) return `${w.slice(0, -1)}ied`; // identify → identified
+  return `${w}ed`; // answer → answered, maintain → maintained
+}
+
+// Base form of a verb. New data stores base already (passes through); legacy
+// past-tense data ("answered") is stripped back so the miss clause reads right.
+export function baseForm(verb: string): string {
+  const w = verb.trim();
+  if (/ied$/i.test(w)) return `${w.slice(0, -3)}y`; // identified → identify
+  if (/ed$/i.test(w)) return w.slice(0, -2); // answered → answer (base form has no "ed")
+  return w;
+}
+
+// Join trial-result clauses: 1 → "a"; 2 → "a and b"; 3+ → "a, b, and c".
+function joinClauses(parts: string[]): string {
+  if (parts.length <= 1) return parts[0] ?? "";
+  if (parts.length === 2) return `${parts[0]} and ${parts[1]}`;
+  return `${parts.slice(0, -1).join(", ")}, and ${parts[parts.length - 1]}`;
+}
+
 // One measurement's data sentence (the live-preview contract). "" when incomplete.
-export function trialEntrySentence(studentName: string, pronoun: string, e: TrialEntry): string {
+// Form: "{Name} correctly {past-verb} {c1}/{total} {noun} given {phrase1}[, {c2}/{total}
+// given {phrase2}][, and {cN}/{total} given {phraseN}]." Rows are listed by count
+// descending; the noun appears only after the first fraction. A miss clause
+// ("{Pron} did not {verb} {miss}/{total} {noun}.") is added only when there are 2+
+// support rows — with a single row the miss is trivially derivable, so it's omitted.
+//
+// `pastForms` is an optional base→past map (e.g. from an LLM conjugation pass at
+// generation time, which handles irregulars); when a verb is absent it falls back
+// to the rules-based pastTense(). The live form preview passes nothing (rules only).
+export function trialEntrySentence(
+  studentName: string,
+  pronoun: string,
+  e: TrialEntry,
+  pastForms?: Record<string, string>,
+): string {
   const total = e.total.trim();
-  const action = trialEntryAction(e);
-  if (!action || !total) return "";
-  const parts = (e.rows ?? [])
+  const base = baseForm(e.verb);
+  const noun = (e.noun ?? "").trim();
+  if ((!base && !noun) || !total) return "";
+  const rows = (e.rows ?? [])
     .filter((r) => num(r.count) > 0)
-    .map((r) => `${num(r.count)}/${total} given ${trialSupportPhrase(r)}`);
-  if (parts.length === 0) return "";
+    .sort((a, b) => num(b.count) - num(a.count)); // descending by count
+  if (rows.length === 0) return "";
+  const parts = rows.map((r, i) => {
+    const head = i === 0 && noun ? `${num(r.count)}/${total} ${noun}` : `${num(r.count)}/${total}`;
+    return `${head} given ${trialSupportPhrase(r)}`;
+  });
   const Pron = pronoun ? pronoun.charAt(0).toUpperCase() + pronoun.slice(1) : "They";
-  let s = `${studentName} correctly ${action} ${parts.join(", ")}.`;
+  const past = pastForms?.[base.toLowerCase()] ?? pastTense(base);
+  let s = `${studentName} correctly ${past} ${joinClauses(parts)}.`;
   const failed = trialFailed(e);
-  if (failed > 0) s += ` ${Pron} did not do so on ${failed}/${total} trials.`;
+  if (rows.length >= 2 && failed > 0) {
+    s += ` ${Pron} did not ${base}${noun ? ` ${failed}/${total} ${noun}` : ` ${failed}/${total}`}.`;
+  }
   return normalizeAcronyms(s);
 }
 
 // All of an activity's measurement sentences, joined (fed to the draft prompt).
-export function trialSentence(studentName: string, pronoun: string, t: TrialData): string {
+export function trialSentence(
+  studentName: string,
+  pronoun: string,
+  t: TrialData,
+  pastForms?: Record<string, string>,
+): string {
   if (!t.enabled) return "";
   return (t.entries ?? [])
-    .map((e) => trialEntrySentence(studentName, pronoun, e))
+    .map((e) => trialEntrySentence(studentName, pronoun, e, pastForms))
     .filter(Boolean)
     .join(" ");
 }
@@ -180,11 +257,15 @@ const TRIAL_TOKEN_RE = /\[\[TRIAL:\d+\]\]/g;
 export function spliceTrials(note: string, replacements: Record<string, string>): string {
   // The token is a complete sentence, but the model sometimes mis-places it: as
   // the object of "given" (a prompting phrase it isn't), or with a redundant
-  // period right after it (the trial text already ends in one). Normalize those
-  // boundaries before substituting so the spliced sentence reads cleanly.
+  // period right after it (the trial text already ends in one). It also sometimes
+  // leaves an orphan "prompting" fragment beside it (the activity's prompting is
+  // already inside the token). Normalize those boundaries before substituting.
   let out = note
     .replace(/\s*,?\s*\bgiven\s+(\[\[TRIAL:\d+\]\])/gi, ". $1")
-    .replace(/(\[\[TRIAL:\d+\]\])\s*\.(?=\s|$)/g, "$1");
+    .replace(/(\[\[TRIAL:\d+\]\])\s*\.(?=\s|$)/g, "$1")
+    // Orphan "given prompting" (no level/type between) only appears when the model
+    // botches a trial activity — a real clause is always "{level} {type} prompting".
+    .replace(/\s*,?\s*\bgiven\s+prompting\b/gi, "");
   const dropped: string[] = [];
   for (const [token, sentence] of Object.entries(replacements)) {
     if (out.includes(token)) {
@@ -199,8 +280,10 @@ export function spliceTrials(note: string, replacements: Record<string, string>)
     console.warn(`spliceTrials: ${dropped.length} trial token(s) missing from the note; appending.`);
     out = `${out.trim()} ${dropped.join(" ")}`;
   }
-  // Tidy any leftover double spaces/periods or space-before-punctuation.
+  // Tidy: drop a lone "prompting." sentence (orphan fragment the model left next
+  // to a trial token), then collapse double spaces/periods and space-before-punct.
   return out
+    .replace(/([.!?])\s+prompting\.(?=\s|$)/gi, "$1")
     .replace(/\.{2,}/g, ".")
     .replace(/\s+([.,;])/g, "$1")
     .replace(/ {2,}/g, " ")

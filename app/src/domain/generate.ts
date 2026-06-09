@@ -122,6 +122,7 @@ export function buildRegularActivities(
   describe: (def: ActivityDef, index: number) => string,
   studentName: string,
   pronoun: string,
+  pastForms?: Record<string, string>,
 ): RenderedActivity[] {
   const out: RenderedActivity[] = [];
   defs.forEach((def, i) => {
@@ -129,7 +130,7 @@ export function buildRegularActivities(
     const description = describe(def, i).trim();
     if (!description) return;
     const input = inputs[i];
-    const trials = input?.trials ? trialSentence(studentName, pronoun, input.trials) : "";
+    const trials = input?.trials ? trialSentence(studentName, pronoun, input.trials, pastForms) : "";
     out.push({
       description,
       segmentName: def.segmentName || "",

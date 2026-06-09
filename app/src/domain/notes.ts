@@ -230,6 +230,43 @@ export interface GenerateOptions {
   onPhase?: (pass: Pass) => void;
 }
 
+// Conjugate base-form trial verbs to simple past via the model (reliable for
+// irregulars — make→made — unlike a rules table). One batched call, fired when
+// generation starts; the result is fed into the trial sentences. Returns a
+// base→past map (lowercased keys); on any failure returns {} so callers fall back
+// to the rules-based pastTense(). Never throws.
+export async function conjugatePastForms(
+  apiKey: string,
+  verbs: string[],
+  model: string = DEFAULT_MODEL,
+): Promise<Record<string, string>> {
+  const unique = [...new Set(verbs.map((v) => v.trim().toLowerCase()).filter(Boolean))];
+  if (unique.length === 0) return {};
+  const prompt =
+    "Give the simple past tense of each verb below. Reply with ONLY a JSON object " +
+    "mapping each verb (exactly as given, lowercase) to its simple past tense — no other text.\n" +
+    `Verbs: ${JSON.stringify(unique)}`;
+  try {
+    const res = await callAnthropic(apiKey, {
+      model,
+      max_tokens: 500,
+      messages: [{ role: "user", content: prompt }],
+    });
+    const text = res.content.map((b) => b.text).join("");
+    const start = text.indexOf("{");
+    const end = text.lastIndexOf("}");
+    if (start === -1 || end === -1) return {};
+    const parsed = JSON.parse(text.slice(start, end + 1)) as Record<string, unknown>;
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(parsed)) {
+      if (typeof v === "string" && v.trim()) out[k.trim().toLowerCase()] = v.trim();
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
 const BACKOFF_MS = [1000, 3000, 10000];
 
 async function callPass(

@@ -10,7 +10,7 @@ import {
 
 const entry = (rows: TrialEntry["rows"], total: string, failed = ""): TrialEntry => ({
   goalId: "g",
-  verb: "answered",
+  verb: "answer", // base form; conjugated to past for the success clause
   noun: "wh questions",
   total,
   rows,
@@ -18,16 +18,70 @@ const entry = (rows: TrialEntry["rows"], total: string, failed = ""): TrialEntry
 });
 
 describe("trialEntrySentence", () => {
-  it("renders the data sentence verbatim with an auto-failed clause", () => {
+  it("conjugates the base verb, puts the count before the noun, and omits the miss for a single row", () => {
     const s = trialEntrySentence("Sam", "he", entry([{ level: "minimal", types: ["verbal"], count: "6" }], "10"));
+    expect(s).toBe("Sam correctly answered 6/10 WH questions given minimal verbal prompting.");
+  });
+
+  it("uses 'no support' phrasing and no miss clause at 100%", () => {
+    const s = trialEntrySentence("Mia", "she", entry([{ level: "no support", types: [], count: "5" }], "5"));
+    expect(s).toBe("Mia correctly answered 5/5 WH questions given no support.");
+  });
+
+  it("lists 2 rows descending joined by 'and', with a miss clause", () => {
+    const s = trialEntrySentence(
+      "Omar",
+      "he",
+      entry(
+        [
+          { level: "minimal", types: ["verbal"], count: "3" },
+          { level: "significant", types: ["verbal"], count: "4" },
+        ],
+        "10",
+      ),
+    );
     expect(s).toBe(
-      "Sam correctly answered WH questions 6/10 given minimal verbal prompting. He did not do so on 4/10 trials.",
+      "Omar correctly answered 4/10 WH questions given significant verbal prompting and 3/10 given minimal verbal prompting. He did not answer 3/10 WH questions.",
     );
   });
 
-  it("uses 'no support' phrasing and omits the failed clause at 100%", () => {
-    const s = trialEntrySentence("Mia", "she", entry([{ level: "no support", types: [], count: "5" }], "5"));
-    expect(s).toBe("Mia correctly answered WH questions 5/5 given no support.");
+  it("lists 3+ rows descending with an Oxford comma and a miss clause", () => {
+    const s = trialEntrySentence(
+      "Omar",
+      "he",
+      entry(
+        [
+          { level: "minimal", types: ["gestural"], count: "2" },
+          { level: "significant", types: ["verbal"], count: "4" },
+          { level: "moderate", types: ["verbal"], count: "3" },
+        ],
+        "10",
+      ),
+    );
+    expect(s).toBe(
+      "Omar correctly answered 4/10 WH questions given significant verbal prompting, 3/10 given moderate verbal prompting, and 2/10 given minimal gestural prompting. He did not answer 1/10 WH questions.",
+    );
+  });
+
+  it("uses a provided pastForms map (e.g. from the LLM pass) over the rules", () => {
+    const e = entry([{ level: "minimal", types: ["verbal"], count: "4" }], "5");
+    expect(trialEntrySentence("Sam", "he", e, { answer: "responded" })).toBe(
+      "Sam correctly responded 4/5 WH questions given minimal verbal prompting.",
+    );
+  });
+
+  it("conjugates an irregular base verb correctly", () => {
+    const e = { ...entry([{ level: "minimal", types: ["verbal"], count: "4" }], "5"), verb: "make", noun: "on-topic comments" };
+    expect(trialEntrySentence("Noa", "they", e)).toBe(
+      "Noa correctly made 4/5 on-topic comments given minimal verbal prompting.",
+    );
+  });
+
+  it("conjugates an e-ending base verb correctly", () => {
+    const e = { ...entry([{ level: "minimal", types: ["verbal"], count: "4" }], "5"), verb: "sequence", noun: "picture cards" };
+    expect(trialEntrySentence("Mia", "she", e)).toBe(
+      "Mia correctly sequenced 4/5 picture cards given minimal verbal prompting.",
+    );
   });
 });
 
@@ -48,6 +102,20 @@ describe("spliceTrials", () => {
 
   it("strips a stray token that has no mapping", () => {
     expect(spliceTrials(`Note text ${trialToken(9)} here.`, {})).toBe("Note text here.");
+  });
+
+  it("drops an orphan 'prompting.' fragment the model left beside the token", () => {
+    const sentence = "Sam correctly sequenced 3/8 picture cards given moderate verbal prompting.";
+    const note = `Sam read a passage. ${trialToken(0)} prompting. He was tired.`;
+    expect(spliceTrials(note, { [trialToken(0)]: sentence })).toBe(
+      `Sam read a passage. ${sentence} He was tired.`,
+    );
+  });
+
+  it("drops an orphan 'given prompting' clause with no level or type", () => {
+    expect(spliceTrials("Sam read a passage given prompting. He was tired.", {})).toBe(
+      "Sam read a passage. He was tired.",
+    );
   });
 
   it("fixes a token mis-placed after 'given' and a redundant trailing period", () => {
