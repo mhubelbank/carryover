@@ -86,7 +86,7 @@ function EditableDate({ value, onChange }: { value: string; onChange: (v: string
 }
 
 function TermSection({ onStartNewTerm }: { onStartNewTerm: () => void }) {
-  const { state, saveTerm, finishTerm, undoFinishTerm, termHistory } = useTerm();
+  const { state, saveTerm, finishTerm, undoFinishTerm, deleteTerm, termHistory } = useTerm();
   const [showHistory, setShowHistory] = useState(false);
   // null = idle, "confirm" = confirm panel open, "busy" = finishing in progress.
   const [finishStep, setFinishStep] = useState<null | "confirm" | "busy">(null);
@@ -266,7 +266,11 @@ function TermSection({ onStartNewTerm }: { onStartNewTerm: () => void }) {
           {showHistory && (
             <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
               {[...pastTerms].reverse().map((t, i) => (
-                <PastTermRow key={`${t.firstDay}-${t.lastDay}-${i}`} term={t} />
+                <PastTermRow
+                  key={`${t.firstDay}-${t.lastDay}-${i}`}
+                  term={t}
+                  onDelete={() => void deleteTerm(t)}
+                />
               ))}
             </div>
           )}
@@ -278,14 +282,21 @@ function TermSection({ onStartNewTerm }: { onStartNewTerm: () => void }) {
 
 // A past term: label + dates, expandable to its end-of-term snapshot (students
 // grouped by classroom, with the long-term goals worked on that term).
-function PastTermRow({ term }: { term: ArchivedTerm }) {
+function PastTermRow({ term, onDelete }: { term: ArchivedTerm; onDelete: () => void }) {
   const [open, setOpen] = useState(false);
   const f = parseDate(term.firstDay);
   const l = parseDate(term.lastDay);
   const snapshot = term.snapshot;
 
+  const handleDelete = () => {
+    const n = snapshot?.students.length ?? 0;
+    const detail = n ? ` Its end-of-term snapshot of ${n} student${n === 1 ? "" : "s"} will be lost.` : "";
+    if (window.confirm(`Delete "${term.label}" from your history?${detail} This can't be undone.`)) onDelete();
+  };
+
   return (
     <div style={{ borderTop: "0.5px solid var(--color-border-tertiary)", paddingTop: 6 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
       <button
         onClick={() => snapshot && setOpen((v) => !v)}
         style={{
@@ -293,7 +304,8 @@ function PastTermRow({ term }: { term: ArchivedTerm }) {
           alignItems: "center",
           justifyContent: "space-between",
           gap: 12,
-          width: "100%",
+          flex: 1,
+          minWidth: 0,
           background: "none",
           border: "none",
           padding: 0,
@@ -315,6 +327,23 @@ function PastTermRow({ term }: { term: ArchivedTerm }) {
           {snapshot ? ` · ${snapshot.students.length} student${snapshot.students.length === 1 ? "" : "s"}` : ""}
         </span>
       </button>
+        <button
+          onClick={handleDelete}
+          title="Delete this past term"
+          aria-label={`Delete ${term.label}`}
+          style={{
+            display: "inline-flex",
+            background: "none",
+            border: "none",
+            padding: 4,
+            cursor: "pointer",
+            color: "var(--color-text-tertiary)",
+            flexShrink: 0,
+          }}
+        >
+          <Icon name="trash" size={14} />
+        </button>
+      </div>
       {snapshot && open && <TermSnapshotDetail students={snapshot.students} />}
     </div>
   );
