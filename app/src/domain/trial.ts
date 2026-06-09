@@ -181,6 +181,15 @@ export function baseForm(verb: string): string {
   return w;
 }
 
+// Stable 32-bit hash of a string — used to pick the miss-clause joiner
+// deterministically from the entry's content (so the live preview matches the
+// note and nothing flickers on re-render).
+function contentHash(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (Math.imul(h, 31) + s.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
 // Join trial-result clauses: 1 → "a"; 2 → "a and b"; 3+ → "a, b, and c".
 function joinClauses(parts: string[]): string {
   if (parts.length <= 1) return parts[0] ?? "";
@@ -203,6 +212,10 @@ export function trialEntrySentence(
   pronoun: string,
   e: TrialEntry,
   pastForms?: Record<string, string>,
+  // Leading subject — defaults to the name (self-contained, used by the form
+  // preview). trialSentence alternates name/pronoun across entries to avoid
+  // repeating the name every sentence.
+  subject?: string,
 ): string {
   const total = e.total.trim();
   const base = baseForm(e.verb);
@@ -218,10 +231,17 @@ export function trialEntrySentence(
   });
   const Pron = pronoun ? pronoun.charAt(0).toUpperCase() + pronoun.slice(1) : "They";
   const past = pastForms?.[base.toLowerCase()] ?? pastTense(base);
-  let s = `${studentName} correctly ${past} ${joinClauses(parts)}.`;
+  const success = `${subject ?? studentName} correctly ${past} ${joinClauses(parts)}`;
+  let s = `${success}.`;
   const failed = trialFailed(e);
   if (rows.length >= 2 && failed > 0) {
-    s += ` ${Pron} did not ${base}${noun ? ` ${failed}/${total} ${noun}` : ` ${failed}/${total}`}.`;
+    const missTail = `${failed}/${total}${noun ? ` ${noun}` : ""}`;
+    // Joiner chosen deterministically from the entry's content, weighted ~2:1
+    // toward a period (the established voice); a semicolon joins occasionally.
+    const semicolon = contentHash(`${base}|${noun}|${total}|${failed}`) % 3 === 0;
+    s = semicolon
+      ? `${success}; ${pronoun || "they"} did not ${base} ${missTail}.`
+      : `${success}. ${Pron} did not ${base} ${missTail}.`;
   }
   return normalizeAcronyms(s);
 }
@@ -234,10 +254,34 @@ export function trialSentence(
   pastForms?: Record<string, string>,
 ): string {
   if (!t.enabled) return "";
+  // The note's activity sentence already names the student, so alternate the
+  // trial sentences' subject pronoun → name → pronoun … to avoid repeating the
+  // full name every sentence ("Quinn read… Quinn correctly… Quinn correctly…").
+  const Pron = pronoun ? pronoun.charAt(0).toUpperCase() + pronoun.slice(1) : "They";
   return (t.entries ?? [])
-    .map((e) => trialEntrySentence(studentName, pronoun, e, pastForms))
+    .map((e, i) => trialEntrySentence(studentName, pronoun, e, pastForms, i % 2 === 0 ? Pron : studentName))
     .filter(Boolean)
     .join(" ");
+}
+
+// At most one semicolon per note. A trial miss clause may join with a semicolon
+// ("…prompting; he did not answer 2/5 questions."), but only one should survive
+// per note — so once the whole note is assembled, demote any extra trial-clause
+// semicolons (beyond the first, and counting any the prose already used) back to a
+// period + capitalized pronoun. Only touches our own "; <pronoun> did not …" joins.
+export function limitMissSemicolons(note: string): string {
+  const trialSemi = /;(\s+)([A-Za-z]+)(\s+did not\s+)/g;
+  const trialCount = (note.match(trialSemi) || []).length;
+  if (trialCount === 0) return note;
+  const otherSemis = (note.match(/;/g) || []).length - trialCount;
+  let keep = Math.max(0, 1 - otherSemis);
+  return note.replace(trialSemi, (m, sp: string, pron: string, tail: string) => {
+    if (keep > 0) {
+      keep--;
+      return m;
+    }
+    return `.${sp}${pron.charAt(0).toUpperCase()}${pron.slice(1)}${tail}`;
+  });
 }
 
 // Trial sentences are reproduced into the note verbatim, but LLMs can't be

@@ -1,10 +1,13 @@
 import { describe, it, expect, vi } from "vitest";
 import {
   trialEntrySentence,
+  trialSentence,
   trialToken,
   spliceTrials,
+  limitMissSemicolons,
   expandEntryToEvents,
   eventsToPatch,
+  type TrialData,
   type TrialEntry,
 } from "../domain/trial";
 
@@ -15,6 +18,22 @@ const entry = (rows: TrialEntry["rows"], total: string, failed = ""): TrialEntry
   total,
   rows,
   failed,
+});
+
+describe("trialSentence", () => {
+  it("alternates the subject pronoun → name → … across entries", () => {
+    const t: TrialData = {
+      enabled: true,
+      method: "summary",
+      entries: [
+        { ...entry([{ level: "minimal", types: ["verbal"], count: "6" }], "10"), verb: "identify", noun: "main ideas" },
+        { ...entry([{ level: "moderate", types: ["visual"], count: "4" }], "5"), verb: "sequence", noun: "picture cards" },
+      ],
+    };
+    expect(trialSentence("Quinn", "he", t)).toBe(
+      "He correctly identified 6/10 main ideas given minimal verbal prompting. Quinn correctly sequenced 4/5 picture cards given moderate visual prompting.",
+    );
+  });
 });
 
 describe("trialEntrySentence", () => {
@@ -28,7 +47,7 @@ describe("trialEntrySentence", () => {
     expect(s).toBe("Mia correctly answered 5/5 WH questions given no support.");
   });
 
-  it("lists 2 rows descending joined by 'and', with a miss clause", () => {
+  it("lists 2 rows descending joined by 'and', with a miss clause (semicolon joiner here)", () => {
     const s = trialEntrySentence(
       "Omar",
       "he",
@@ -40,8 +59,9 @@ describe("trialEntrySentence", () => {
         "10",
       ),
     );
+    // The joiner is content-seeded (~2:1 period:semicolon); this entry hashes to a semicolon.
     expect(s).toBe(
-      "Omar correctly answered 4/10 WH questions given significant verbal prompting and 3/10 given minimal verbal prompting. He did not answer 3/10 WH questions.",
+      "Omar correctly answered 4/10 WH questions given significant verbal prompting and 3/10 given minimal verbal prompting; he did not answer 3/10 WH questions.",
     );
   });
 
@@ -82,6 +102,27 @@ describe("trialEntrySentence", () => {
     expect(trialEntrySentence("Mia", "she", e)).toBe(
       "Mia correctly sequenced 4/5 picture cards given minimal verbal prompting.",
     );
+  });
+});
+
+describe("limitMissSemicolons", () => {
+  it("keeps the first trial semicolon and demotes the rest to periods", () => {
+    const note = "A read. He answered 4/5; he did not answer 1/5 questions. B sorted; she did not sort 1/5 cards.";
+    expect(limitMissSemicolons(note)).toBe(
+      "A read. He answered 4/5; he did not answer 1/5 questions. B sorted. She did not sort 1/5 cards.",
+    );
+  });
+
+  it("demotes the trial semicolon when the prose already has one", () => {
+    const note = "A read a passage; she was engaged. He answered 4/5; he did not answer 1/5 questions.";
+    expect(limitMissSemicolons(note)).toBe(
+      "A read a passage; she was engaged. He answered 4/5. He did not answer 1/5 questions.",
+    );
+  });
+
+  it("leaves a lone trial semicolon untouched", () => {
+    const note = "Quinn read. He correctly sequenced 4/5; he did not sequence 1/5 picture cards.";
+    expect(limitMissSemicolons(note)).toBe(note);
   });
 });
 
