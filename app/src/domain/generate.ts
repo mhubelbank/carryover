@@ -18,7 +18,8 @@ export const PROMPTING_LEVELS = [
 // qualitative checklist and the structured trial rows can't drift apart.
 export const PROMPTING_TYPES = TRIAL_SUPPORT_TYPES;
 
-export const REDIRECTION_LEVELS = ["no", "regular", "occasional", "continuous"] as const;
+// Ordered least → most frequent (after "no").
+export const REDIRECTION_LEVELS = ["no", "occasional", "regular", "continuous"] as const;
 
 // Note: "disregulated" is intentionally spelled this way in her data — preserve it.
 export const RESPONSE_TYPES = [
