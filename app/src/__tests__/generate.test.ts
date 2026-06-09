@@ -20,6 +20,7 @@ const activity = (trials: string): RenderedActivity => ({
   domains: "expressive",
   goals: "answer wh questions",
   goalDetails: "",
+  longTermGoals: "",
   trials,
   promptingLevel: "",
   promptingType: "",

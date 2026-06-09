@@ -79,6 +79,9 @@ export interface ActivityDef {
 export interface ActivityInput {
   goals: string[]; // resolved shortnames — named in the note's "targeting" clause
   goalDetails: string[]; // full short-term goal sentences — context for the model
+  // Distinct long-term (annual) goal sentences behind this activity's goals — the
+  // closing paraphrases the shared one. Resolved in buildContext; "" form-side.
+  longTermGoals?: string[];
   promptingLevel: string[];
   promptingType: string[];
   redirection: string[];
@@ -101,6 +104,9 @@ export interface RenderedActivity {
   domains: string;
   goals: string;
   goalDetails: string;
+  // Distinct long-term (annual) goal(s) the activity's goals roll up to,
+  // "; "-joined; "" when none. The closing paraphrases the shared one closely.
+  longTermGoals: string;
   // The precise trial data sentence (Trials mode); "" when off. When present the
   // note uses it verbatim instead of describing prompting separately.
   trials: string;
@@ -137,6 +143,7 @@ export function buildRegularActivities(
       domains: def.domains.join(", "),
       goals: (input?.goals ?? []).join(", "),
       goalDetails: (input?.goalDetails ?? []).join("; "),
+      longTermGoals: (input?.longTermGoals ?? []).join("; "),
       trials,
       promptingLevel: (input?.promptingLevel ?? []).join(", "),
       promptingType: (input?.promptingType ?? []).join(", "),

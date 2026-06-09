@@ -267,6 +267,32 @@ export async function conjugatePastForms(
   }
 }
 
+// Section ordering and closing angle both rotate by `variant` (week index in the
+// app, pass index in the eval) — so the same student's notes differ across weeks
+// while staying consistent within a session. The closing angle is offset so it
+// doesn't move in lockstep with the ordering.
+const VARIETY_ORDERS = [
+  "describe the activities in the order they occurred",
+  "lead with the student's overall engagement and affect, then the activities",
+  "lead with the primary activity and its result, then the rest",
+];
+const CLOSING_ANGLES = [
+  "begin the closing by naming the long-term goal being advanced, then how it was worked toward",
+  "begin the closing with the activity and what it offered, then the goals",
+  "begin the closing with the language domain(s) addressed, then the goals",
+];
+
+// The per-session variety instruction appended to the draft prompt. `variant` is
+// any integer; orders/angles are picked mod 3.
+export function varietyNote(variant: number): string {
+  const i = ((variant % 3) + 3) % 3;
+  return (
+    `Week-to-week variety: so this note doesn't read identically to the same student's notes from other weeks, ${VARIETY_ORDERS[i]}. ` +
+    `For the closing sentence, ${CLOSING_ANGLES[(i + 1) % 3]}. ` +
+    "Keep the same clinical vocabulary and the same per-student template — only the opening, the section order, and the closing's angle differ across weeks."
+  );
+}
+
 const BACKOFF_MS = [1000, 3000, 10000];
 
 async function callPass(

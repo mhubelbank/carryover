@@ -58,6 +58,7 @@ import {
   conjugatePastForms,
   generateNote,
   loadPromptSet,
+  varietyNote as weekVarietyNote,
   type NoteResult,
   type Pass,
 } from "../domain/notes";
@@ -140,23 +141,14 @@ async function runPool<T>(items: T[], concurrency: number, worker: (item: T) => 
   await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, run));
 }
 
-// Three ways to order a note's content. A session picks one by its week, so a
-// teacher's students that day read consistently while the same student's note
-// differs week to week — without changing vocabulary or the per-student template.
-const VARIETY_VARIANTS = [
-  "describe the activities in the order they occurred",
-  "lead with the student's overall engagement and affect, then the activities",
-  "lead with the primary activity and its result, then the rest",
-];
+// A session's variety instruction rotates by week (so a teacher's students that
+// day read consistently while the same student's note differs week to week). The
+// rotation logic + text live in domain/notes (varietyNote), shared with the eval.
 function buildVarietyNote(date: string): string {
   const d = parseDate(date);
   if (!d) return "";
   const week = Math.floor(mondayOf(d).getTime() / (7 * 86_400_000));
-  const variant = VARIETY_VARIANTS[((week % VARIETY_VARIANTS.length) + VARIETY_VARIANTS.length) % VARIETY_VARIANTS.length]!;
-  return (
-    `Week-to-week variety: so this note doesn't read identically to the same student's notes from other weeks, ${variant}. ` +
-    "Keep the same clinical vocabulary and the same per-student template — only the opening and the order of sections should differ across weeks."
-  );
+  return weekVarietyNote(week);
 }
 
 interface Props {
@@ -3130,6 +3122,9 @@ function buildContext(
       ...input,
       goals: picked.map((g) => g.shortName || g.shortTermGoal).filter(Boolean),
       goalDetails: picked.map((g) => g.shortTermGoal.trim() || g.shortName).filter(Boolean),
+      // Distinct annual goals behind the picked short-terms — the closing
+      // paraphrases the shared one closely. Deduped, blanks dropped.
+      longTermGoals: [...new Set(picked.map((g) => g.longTermGoal.trim()).filter(Boolean))],
     };
   });
   // Resolve each selected activityId → its catalog entry, then build the
