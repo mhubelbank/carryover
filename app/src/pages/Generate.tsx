@@ -241,6 +241,25 @@ function clearFormDraft(): void {
   storage.remove(FORM_DRAFT_KEY);
 }
 
+// A per-session snapshot of the form, captured at generation so its inputs can be
+// restored on demand later — the auto-save draft is cleared on generate (a refresh
+// starts fresh), but this survives, keyed by (date · teacher · slot).
+const FORM_SNAPSHOT_PREFIX = "generate_form_snapshot_v4";
+function formSnapshotKey(date: string, teacherId: string, timeSlot: string): string {
+  return `${FORM_SNAPSHOT_PREFIX}|${date}|${teacherId}|${timeSlot}`;
+}
+function saveFormSnapshot(d: FormDraft): void {
+  storage.set(formSnapshotKey(d.date, d.teacherId, d.timeSlot), JSON.stringify(d));
+}
+function loadFormSnapshot(date: string, teacherId: string, timeSlot: string): FormDraft | null {
+  try {
+    const s = storage.get(formSnapshotKey(date, teacherId, timeSlot));
+    return s ? (JSON.parse(s) as FormDraft) : null;
+  } catch {
+    return null;
+  }
+}
+
 function blankNews(): NewsFieldValues {
   return {
     pragmatic: {
@@ -298,6 +317,8 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
   const [results, setResults] = useState<ResultRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [restorable, setRestorable] = useState<CachedNote[]>([]);
+  // The form snapshot saved when this session was last generated (if any).
+  const [restorableForm, setRestorableForm] = useState<FormDraft | null>(null);
   // While generating: how many of the batch have finished (notes run in parallel,
   // so there's no single "current pass" to show).
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
@@ -451,8 +472,10 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
   useEffect(() => {
     if (phase !== "form" || !teacher || !timeSlot) {
       setRestorable([]);
+      setRestorableForm(null);
       return;
     }
+    setRestorableForm(loadFormSnapshot(date, teacher.id, timeSlot));
     let cancelled = false;
     getSessionNotes(date, teacher.id, timeSlot)
       .then((n) => !cancelled && setRestorable(n))
@@ -461,6 +484,19 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
       cancelled = true;
     };
   }, [phase, date, teacher, timeSlot]);
+
+  // Restore the form inputs saved when this session was last generated.
+  const restoreForm = () => {
+    const d = restorableForm;
+    if (!d) return;
+    setDate(d.date);
+    setTeacherId(d.teacherId);
+    setTimeSlot(d.timeSlot);
+    setMode(d.mode);
+    setActivities(d.activities);
+    setStudentState(d.studentState);
+    seededSig.current = d.sessionSig; // keep the seeding effect from clobbering the restore
+  };
 
   const restoreCachedNotes = () => {
     setResults(
@@ -813,7 +849,10 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
       }
     }
 
-    clearFormDraft(); // the form's work is done — don't restore it next time
+    // Snapshot the form for this session so "Restore form" can bring it back, then
+    // clear the auto-save draft so a plain refresh starts fresh.
+    saveFormSnapshot({ date, teacherId, timeSlot, mode, activities, studentState, sessionSig });
+    clearFormDraft();
     setPhase("results");
   }
 
@@ -936,9 +975,16 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
               session earlier.
             </span>
           </div>
-          <button className="button button--small" style={{ flexShrink: 0 }} onClick={restoreCachedNotes}>
-            View them →
-          </button>
+          <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+            {restorableForm && (
+              <button className="button button--small button--ghost" onClick={restoreForm}>
+                Restore form
+              </button>
+            )}
+            <button className="button button--small" onClick={restoreCachedNotes}>
+              View them →
+            </button>
+          </div>
         </div>
       )}
 
