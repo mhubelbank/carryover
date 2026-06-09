@@ -55,6 +55,7 @@ import {
 } from "../domain/generate";
 import {
   MAX_TOKENS_BY_MODE,
+  conjugatePastForms,
   generateNote,
   loadPromptSet,
   type NoteResult,
@@ -81,6 +82,7 @@ import { teacherColor, type Activity, type Mode, type Role, type SessionCapture,
 import { getSessionNotes, saveNotes, type CachedNote } from "../clients/noteCache";
 import { storage } from "../clients/storage";
 import {
+  baseForm,
   blankTrialEntry,
   blankTrials,
   eventsToPatch,
@@ -258,7 +260,7 @@ function blankNews(): NewsFieldValues {
 }
 
 export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: Props) {
-  const { state, client } = useTerm();
+  const { state, client, saveGoals } = useTerm();
   const { keys } = useAuth();
 
   // Restore an auto-saved in-progress form on a plain mount (refresh), but never
@@ -746,10 +748,13 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
       return false;
     });
     setProgress({ current: done, total });
+    // One batched LLM pass conjugates all trial verbs to past tense (handles
+    // irregulars); falls back to rules per-verb. {} for news-day / no trials.
+    const pastForms = await conjugatePastForms(apiKey, collectTrialVerbs(pending.map((s) => studentState[s.id]!)));
     await runPool(pending, GENERATE_CONCURRENCY, async (student) => {
       const st = studentState[student.id]!;
       try {
-        const ctx = buildContext(mode, teacher, student, st, activities, goals, catalog, roleCatalog);
+        const ctx = buildContext(mode, teacher, student, st, activities, goals, catalog, roleCatalog, pastForms);
         const result = await generateNote(apiKey, prompts, ctx, {
           maxTokens: MAX_TOKENS_BY_MODE[mode],
           postProcess: buildPostProcess(teacher, student),
@@ -766,6 +771,15 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
       }
     });
     setProgress(null);
+
+    // Sync each goal's measured verb/noun from the trial fields the clinician
+    // populated this session. Non-fatal — a failure doesn't invalidate the notes.
+    try {
+      const updatedGoals = goalsWithMeasuredFromTrials(goals, includedStudents.map((s) => studentState[s.id]!));
+      if (updatedGoals) await saveGoals(updatedGoals);
+    } catch {
+      // ignore — the notes are already generated; goal sync is best-effort.
+    }
 
     // Persist session metadata (goalIds per student, mode). Note text is never stored.
     try {
@@ -839,10 +853,11 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
         student: students.find((s) => s.id === id),
       }))
       .filter((t) => t.row && t.st && t.student && !t.row.absent);
+    const pastForms = await conjugatePastForms(apiKey, collectTrialVerbs(targets.map((t) => t.st!)));
     await runPool(targets, GENERATE_CONCURRENCY, async ({ id, st, student }) => {
       updateResult(id, { regenerating: true, regenPhase: "draft", error: undefined });
       try {
-        const ctx = buildContext(mode, teacher, student!, st!, activities, goals, catalog, roleCatalog);
+        const ctx = buildContext(mode, teacher, student!, st!, activities, goals, catalog, roleCatalog, pastForms);
         const result = await generateNote(apiKey, prompts, ctx, {
           maxTokens: MAX_TOKENS_BY_MODE[mode],
           postProcess: buildPostProcess(teacher, student!),
@@ -1716,7 +1731,7 @@ function TrialEntryEditor({
               const seed = g && trialEntryAction(entry) === "";
               onChange({
                 goalId: e.target.value,
-                ...(seed ? { verb: g!.measuredVerb, noun: g!.measuredNoun } : {}),
+                ...(seed ? { verb: baseForm(g!.measuredVerb), noun: g!.measuredNoun } : {}),
               });
             }}
           >
@@ -1752,12 +1767,12 @@ function TrialEntryEditor({
           </div>
         )}
         <div style={{ flex: 1, minWidth: 200 }}>
-          <label className="label">What is being measured? E.g. [ answered ] [ WH questions ]</label>
+          <label className="label">What is being measured? E.g. [ answer ] [ WH questions ]</label>
           <div style={{ display: "flex", gap: 8 }}>
             <input
               className="input"
               style={{ width: 190 }}
-              placeholder="past-tense verb"
+              placeholder="base-form verb"
               value={entry.verb}
               onChange={(e) => onChange({ verb: e.target.value })}
             />
@@ -2176,7 +2191,7 @@ function RegularStudentCard({
               const entries =
                 (cur.entries ?? []).length === 0
                   ? activityGoals.length > 0
-                    ? activityGoals.map((g) => blankTrialEntry(g.id, g.measuredVerb, g.measuredNoun))
+                    ? activityGoals.map((g) => blankTrialEntry(g.id, baseForm(g.measuredVerb), g.measuredNoun))
                     : [blankTrialEntry()]
                   : cur.entries;
               // Drop the checklist-only prompting fields (redirection/response are
@@ -3034,6 +3049,43 @@ function buildAllNotes(dateLabel: string, timeSlot: string, results: ResultRow[]
   return `${header}\n\n${body}`;
 }
 
+// Every base-form trial verb across these students, for one batched conjugation
+// call at generation time. baseForm() normalizes any legacy past-tense entries.
+function collectTrialVerbs(states: StudentState[]): string[] {
+  return states.flatMap((st) =>
+    (st.regular ?? []).flatMap((inp) => (inp.trials?.entries ?? []).map((e) => baseForm(e.verb))),
+  );
+}
+
+// Sync each goal's measuredVerb/measuredNoun from the trial "what is being
+// measured" fields the clinician populated this session (keyed by goalId). Stores
+// the base-form verb. Returns the updated full goals list if anything changed, or
+// null when there's nothing to persist.
+function goalsWithMeasuredFromTrials(goals: Goal[], states: StudentState[]): Goal[] | null {
+  const updates = new Map<string, { verb: string; noun: string }>();
+  for (const st of states) {
+    for (const inp of st.regular ?? []) {
+      for (const e of inp.trials?.entries ?? []) {
+        const verb = baseForm(e.verb).trim();
+        const noun = (e.noun ?? "").trim();
+        if (e.goalId && (verb || noun)) updates.set(e.goalId, { verb, noun });
+      }
+    }
+  }
+  if (updates.size === 0) return null;
+  let changed = false;
+  const next = goals.map((g) => {
+    const u = updates.get(g.id);
+    if (!u) return g;
+    const measuredVerb = u.verb || g.measuredVerb;
+    const measuredNoun = u.noun || g.measuredNoun;
+    if (measuredVerb === g.measuredVerb && measuredNoun === g.measuredNoun) return g;
+    changed = true;
+    return { ...g, measuredVerb, measuredNoun };
+  });
+  return changed ? next : null;
+}
+
 function buildContext(
   mode: Mode,
   teacher: Teacher,
@@ -3043,6 +3095,7 @@ function buildContext(
   goals: Goal[],
   catalog: Activity[],
   roleCatalog: Role[],
+  pastForms?: Record<string, string>,
 ) {
   const pronoun = student.pronouns.split("/")[0]?.trim() || student.pronouns;
   if (mode === "news-day") {
@@ -3093,7 +3146,7 @@ function buildContext(
     const caps = { ...st.captures, ...(st.regular[i]?.captures ?? {}) };
     const selectedOptions = st.regular[i]?.options ?? [];
     return applyActivityRewrite(teacher, student, activity, def.additionalInfo, caps, fallback, selectedOptions);
-  }, student.firstName, pronoun);
+  }, student.firstName, pronoun, pastForms);
   return regularContext({
     studentName: student.firstName,
     pronouns: student.pronouns,
