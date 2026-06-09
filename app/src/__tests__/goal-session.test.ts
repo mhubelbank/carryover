@@ -5,7 +5,7 @@ import type { SessionMetadata } from "../domain/session";
 
 describe("goalMeasuredAction", () => {
   it("joins verb + noun, trimming, and is empty when unset", () => {
-    expect(goalMeasuredAction({ measuredVerb: "answered", measuredNoun: "wh questions" })).toBe("answered wh questions");
+    expect(goalMeasuredAction({ measuredVerb: "answer", measuredNoun: "wh questions" })).toBe("answer wh questions");
     expect(goalMeasuredAction({ measuredVerb: "", measuredNoun: "" })).toBe("");
   });
 });

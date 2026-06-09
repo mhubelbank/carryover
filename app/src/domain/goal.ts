@@ -7,9 +7,9 @@ export interface Goal {
   shortTermGoal: string;
   // Terse label (e.g. "WH questions") shown as the goal's checkbox in Generate.
   shortName: string;
-  // The Trials count phrase, split into a past-tense verb ("answered") and its
-  // object ("wh questions"); joined they slot into "{Name} correctly ___ 6/10".
-  // Empty for goals from before this was tracked; Trials falls back to shortName.
+  // The Trials count phrase, split into a base-form verb ("answer") and its
+  // object ("wh questions"); the verb is conjugated to slot into "{Name} correctly
+  // ___ 6/10". Empty for goals from before this was tracked; falls back to shortName.
   measuredVerb: string;
   measuredNoun: string;
   // Mastery criterion for the Progress view: "{targetPercent}% correct at
