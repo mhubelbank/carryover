@@ -1010,6 +1010,18 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
         </div>
       )}
 
+      {/* Lock the whole form while generating so nothing changes mid-run. The
+          Generate button + progress sits outside this fieldset, staying clear. */}
+      <fieldset
+        disabled={phase === "running"}
+        style={{
+          border: 0,
+          margin: 0,
+          padding: 0,
+          minInlineSize: 0,
+          ...(phase === "running" ? { pointerEvents: "none", opacity: 0.6 } : {}),
+        }}
+      >
       {/* Top controls — pick the session (date · teacher · time slot) and mode.
           Deep-linking from Today pre-fills date/teacher/slot. A top accent in the
           teacher's color ties the screen to them, mirroring Today's session cards. */}
@@ -1304,6 +1316,7 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
             </div>
           );
         })()}
+      </fieldset>
 
       {error && (
         <p role="alert" style={{ fontSize: 13, color: "var(--color-text-danger)" }}>
