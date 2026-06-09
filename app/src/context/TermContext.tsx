@@ -75,9 +75,6 @@ interface TermContextValue {
   // Reverse the most recent archive: strip `finishedOn` from term.json and remove
   // the matching history entry. Used by the undoable auto-archive notice.
   undoFinishTerm: () => Promise<void>;
-  // Permanently remove a past term (and its snapshot) from history. Confirmed in
-  // the UI; not the active term (that's "undo finish").
-  deleteTerm: (term: Term) => Promise<void>;
   // Set when a term was archived automatically (overdue on open, or defensively
   // before a roster edit) — drives the undoable notice. null once dismissed/undone.
   autoArchiveNotice: { label: string; finishedOn: string } | null;
@@ -240,11 +237,6 @@ export function TermProvider({ children }: { children: ReactNode }) {
     setAutoArchiveNotice(null);
   }, [client, persistHistory]);
 
-  const deleteTerm = useCallback(
-    (term: Term) => persistHistory(removeFromTermHistory(termHistoryRef.current, term)),
-    [persistHistory],
-  );
-
   const dismissAutoArchiveNotice = useCallback(() => setAutoArchiveNotice(null), []);
 
   // Auto-archive an overdue term the next time the app loads past its grace window.
@@ -399,7 +391,6 @@ export function TermProvider({ children }: { children: ReactNode }) {
       finishTerm,
       archiveTermToHistory,
       undoFinishTerm,
-      deleteTerm,
       autoArchiveNotice,
       dismissAutoArchiveNotice,
       saveTeachers,
@@ -421,7 +412,6 @@ export function TermProvider({ children }: { children: ReactNode }) {
       finishTerm,
       archiveTermToHistory,
       undoFinishTerm,
-      deleteTerm,
       autoArchiveNotice,
       dismissAutoArchiveNotice,
       saveTeachers,
