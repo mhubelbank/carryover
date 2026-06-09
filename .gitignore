@@ -46,6 +46,10 @@ coverage/
 # Eval script output (generated notes for manual review)
 eval-output/
 
+# Emily's original POC prompt files — kept locally for reference only. They
+# contain real student/teacher names (PII); NEVER commit to this public repo.
+/originals/
+
 # The npm package lives in app/ — guard against a stray root manifest/lockfile
 # (e.g. from running npm at the repo root, or Cloudflare auto-config).
 /package.json
