@@ -290,7 +290,10 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
     });
   const [phase, setPhase] = useState<"form" | "running" | "results">("form");
   useEffect(() => {
-    window.scrollTo(0, 0);
+    // Scroll to top when the results view appears or we return to the form — but
+    // NOT when generation starts ("running" keeps the form visible, so jumping to
+    // the top yanks the user away from the Generate button / progress they clicked).
+    if (phase !== "running") window.scrollTo(0, 0);
   }, [phase]);
   const [results, setResults] = useState<ResultRow[]>([]);
   const [error, setError] = useState<string | null>(null);
