@@ -271,10 +271,12 @@ export async function conjugatePastForms(
 // app, pass index in the eval) — so the same student's notes differ across weeks
 // while staying consistent within a session. The closing angle is offset so it
 // doesn't move in lockstep with the ordering.
+// All keep the clinical opening (the student doing the activity) — never lead with
+// affect/response, which doesn't read clinically.
 const VARIETY_ORDERS = [
-  "describe the activities in the order they occurred",
-  "lead with the student's overall engagement and affect, then the activities",
-  "lead with the primary activity and its result, then the rest",
+  "present the activities in the order they occurred",
+  "when there are multiple activities, lead with the primary activity and its result, then the others",
+  "present the activities in order, weaving the student's overall response in toward the end",
 ];
 const CLOSING_ANGLES = [
   "begin the closing by naming the long-term goal being advanced, then how it was worked toward",
@@ -373,9 +375,10 @@ export async function generateNote(
     renderTemplate(prompts.streamline, { ...ctx, draftNote: draft, reviewedNote: reviewed }),
   );
   // Splice the exact trial sentences back in for any [[TRIAL:n]] tokens the note
-  // carried through the passes (regularContext put them there).
+  // carried through the passes (regularContext put them there). Collapse any
+  // internal line breaks the model inserted — the note is one continuous paragraph.
   const replacements = (ctx.trialReplacements as Record<string, string> | undefined) ?? {};
-  const note = spliceTrials(streamlined.trim(), replacements);
+  const note = spliceTrials(streamlined.trim(), replacements).replace(/\s*\n\s*/g, " ");
   // Post-processing (e.g. a teacher append), then force acronym casing ("wh" → "WH").
   const final = normalizeAcronyms(opts.postProcess ? opts.postProcess(note) : note);
 

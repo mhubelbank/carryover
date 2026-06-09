@@ -10,12 +10,20 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import {
   buildRegularActivities,
+  buildRoleData,
+  newsContext,
   regularContext,
+  resolveRolePhrase,
+  NEWS_PROMPT_LEVELS,
+  PRAGMATIC_QUALITY_LEVELS,
+  STUDIO_AUDIENCE_SKILLS,
   type ActivityDef,
   type ActivityInput,
+  type NewsFieldValues,
+  type PragmaticSkillKey,
 } from "../src/domain/generate";
-import { generateNote, type TemplateContext } from "../src/domain/notes";
-import type { Teacher } from "../src/domain/teacher";
+import { conjugatePastForms, generateNote, varietyNote, type PromptSet, type TemplateContext } from "../src/domain/notes";
+import type { Role, Teacher } from "../src/domain/teacher";
 import type { TrialData, TrialEntry } from "../src/domain/trial";
 import { getGolden, getPrompts, mapPool, requireEnv } from "./_shared";
 
@@ -25,6 +33,9 @@ const nums = argv.filter((a) => /^\d+$/.test(a)).map(Number);
 const PASSES = nums[0] ?? (process.env.PASSES ? Number(process.env.PASSES) : 3);
 const STUDENTS = nums[1] ?? (process.env.STUDENTS ? Number(process.env.STUDENTS) : 5);
 const SEED = process.env.SEED ? Number(process.env.SEED) : 1;
+// Lower than the app's cap to stay under the Anthropic input-tokens/min rate
+// limit (golden examples make every prompt large). Override with CONCURRENCY.
+const CONCURRENCY = process.env.CONCURRENCY ? Number(process.env.CONCURRENCY) : 2;
 
 // Seeded PRNG (mulberry32) so a given SEED reproduces the same batch.
 function makeRng(seed: number) {
@@ -60,20 +71,42 @@ const ACTIVITIES = [
 // activity that shares a domain — keeping synthetic sessions plausible (e.g. an
 // articulation goal never lands on a reading-comprehension task) and the note's
 // domain label consistent with its goals.
+// Long-term (annual) goals — several short-terms share one, so the eval exercises
+// the closing's "advance the shared long-term goal" path. Formal IEP wording with
+// name + criteria, so the close-paraphrase / drop-criteria instruction is tested.
+const LT_COMPREHENSION =
+  "The student will comprehend grade-level narrative and informational texts to answer questions, identify central ideas, and retell events, in 4 out of 5 opportunities, given minimal verbal prompting.";
+const LT_CONVERSATION =
+  "The student will participate in structured conversations by initiating requests and contributing on-topic comments with peers and adults, in 4 of 5 opportunities, with moderate prompting.";
+const LT_ARTICULATION =
+  "The student will produce target speech sounds accurately at the word and phrase level in 80% of opportunities, given minimal cueing.";
+
 // Trials measure a base-form verb + a PLURAL count noun (measuredVerb/measuredNoun
 // in the real form), e.g. "answer" + "WH questions" → "answered 4/10 WH questions".
 const GOALS = [
-  { short: "answer WH questions", verb: "answer", noun: "WH questions", full: "Given a familiar story, the student will answer who, what, and where questions with no more than one prompt.", domains: ["receptive", "expressive"] },
-  { short: "sequence picture cards", verb: "sequence", noun: "picture cards", full: "The student will sequence 3–4 picture cards to retell an event in the correct order.", domains: ["receptive", "expressive"] },
-  { short: "initiate requests", verb: "initiate", noun: "requests", full: "The student will independently initiate a request using a three-word phrase in 4 of 5 opportunities.", domains: ["pragmatic", "expressive"] },
-  { short: "produce target sounds", verb: "produce", noun: "target sounds", full: "The student will produce target sounds in the initial position of words at the phrase level with 80% accuracy.", domains: ["expressive"] },
-  { short: "make on-topic comments", verb: "make", noun: "on-topic comments", full: "The student will make on-topic comments during a structured conversation in 4 of 5 opportunities.", domains: ["pragmatic"] },
-  { short: "identify the main idea", verb: "identify", noun: "main ideas", full: "After a short text, the student will identify the main idea in a complete sentence with no more than one cue.", domains: ["receptive"] },
+  { short: "answer WH questions", verb: "answer", noun: "WH questions", long: LT_COMPREHENSION, full: "Given a familiar story, the student will answer who, what, and where questions with no more than one prompt.", domains: ["receptive", "expressive"] },
+  { short: "sequence picture cards", verb: "sequence", noun: "picture cards", long: LT_COMPREHENSION, full: "The student will sequence 3–4 picture cards to retell an event in the correct order.", domains: ["receptive", "expressive"] },
+  { short: "initiate requests", verb: "initiate", noun: "requests", long: LT_CONVERSATION, full: "The student will independently initiate a request using a three-word phrase in 4 of 5 opportunities.", domains: ["pragmatic", "expressive"] },
+  { short: "produce target sounds", verb: "produce", noun: "target sounds", long: LT_ARTICULATION, full: "The student will produce target sounds in the initial position of words at the phrase level with 80% accuracy.", domains: ["expressive"] },
+  { short: "make on-topic comments", verb: "make", noun: "on-topic comments", long: LT_CONVERSATION, full: "The student will make on-topic comments during a structured conversation in 4 of 5 opportunities.", domains: ["pragmatic"] },
+  { short: "identify the main idea", verb: "identify", noun: "main ideas", long: LT_COMPREHENSION, full: "After a short text, the student will identify the main idea in a complete sentence with no more than one cue.", domains: ["receptive"] },
 ];
 const LEVELS = ["minimal", "moderate", "significant"];
 const TYPES = ["verbal", "visual", "gestural", "tactile", "modeled"];
 const REDIRECTION = ["regular", "occasional", "continuous"];
 const RESPONSE = ["enthusiastic", "engaged", "alert", "distracted", "tired"];
+// Free-text clinician observations — the pipeline should transform these into
+// clinical prose (not transcribe verbatim, not list as incidents) and weave them
+// in naturally. Deliberately varied (behavior, AAC, para support, fatigue).
+const NOTES = [
+  "needed a short movement break midway through before re-engaging",
+  "kept bringing up his weekend soccer game and needed redirection back to task",
+  "used his AAC device to produce two of his responses",
+  "reluctant to start, warmed up after a preferred item was offered",
+  "para provided hand-over-hand support during the writing portion",
+  "asked to be done early but finished the activity with encouragement",
+  "more fatigued than usual following a morning assessment",
+];
 
 function trialFor(goal: { short: string; verb: string; noun: string }): TrialEntry {
   const total = pick([5, 8, 10]);
@@ -98,7 +131,7 @@ interface BuiltStudent {
   ctx: TemplateContext;
 }
 
-function buildStudent(): BuiltStudent {
+function buildStudent(pastForms: Record<string, string>): BuiltStudent {
   const name = pick(NAMES);
   const [pronoun, pronouns] = pick(PRONOUNS);
   const acts = pickSome(ACTIVITIES, 1 + (chance(0.5) ? 1 : 0));
@@ -116,11 +149,12 @@ function buildStudent(): BuiltStudent {
     const input: ActivityInput = {
       goals: goals.map((g) => g.short),
       goalDetails: goals.map((g) => g.full),
+      longTermGoals: [...new Set(goals.map((g) => g.long))],
       promptingLevel: useTrials ? [] : [pick(LEVELS)],
       promptingType: useTrials ? [] : pickSome(TYPES, 1 + Math.floor(rand() * 2)),
       redirection: chance(0.4) ? [pick(REDIRECTION)] : [],
       response: [pick(RESPONSE)],
-      additionalNotes: "",
+      additionalNotes: chance(0.35) ? pick(NOTES) : "",
       captures: {},
       options: [],
       trials,
@@ -133,57 +167,145 @@ function buildStudent(): BuiltStudent {
           .join("; ")}`
       : `prompting ${input.promptingLevel.join("")} ${input.promptingType.join("+")}`;
     summary.push(
-      `${a.desc} — goals: ${goals.map((g) => g.short).join(", ")}; ${metric}` +
-        `${input.redirection.length ? `; redirection ${input.redirection[0]}` : ""}; ${input.response[0]}`,
+      `${a.desc} — goals: ${goals.map((g) => g.short).join(", ")}` +
+        `; LT: ${[...new Set(goals.map((g) => g.long))].map((l) => `"${l}"`).join(" + ")}` +
+        `; ${metric}` +
+        `${input.redirection.length ? `; redirection ${input.redirection[0]}` : ""}; ${input.response[0]}` +
+        `${input.additionalNotes ? `; notes: "${input.additionalNotes}"` : ""}`,
     );
   });
 
-  const activities = buildRegularActivities(defs, inputs, (_d, i) => acts[i]!.desc, name, pronoun);
+  const activities = buildRegularActivities(defs, inputs, (_d, i) => acts[i]!.desc, name, pronoun, pastForms);
   const ctx = regularContext({ studentName: name, pronouns, pronoun, individualSession: false, teacher: TEACHER, activities });
   return { name, pronoun, summary, ctx };
 }
 
-// Build all sessions up front (reproducible from SEED).
-const sessions = Array.from({ length: PASSES }, () =>
-  Array.from({ length: STUDENTS }, () => buildStudent()),
+// --- News-day synthetic sessions ---
+// Roles with the field-components each surfaces (drives buildRoleData).
+const ROLES: Role[] = [
+  { id: "anchor", name: "Anchor", phrase: "an anchor", fields: ["visualCues", "facialExpressions"] },
+  { id: "audience", name: "Studio Audience", phrase: "a member of the studio audience", fields: ["pragmatic", "compliments"] },
+  { id: "reporter", name: "Reporter", phrase: "a reporter", fields: ["visualCues", "decodingCarryover"] },
+  { id: "weather", name: "Weather", phrase: "the weather reporter", fields: ["facialExpressions", "compliments"] },
+];
+
+function newsValues(role: Role): NewsFieldValues {
+  const has = (k: string) => role.fields.includes(k);
+  const pct = () => String(pick([60, 70, 75, 80, 85, 90]));
+  const lvl = () => pick([...NEWS_PROMPT_LEVELS]);
+  const v: NewsFieldValues = {};
+  if (has("visualCues")) {
+    v.cuesPercentage = pct();
+    v.cuesPrompting = lvl();
+    if (chance(0.5)) v.cuesTarget = pick(["eye contact", "vocal volume"]);
+  }
+  if (has("facialExpressions")) {
+    v.facialPercentage = pct();
+    v.facialPrompting = lvl();
+  }
+  if (has("decodingCarryover")) v.decodingPercentage = pct();
+  if (has("pragmatic")) {
+    const p: NonNullable<NewsFieldValues["pragmatic"]> = {};
+    (Object.keys(STUDIO_AUDIENCE_SKILLS) as PragmaticSkillKey[]).forEach((k) => {
+      if (!chance(0.7)) return;
+      const qualityLevel = pick([...PRAGMATIC_QUALITY_LEVELS]);
+      // "Not observed" means the skill wasn't demonstrated — no prompting applies.
+      p[k] = { enabled: true, qualityLevel, promptLevel: qualityLevel === "Not observed" ? "" : lvl() };
+    });
+    v.pragmatic = p;
+  }
+  if (has("compliments") && chance(0.6)) {
+    v.gaveCompliments = true;
+    v.complimentsPrompting = `with one ${lvl()} verbal prompt`;
+  }
+  if (chance(0.35)) v.additionalNotes = pick(NOTES);
+  return v;
+}
+
+function buildNewsStudent(): BuiltStudent {
+  const name = pick(NAMES);
+  const [pronoun, pronouns] = pick(PRONOUNS);
+  const role = pick(ROLES);
+  const v = newsValues(role);
+  const roleData = buildRoleData(role, v);
+  const goals = pickSome(GOALS, 1 + (chance(0.5) ? 1 : 0));
+  const ctx = newsContext({
+    studentName: name,
+    pronouns,
+    teacher: TEACHER,
+    role,
+    rolePhrase: resolveRolePhrase(role, v),
+    selectedGoals: goals.map((g) => g.short),
+    selectedGoalDetails: goals.map((g) => g.full),
+    roleData,
+    additionalContext: "",
+  });
+  const summary = [
+    `role: ${role.name}; goals: ${goals.map((g) => g.short).join(", ")}` +
+      `${roleData ? `; data:${roleData.replace(/\n/g, " |")}` : ""}`,
+  ];
+  return { name, pronoun, summary, ctx };
+}
+
+// Conjugate the regular goal verbs to past via the LLM pass (mirrors the app),
+// so the eval exercises the same conjugation path; {} in dry runs → rules.
+const apiKey = dry ? "" : requireEnv("ANTHROPIC_API_KEY");
+const pastForms = dry ? {} : await conjugatePastForms(apiKey, GOALS.map((g) => g.verb));
+
+// Build both modes' sessions up front (reproducible from SEED).
+const regular = Array.from({ length: PASSES }, () =>
+  Array.from({ length: STUDENTS }, () => buildStudent(pastForms)),
 );
+const news = Array.from({ length: PASSES }, () => Array.from({ length: STUDENTS }, () => buildNewsStudent()));
+const flat = (ss: BuiltStudent[][]) => ss.flatMap((students, p) => students.map((s, j) => ({ p, j, s })));
+const flatReg = flat(regular);
+const flatNews = flat(news);
 
-mkdirSync("eval-output", { recursive: true });
-const outPath = `eval-output/batch-seed${SEED}-${PASSES}x${STUDENTS}${dry ? "-dry" : ""}.md`;
-let md = `# Note batch — ${PASSES} passes × ${STUDENTS} students (seed ${SEED})\n\n`;
-
-const flat = sessions.flatMap((students, p) => students.map((s, j) => ({ p, j, s })));
-const finals: { final: string }[] = [];
-
-if (dry) {
-  console.log(`DRY: built ${PASSES}×${STUDENTS} = ${flat.length} contexts (no generation).`);
-  flat.forEach(() => finals.push({ final: "_(dry run — no note generated)_" }));
-} else {
-  const apiKey = requireEnv("ANTHROPIC_API_KEY");
-  const prompts = await getPrompts("regular");
-  const golden = await getGolden();
-  console.log(`Generating ${flat.length} notes${golden ? " (with golden examples)" : ""}…`);
+async function runGen(items: { p: number; s: BuiltStudent }[], prompts: PromptSet, golden: string, label: string) {
+  console.log(`Generating ${items.length} ${label} notes…`);
   let done = 0;
-  const results = await mapPool(flat, 4, async ({ s }) => {
-    const r = await generateNote(apiKey, prompts, s.ctx, { maxTokens: 1500, goldenExamples: golden }).catch(
-      (e): { final: string } => ({
-        final: `[generation error: ${e instanceof Error ? e.message : String(e)}]`,
-      }),
-    );
-    process.stdout.write(`\r  ${++done}/${flat.length}`);
+  const out = await mapPool(items, CONCURRENCY, async ({ p, s }) => {
+    // Treat each pass as a different "week" so the ordering/closing-angle variety
+    // rotates across passes (mirrors the app's week-to-week rotation).
+    const r = await generateNote(apiKey, prompts, s.ctx, {
+      maxTokens: 1500,
+      goldenExamples: golden,
+      varietyNote: varietyNote(p),
+    }).catch((e): { final: string } => ({ final: `[generation error: ${e instanceof Error ? e.message : String(e)}]` }));
+    process.stdout.write(`\r  ${++done}/${items.length}`);
     return r;
   });
   process.stdout.write("\n");
-  finals.push(...results);
+  return out;
 }
 
-flat.forEach(({ p, j, s }, idx) => {
-  if (j === 0) md += `## Pass ${p + 1}\n\n`;
-  md += `### ${p + 1}.${j + 1} — ${s.name} (${s.pronoun})\n`;
-  s.summary.forEach((line) => (md += `- ${line}\n`));
-  md += `\n${finals[idx]!.final}\n`;
-  md += `\n---\n\n`;
-});
+let regFinals: { final: string }[];
+let newsFinals: { final: string }[];
+if (dry) {
+  console.log(`DRY: built ${flatReg.length} regular + ${flatNews.length} news-day contexts (no generation).`);
+  regFinals = flatReg.map(() => ({ final: "_(dry run — no note generated)_" }));
+  newsFinals = flatNews.map(() => ({ final: "_(dry run — no note generated)_" }));
+} else {
+  const golden = await getGolden();
+  regFinals = await runGen(flatReg, await getPrompts("regular"), golden, "regular");
+  newsFinals = await runGen(flatNews, await getPrompts("news-day"), golden, "news-day");
+}
 
+function renderSection(heading: string, items: { p: number; j: number; s: BuiltStudent }[], finals: { final: string }[]) {
+  let out = `# ${heading}\n\n`;
+  items.forEach(({ p, j, s }, idx) => {
+    if (j === 0) out += `## Pass ${p + 1}\n\n`;
+    out += `### ${p + 1}.${j + 1} — ${s.name} (${s.pronoun})\n`;
+    s.summary.forEach((line) => (out += `- ${line}\n`));
+    out += `\n${finals[idx]!.final}\n\n---\n\n`;
+  });
+  return out;
+}
+
+mkdirSync("eval-output", { recursive: true });
+const outPath = `eval-output/batch-seed${SEED}-${PASSES}x${STUDENTS}${dry ? "-dry" : ""}.md`;
+const md =
+  renderSection(`Regular mode — ${PASSES}×${STUDENTS} (seed ${SEED})`, flatReg, regFinals) +
+  renderSection(`News-day mode — ${PASSES}×${STUDENTS} (seed ${SEED})`, flatNews, newsFinals);
 writeFileSync(outPath, md);
 console.log(`Wrote ${outPath}`);
