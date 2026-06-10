@@ -280,7 +280,7 @@ const VARIETY_ORDERS = [
 ];
 const CLOSING_ANGLES = [
   "begin the closing by naming the long-term goal being advanced, then how it was worked toward",
-  "begin the closing with the activity and what it offered, then the goals",
+  "begin the closing with a brief back-reference to the activity (e.g. \"This session,\" \"This work\") and what it built — never re-naming the activity or echoing the opening's wording — then the goals",
   "begin the closing with the language domain(s) addressed, then the goals",
 ];
 
