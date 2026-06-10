@@ -1,8 +1,12 @@
 import { useState, type ReactNode } from "react";
 import { Icon } from "../components/Icon";
 import { Nav, type NavPage } from "../components/Nav";
-import { AnthropicError, validateApiKey } from "../clients/anthropic";
+import { AnthropicError } from "../clients/anthropic";
+import { OpenAIError } from "../clients/openai";
+import { validateKey } from "../clients/llm";
 import { GitHubError, validateGitHubToken } from "../clients/github";
+import { MODEL_CHOICES, PROVIDER_META } from "../clients/models";
+import { getModelChoiceId, setModelChoiceId } from "../clients/modelPref";
 import { REPO_CONFIG, useAuth } from "../context/AuthContext";
 import { useTerm } from "../context/TermContext";
 import { triggerDownload, downloadText, zipStore } from "../clients/download";
@@ -34,6 +38,7 @@ export function Settings({ onNavigate, onStartNewTerm }: SettingsProps) {
       <TermSection onStartNewTerm={onStartNewTerm} />
       <AppearanceSection />
       <CatalogsSection onNavigate={onNavigate} />
+      <ModelSection />
       <KeysSection />
       <ExportSection />
       <ResetSection onSignOut={signOut} onTestMode={enterTestMode} />
@@ -423,6 +428,75 @@ function CatalogsSection({ onNavigate }: { onNavigate: (page: NavPage) => void }
   );
 }
 
+// The model picker: friendly names + a "why choose this" line, no raw model IDs.
+// Persisted via modelPref; the Generate page reads it when she generates.
+function ModelSection() {
+  const { keys } = useAuth();
+  const [choiceId, setChoiceId] = useState<string>(getModelChoiceId);
+  const choose = (id: string) => {
+    setChoiceId(id);
+    setModelChoiceId(id);
+  };
+  const selected = MODEL_CHOICES.find((c) => c.id === choiceId);
+  const needsOpenAIKey = selected?.provider === "openai" && !keys?.openaiApiKey;
+  return (
+    <div className="card" style={{ marginBottom: "1rem" }}>
+      <h3 className="card__title">Model</h3>
+      <p style={{ fontSize: 13, color: "var(--color-text-secondary)", marginBottom: 12 }}>
+        Which AI writes the notes. You can switch anytime — try a few and keep what reads best.
+      </p>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {MODEL_CHOICES.map((c) => {
+          const on = c.id === choiceId;
+          return (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => choose(c.id)}
+              style={{
+                textAlign: "left",
+                display: "flex",
+                gap: 10,
+                alignItems: "flex-start",
+                padding: "10px 12px",
+                borderRadius: "var(--border-radius-md)",
+                cursor: "pointer",
+                border: on ? "1px solid var(--color-text-info)" : "0.5px solid var(--color-border-secondary)",
+                background: on ? "var(--color-background-info)" : "transparent",
+              }}
+            >
+              <span
+                aria-hidden
+                style={{
+                  marginTop: 3,
+                  width: 14,
+                  height: 14,
+                  borderRadius: "50%",
+                  flexShrink: 0,
+                  border: on
+                    ? "4px solid var(--color-text-info)"
+                    : "1.5px solid var(--color-border-secondary)",
+                }}
+              />
+              <span>
+                <span style={{ display: "block", fontWeight: 500, fontSize: 14, color: "var(--color-text-primary)" }}>
+                  {c.label}
+                </span>
+                <span style={{ fontSize: 12.5, color: "var(--color-text-secondary)" }}>{c.blurb}</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      {needsOpenAIKey && (
+        <p className="field-hint" style={{ color: "var(--color-text-danger)", marginTop: 10 }}>
+          Add your OpenAI key below to use this model.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function KeysSection() {
   const { keys, updateKeys } = useAuth();
   return (
@@ -433,8 +507,17 @@ function KeysSection() {
           label="Anthropic API key"
           value={keys?.anthropicApiKey ?? ""}
           placeholder="sk-ant-…"
-          validate={(v) => validateApiKey(v)}
+          creditsUrl={PROVIDER_META.anthropic.creditsUrl}
+          validate={(v) => validateKey("anthropic", v)}
           onSave={(v) => updateKeys({ anthropicApiKey: v })}
+        />
+        <KeyRow
+          label="OpenAI API key"
+          value={keys?.openaiApiKey ?? ""}
+          placeholder="sk-…"
+          creditsUrl={PROVIDER_META.openai.creditsUrl}
+          validate={(v) => validateKey("openai", v)}
+          onSave={(v) => updateKeys({ openaiApiKey: v })}
         />
         <KeyRow
           label="GitHub personal access token"
@@ -445,7 +528,8 @@ function KeysSection() {
         />
       </div>
       <p className="field-hint" style={{ marginTop: 12 }}>
-        Stored only in this browser. Update the GitHub token if data is missing, and the Anthropic key if note generation fails.
+        Stored only in this browser. The OpenAI key is only needed if you pick a ChatGPT model above. Use the credit
+        links to keep an eye on each account's balance.
       </p>
     </div>
   );
@@ -460,7 +544,7 @@ function maskKey(value: string): string {
 }
 
 function formatKeyError(err: unknown): string {
-  if (err instanceof AnthropicError) return `Key rejected: ${err.message}`;
+  if (err instanceof AnthropicError || err instanceof OpenAIError) return `Key rejected: ${err.message}`;
   if (err instanceof GitHubError) return `Token rejected: ${err.message}`;
   return err instanceof Error ? err.message : "Couldn't validate — check your connection.";
 }
@@ -472,12 +556,14 @@ function KeyRow({
   label,
   value,
   placeholder,
+  creditsUrl,
   validate,
   onSave,
 }: {
   label: string;
   value: string;
   placeholder: string;
+  creditsUrl?: string;
   validate: (value: string) => Promise<unknown>;
   onSave: (value: string) => void;
 }) {
@@ -510,7 +596,19 @@ function KeyRow({
 
   return (
     <div>
-      <label className="label">{label}</label>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
+        <label className="label">{label}</label>
+        {creditsUrl && (
+          <a
+            href={creditsUrl}
+            target="_blank"
+            rel="noreferrer"
+            style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 3 }}
+          >
+            Check your credits <Icon name="external-link" size={11} />
+          </a>
+        )}
+      </div>
       <div style={{ display: "flex", gap: 8 }}>
         {editing ? (
           <>

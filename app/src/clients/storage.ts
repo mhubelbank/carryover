@@ -26,7 +26,9 @@ export const storage = {
 
 export const StorageKeys = {
   anthropicApiKey: "anthropic_api_key",
+  openaiApiKey: "openai_api_key",
   githubToken: "github_token",
+  modelChoice: "model_choice",
   theme: "theme",
   page: "page",
 } as const;

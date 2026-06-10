@@ -3,6 +3,8 @@ import { Icon } from "../components/Icon";
 import { PROMPT_TYPE_ICON, LEVEL_ABBR } from "../components/promptSymbols";
 import { Nav, type NavPage } from "../components/Nav";
 import { useAuth } from "../context/AuthContext";
+import { resolveChoice, PROVIDER_META, MODEL_CHOICES } from "../clients/models";
+import { getModelChoiceId, setModelChoiceId } from "../clients/modelPref";
 import { useTerm } from "../context/TermContext";
 import {
   appendFeedbackRule,
@@ -273,6 +275,19 @@ function blankNews(): NewsFieldValues {
 export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: Props) {
   const { state, client, saveGoals } = useTerm();
   const { keys } = useAuth();
+
+  // The model she picked in Settings decides the provider, the API model id, and
+  // which key the run needs. Held in state (seeded from the saved pref) so that
+  // switching it mid-session — e.g. from the regenerate modal — takes effect on
+  // the next run immediately; `changeModel` also persists it as her preference.
+  const [modelChoiceId, setModelChoiceIdState] = useState(getModelChoiceId);
+  const changeModel = (id: string) => {
+    setModelChoiceIdState(id);
+    setModelChoiceId(id);
+  };
+  const modelChoice = resolveChoice(modelChoiceId);
+  const providerKey = modelChoice.provider === "openai" ? keys?.openaiApiKey : keys?.anthropicApiKey;
+  const hasModelKey = providerKey != null && providerKey.length > 0;
 
   // Restore an auto-saved in-progress form on a plain mount (refresh), but never
   // over a deep-link target — that's a deliberately fresh session from Today.
@@ -719,11 +734,11 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
   const canGenerate =
     teacher !== undefined &&
     includedStudents.length > 0 &&
-    keys?.anthropicApiKey != null &&
+    hasModelKey &&
     client !== null;
 
   async function handleGenerate() {
-    if (!teacher || !client || !keys?.anthropicApiKey) return;
+    if (!teacher || !client || !hasModelKey) return;
     // Date and at least one activity are required (matching SESIS) — raise a
     // clear error rather than generating a dateless or activity-less note. The
     // activity requirement is regular-mode only; news day uses roles instead.
@@ -761,7 +776,7 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
     const goldenExamples = await loadGoldenExamples(client).catch(() => "");
     const varietyNote = buildVarietyNote(date);
 
-    const apiKey = keys.anthropicApiKey;
+    const apiKey = providerKey!;
     const total = includedStudents.length;
     let done = 0;
     // Absent students get a fixed note immediately; the rest run in parallel
@@ -781,12 +796,19 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
     setProgress({ current: done, total });
     // One batched LLM pass conjugates all trial verbs to past tense (handles
     // irregulars); falls back to rules per-verb. {} for news-day / no trials.
-    const pastForms = await conjugatePastForms(apiKey, collectTrialVerbs(pending.map((s) => studentState[s.id]!)));
+    const pastForms = await conjugatePastForms(
+      apiKey,
+      collectTrialVerbs(pending.map((s) => studentState[s.id]!)),
+      modelChoice.provider,
+      modelChoice.modelId,
+    );
     await runPool(pending, GENERATE_CONCURRENCY, async (student) => {
       const st = studentState[student.id]!;
       try {
         const ctx = buildContext(mode, teacher, student, st, activities, goals, catalog, roleCatalog, pastForms);
         const result = await generateNote(apiKey, prompts, ctx, {
+          provider: modelChoice.provider,
+          model: modelChoice.modelId,
           maxTokens: MAX_TOKENS_BY_MODE[mode],
           postProcess: buildPostProcess(teacher, student),
           feedbackRules,
@@ -864,8 +886,8 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
   // feedback to feedback-rules.md once (not per note). Notes run sequentially to
   // keep the API cadence gentle; each row shows its own phase as it goes.
   async function regenerate(studentIds: string[], feedback = "", saveAsRule = false) {
-    if (!teacher || !client || !keys?.anthropicApiKey || studentIds.length === 0) return;
-    const apiKey = keys.anthropicApiKey;
+    if (!teacher || !client || !hasModelKey || studentIds.length === 0) return;
+    const apiKey = providerKey!;
     let prompts;
     try {
       prompts = await loadPromptSet(client, mode);
@@ -887,12 +909,19 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
         student: students.find((s) => s.id === id),
       }))
       .filter((t) => t.row && t.st && t.student && !t.row.absent);
-    const pastForms = await conjugatePastForms(apiKey, collectTrialVerbs(targets.map((t) => t.st!)));
+    const pastForms = await conjugatePastForms(
+      apiKey,
+      collectTrialVerbs(targets.map((t) => t.st!)),
+      modelChoice.provider,
+      modelChoice.modelId,
+    );
     await runPool(targets, GENERATE_CONCURRENCY, async ({ id, st, student }) => {
       updateResult(id, { regenerating: true, regenPhase: "draft", error: undefined });
       try {
         const ctx = buildContext(mode, teacher, student!, st!, activities, goals, catalog, roleCatalog, pastForms);
         const result = await generateNote(apiKey, prompts, ctx, {
+          provider: modelChoice.provider,
+          model: modelChoice.modelId,
           maxTokens: MAX_TOKENS_BY_MODE[mode],
           postProcess: buildPostProcess(teacher, student!),
           feedbackRules,
@@ -922,6 +951,9 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
         onBack={() => setPhase("form")}
         onNavigate={onNavigate}
         onRegenerate={regenerate}
+        modelChoiceId={modelChoiceId}
+        onChangeModel={changeModel}
+        modelKeyMissing={!hasModelKey}
         onToggleDrafts={(id) =>
           updateResult(id, { showDrafts: !results.find((r) => r.studentId === id)?.showDrafts })
         }
@@ -1326,6 +1358,11 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
 
       {hasSession && (
         <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 12, marginTop: 16 }}>
+          {!hasModelKey && (
+            <span style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>
+              Add your {PROVIDER_META[modelChoice.provider].label} key in Settings to use {modelChoice.label}.
+            </span>
+          )}
           <button
             className="button button--primary"
             onClick={handleGenerate}
@@ -2643,6 +2680,9 @@ function ResultsView({
   onBack,
   onNavigate,
   onRegenerate,
+  modelChoiceId,
+  onChangeModel,
+  modelKeyMissing,
   onToggleDrafts,
 }: {
   date: string;
@@ -2652,6 +2692,9 @@ function ResultsView({
   onBack: () => void;
   onNavigate: (page: NavPage) => void;
   onRegenerate: (ids: string[], feedback?: string, saveAsRule?: boolean) => void;
+  modelChoiceId: string;
+  onChangeModel: (id: string) => void;
+  modelKeyMissing: boolean;
   onToggleDrafts: (id: string) => void;
 }) {
   const parsed = parseDate(date);
@@ -2845,6 +2888,9 @@ function ResultsView({
       {regenRows.length > 0 && (
         <RegenerateModal
           targets={regenRows.map((r) => ({ name: r.name, currentNote: r.result?.final ?? "" }))}
+          modelChoiceId={modelChoiceId}
+          onChangeModel={onChangeModel}
+          modelKeyMissing={modelKeyMissing}
           onClose={() => setRegenTargets(null)}
           onSubmit={(feedback, saveAsRule) => {
             onRegenerate(
@@ -2875,10 +2921,16 @@ const QUICK_FIXES: { label: string; phrase: string }[] = [
 // an optional "save as a rule for future notes".
 function RegenerateModal({
   targets,
+  modelChoiceId,
+  onChangeModel,
+  modelKeyMissing,
   onSubmit,
   onClose,
 }: {
   targets: { name: string; currentNote: string }[];
+  modelChoiceId: string;
+  onChangeModel: (id: string) => void;
+  modelKeyMissing: boolean;
   onSubmit: (feedback: string, saveAsRule: boolean) => void;
   onClose: () => void;
 }) {
@@ -3055,10 +3107,39 @@ function RegenerateModal({
           </div>
         </div>
 
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+          <label htmlFor="regen-model" style={{ fontSize: 12, fontWeight: 500, color: "var(--color-text-secondary)" }}>
+            Model
+          </label>
+          <select
+            id="regen-model"
+            className="input"
+            value={modelChoiceId}
+            onChange={(e) => onChangeModel(e.target.value)}
+            style={{ width: "auto", fontSize: 13, padding: "4px 8px" }}
+          >
+            {MODEL_CHOICES.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+          <span style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>
+            Changing this also updates your default in Settings.
+          </span>
+        </div>
+
+        {modelKeyMissing && (
+          <p className="field-hint" style={{ color: "var(--color-text-danger)", marginTop: -6, marginBottom: 14 }}>
+            Add this model's API key in Settings before regenerating with it.
+          </p>
+        )}
+
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <button
             onClick={() => onSubmit("", false)}
-            style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, padding: "6px 12px", color: "var(--color-text-secondary)", whiteSpace: "nowrap" }}
+            disabled={modelKeyMissing}
+            style={{ background: "none", border: "none", cursor: modelKeyMissing ? "not-allowed" : "pointer", fontSize: 13, padding: "6px 12px", color: "var(--color-text-secondary)", whiteSpace: "nowrap", opacity: modelKeyMissing ? 0.5 : 1 }}
           >
             Just regenerate without feedback
           </button>
@@ -3068,7 +3149,7 @@ function RegenerateModal({
             </button>
             <button
               className="button button--small"
-              disabled={!hasFeedback}
+              disabled={!hasFeedback || modelKeyMissing}
               onClick={() => onSubmit(feedback, saveAsRule && hasFeedback)}
               style={{
                 fontSize: 14,

@@ -14,6 +14,9 @@ export const REPO_CONFIG = {
 
 interface Keys {
   anthropicApiKey: string;
+  // Optional — only set if she uses a ChatGPT model. Empty string when unset, so
+  // a missing OpenAI key never blocks sign-in (which needs Anthropic + GitHub).
+  openaiApiKey: string;
   githubToken: string;
 }
 
@@ -36,7 +39,7 @@ function loadKeys(): Keys | null {
   const anthropicApiKey = storage.get(StorageKeys.anthropicApiKey);
   const githubToken = storage.get(StorageKeys.githubToken);
   if (!anthropicApiKey || !githubToken) return null;
-  return { anthropicApiKey, githubToken };
+  return { anthropicApiKey, openaiApiKey: storage.get(StorageKeys.openaiApiKey) ?? "", githubToken };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -48,6 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       keys,
       signIn: (newKeys) => {
         storage.set(StorageKeys.anthropicApiKey, newKeys.anthropicApiKey);
+        storage.set(StorageKeys.openaiApiKey, newKeys.openaiApiKey);
         storage.set(StorageKeys.githubToken, newKeys.githubToken);
         setKeys(newKeys);
       },
@@ -57,6 +61,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const next = { ...base, ...partial };
         if (partial.anthropicApiKey !== undefined) {
           storage.set(StorageKeys.anthropicApiKey, next.anthropicApiKey);
+        }
+        if (partial.openaiApiKey !== undefined) {
+          storage.set(StorageKeys.openaiApiKey, next.openaiApiKey);
         }
         if (partial.githubToken !== undefined) {
           storage.set(StorageKeys.githubToken, next.githubToken);

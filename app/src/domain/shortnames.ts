@@ -1,4 +1,6 @@
-import { callAnthropic, DEFAULT_MODEL } from "../clients/anthropic";
+import { DEFAULT_MODEL } from "../clients/anthropic";
+import { callModel } from "../clients/llm";
+import type { Provider } from "../clients/models";
 
 export interface SuggestGoalLabelsInput {
   longTermGoal: string;
@@ -66,6 +68,8 @@ const SYSTEM =
 export async function suggestGoalLabels(
   apiKey: string,
   input: SuggestGoalLabelsInput,
+  provider: Provider = "anthropic",
+  model: string = DEFAULT_MODEL,
 ): Promise<GoalLabels[]> {
   const demos = ANCHORS.map(
     (a) => `"${a.st}" -> shortName: "${a.shortname}", measuredVerb: "${a.verb}", measuredNoun: "${a.noun}"`,
@@ -91,14 +95,13 @@ export async function suggestGoalLabels(
     .filter(Boolean)
     .join("\n\n");
 
-  const res = await callAnthropic(apiKey, {
-    model: DEFAULT_MODEL,
+  const res = await callModel(provider, apiKey, {
+    model,
     max_tokens: 900,
     system: SYSTEM,
     messages: [{ role: "user", content: prompt }],
   });
-  const text = res.content.map((c) => c.text).join("");
-  return parseGoalLabels(text, input.shortTerms);
+  return parseGoalLabels(res.text, input.shortTerms);
 }
 
 function parseGoalLabels(text: string, shortTerms: string[]): GoalLabels[] {

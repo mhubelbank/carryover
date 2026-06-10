@@ -1,4 +1,6 @@
-import { callAnthropic, AnthropicError, DEFAULT_MODEL } from "../clients/anthropic";
+import { DEFAULT_MODEL } from "../clients/anthropic";
+import { callModel, llmErrorStatus } from "../clients/llm";
+import type { Provider } from "../clients/models";
 import type { GitHubClient } from "../clients/github";
 import type { Mode } from "./teacher";
 import { normalizeAcronyms } from "./text";
@@ -213,6 +215,7 @@ export async function loadPromptSet(client: GitHubClient, mode: Mode): Promise<P
 // ---------------------------------------------------------------------------
 
 export interface GenerateOptions {
+  provider?: Provider;
   model?: string;
   maxTokens?: number;
   // Contents of data/prompts/feedback-rules.md — appended to the DRAFT prompt only.
@@ -238,6 +241,7 @@ export interface GenerateOptions {
 export async function conjugatePastForms(
   apiKey: string,
   verbs: string[],
+  provider: Provider = "anthropic",
   model: string = DEFAULT_MODEL,
 ): Promise<Record<string, string>> {
   const unique = [...new Set(verbs.map((v) => v.trim().toLowerCase()).filter(Boolean))];
@@ -247,12 +251,12 @@ export async function conjugatePastForms(
     "mapping each verb (exactly as given, lowercase) to its simple past tense — no other text.\n" +
     `Verbs: ${JSON.stringify(unique)}`;
   try {
-    const res = await callAnthropic(apiKey, {
+    const res = await callModel(provider, apiKey, {
       model,
       max_tokens: 500,
       messages: [{ role: "user", content: prompt }],
     });
-    const text = res.content.map((b) => b.text).join("");
+    const text = res.text;
     const start = text.indexOf("{");
     const end = text.lastIndexOf("}");
     if (start === -1 || end === -1) return {};
@@ -300,6 +304,7 @@ const BACKOFF_MS = [1000, 3000, 10000];
 async function callPass(
   apiKey: string,
   pass: Pass,
+  provider: Provider,
   model: string,
   maxTokens: number,
   prompt: string,
@@ -307,15 +312,15 @@ async function callPass(
   let lastError: unknown;
   for (let attempt = 0; attempt <= BACKOFF_MS.length; attempt++) {
     try {
-      const res = await callAnthropic(apiKey, {
+      const res = await callModel(provider, apiKey, {
         model,
         max_tokens: maxTokens,
         messages: [{ role: "user", content: prompt }],
       });
-      return cleanClaudeResponse(res.content.map((b) => b.text).join(""));
+      return cleanClaudeResponse(res.text);
     } catch (err) {
       lastError = err;
-      const status = err instanceof AnthropicError ? err.status : undefined;
+      const status = llmErrorStatus(err);
       const retryable = status === undefined || status === 429 || (status >= 500 && status < 600);
       const wait = BACKOFF_MS[attempt];
       if (!retryable || wait === undefined) break;
@@ -334,6 +339,7 @@ export async function generateNote(
   ctx: TemplateContext,
   opts: GenerateOptions = {},
 ): Promise<NoteResult> {
+  const provider = opts.provider ?? "anthropic";
   const model = opts.model ?? DEFAULT_MODEL;
   const maxTokens = opts.maxTokens ?? 1500;
 
@@ -355,12 +361,13 @@ export async function generateNote(
   }
   if (appends.length > 0) draftPrompt += "\n\n" + appends.join("\n\n");
   opts.onPhase?.("draft");
-  const draft = await callPass(apiKey, "draft", model, maxTokens, draftPrompt);
+  const draft = await callPass(apiKey, "draft", provider, model, maxTokens, draftPrompt);
 
   opts.onPhase?.("review");
   const reviewed = await callPass(
     apiKey,
     "review",
+    provider,
     model,
     maxTokens,
     renderTemplate(prompts.review, { ...ctx, draftNote: draft }),
@@ -370,6 +377,7 @@ export async function generateNote(
   const streamlined = await callPass(
     apiKey,
     "streamline",
+    provider,
     model,
     maxTokens,
     renderTemplate(prompts.streamline, { ...ctx, draftNote: draft, reviewedNote: reviewed }),

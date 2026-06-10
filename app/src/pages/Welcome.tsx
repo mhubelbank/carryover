@@ -35,6 +35,8 @@ export function Welcome() {
       ]);
       signIn({
         anthropicApiKey: anthropicKey.trim(),
+        // OpenAI is optional and added later in Settings if she wants a ChatGPT model.
+        openaiApiKey: "",
         githubToken: githubKey.trim(),
       });
     } catch (err) {
