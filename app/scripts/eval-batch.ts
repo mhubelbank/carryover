@@ -31,6 +31,7 @@ import type { Role, Teacher } from "../src/domain/teacher";
 import type { TrialData, TrialEntry } from "../src/domain/trial";
 import { getGolden, getPrompts, mapPool, requireEnv } from "./_shared";
 import { resolveChoice, DEFAULT_MODEL_CHOICE } from "../src/clients/models";
+import { noteFlags, type NoteFlags } from "../src/__eval__/metrics";
 
 const argv = process.argv.slice(2);
 const dry = argv.includes("--dry") || process.env.DRY === "1";
@@ -311,22 +312,60 @@ if (dry) {
   newsFinals = flatNews.length ? await runGen(flatNews, await getPrompts("news-day"), golden, "news-day") : [];
 }
 
+// Per-note deterministic flags collected across both modes, for the run summary.
+const collectedFlags: NoteFlags[] = [];
+
 function renderSection(heading: string, items: { p: number; j: number; s: BuiltStudent }[], finals: { final: string }[]) {
   let out = `# ${heading}\n\n`;
   items.forEach(({ p, j, s }, idx) => {
     if (j === 0) out += `## Pass ${p + 1}\n\n`;
     out += `### ${p + 1}.${j + 1} — ${s.name} (${s.pronoun})\n`;
     s.summary.forEach((line) => (out += `- ${line}\n`));
-    out += `\n${finals[idx]!.final}\n\n---\n\n`;
+    const final = finals[idx]!.final;
+    out += `\n${final}\n\n`;
+    if (!dry) {
+      const f = noteFlags(final, s.pronoun);
+      collectedFlags.push(f);
+      const notes: string[] = [];
+      if (f.pronoun.length) notes.push(`pronoun mismatch: ${f.pronoun.map((w) => `"${w}"`).join(", ")}`);
+      if (f.bloatedClosing) notes.push(`bloated closing (${f.closingWords}w, ${f.closingGerunds} gerunds)`);
+      if (f.filler) notes.push(`"addressed" filler`);
+      if (notes.length) out += `> ⚠ ${notes.join(" · ")}\n\n`;
+    }
+    out += `---\n\n`;
   });
   return out;
+}
+
+// Roll the per-note flags into a rate summary (printed to console and saved atop
+// the markdown), so a multi-model sweep is comparable at a glance.
+function metricsSummary(): string {
+  const n = collectedFlags.length;
+  if (n === 0) return "";
+  const rate = (count: number) => `${count}/${n} (${Math.round((count / n) * 100)}%)`;
+  const pron = collectedFlags.filter((f) => f.pronoun.length).length;
+  const bloat = collectedFlags.filter((f) => f.bloatedClosing).length;
+  const filler = collectedFlags.filter((f) => f.filler).length;
+  const avgClosing = Math.round(collectedFlags.reduce((s, f) => s + f.closingWords, 0) / n);
+  return (
+    `# Metrics — ${MODEL.label} (${MODEL.modelId})\n\n` +
+    `- notes scored: ${n}\n` +
+    `- pronoun mismatches: ${rate(pron)}\n` +
+    `- bloated closings: ${rate(bloat)}\n` +
+    `- "addressed" filler: ${rate(filler)}\n` +
+    `- avg. closing length: ${avgClosing} words\n\n` +
+    `_Heuristic flags for review, not hard gates; fabrication still needs a manual read._\n\n---\n\n`
+  );
 }
 
 mkdirSync("eval-output", { recursive: true });
 const modelSlug = MODEL.modelId.replace(/[^a-z0-9]+/gi, "-");
 const outPath = `eval-output/batch-${modelSlug}-seed${SEED}-${PASSES}x${STUDENTS}${dry ? "-dry" : ""}.md`;
-const md =
+const body =
   (flatReg.length ? renderSection(`Regular mode — ${PASSES}×${STUDENTS} (seed ${SEED})`, flatReg, regFinals) : "") +
   (flatNews.length ? renderSection(`News-day mode — ${PASSES}×${STUDENTS} (seed ${SEED})`, flatNews, newsFinals) : "");
-writeFileSync(outPath, md);
+// metricsSummary() reads the flags renderSection collected, so build it after.
+const summary = metricsSummary();
+writeFileSync(outPath, summary + body);
+if (summary) process.stdout.write("\n" + summary.replace(/^#+ /gm, "").replace(/_/g, ""));
 console.log(`Wrote ${outPath}`);

@@ -9,7 +9,9 @@ const API_URL = "https://api.openai.com/v1/chat/completions";
 const MODELS_URL = "https://api.openai.com/v1/models";
 
 export interface OpenAIResponse {
-  choices: Array<{ message: { content: string | null } }>;
+  // finish_reason "length" means the model hit the token ceiling (common on
+  // reasoning models that spend the budget on hidden reasoning) — used to retry.
+  choices: Array<{ message: { content: string | null }; finish_reason?: string }>;
 }
 
 export class OpenAIError extends Error {

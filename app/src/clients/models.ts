@@ -19,7 +19,7 @@ export interface ModelChoice {
 export const MODEL_CHOICES: ModelChoice[] = [
   {
     id: "chatgpt-mini",
-    label: "ChatGPT Mini (default)",
+    label: "ChatGPT Mini",
     blurb: "The recommended OpenAI option. Needs an OpenAI key.",
     provider: "openai",
     modelId: "gpt-5.4-mini",
@@ -47,7 +47,7 @@ export const MODEL_CHOICES: ModelChoice[] = [
   },
 ];
 
-export const DEFAULT_MODEL_CHOICE = "chatgpt-mini";
+export const DEFAULT_MODEL_CHOICE = "claude-sonnet";
 
 export const PROVIDER_META: Record<Provider, { label: string; keyLabel: string; creditsUrl: string }> = {
   anthropic: {

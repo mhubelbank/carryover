@@ -20,6 +20,9 @@ export interface LlmRequest {
 
 export interface LlmResponse {
   text: string;
+  // True when the model stopped because it hit the token ceiling, so the text is
+  // likely cut off and the caller may retry with a larger budget.
+  truncated: boolean;
 }
 
 export async function callModel(
@@ -29,10 +32,16 @@ export async function callModel(
 ): Promise<LlmResponse> {
   if (provider === "openai") {
     const res = await callOpenAI(apiKey, request);
-    return { text: res.choices.map((c) => c.message.content ?? "").join("") };
+    return {
+      text: res.choices.map((c) => c.message.content ?? "").join(""),
+      truncated: res.choices[0]?.finish_reason === "length",
+    };
   }
   const res = await callAnthropic(apiKey, request);
-  return { text: res.content.map((b) => b.text).join("") };
+  return {
+    text: res.content.map((b) => b.text).join(""),
+    truncated: res.stop_reason === "max_tokens",
+  };
 }
 
 export function validateKey(provider: Provider, apiKey: string): Promise<void> {

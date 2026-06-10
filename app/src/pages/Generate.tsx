@@ -72,6 +72,7 @@ import {
   buildPostProcess,
   evalCondition,
 } from "../domain/captures";
+import { pronounMismatches } from "../domain/text";
 import {
   activityOptionsForGenerate,
   catalogById,
@@ -185,6 +186,8 @@ interface ResultRow {
   absent: boolean;
   result?: NoteResult;
   error?: string;
+  // Deterministic pronoun-mismatch flags (e.g. ["he"] for a they/them student).
+  warnings?: string[];
   regenerating?: boolean;
   // Which pass is in flight while regenerating, for the inline progress label.
   regenPhase?: Pass;
@@ -815,7 +818,7 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
           goldenExamples,
           varietyNote,
         });
-        updateResult(student.id, { result });
+        updateResult(student.id, { result, warnings: pronounMismatches(result.final, student.pronouns) });
       } catch (e) {
         updateResult(student.id, { error: e instanceof Error ? e.message : "Failed" });
       } finally {
@@ -929,7 +932,12 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
           varietyNote,
           onPhase: (pass) => updateResult(id, { regenPhase: pass }),
         });
-        updateResult(id, { result, regenerating: false, regenPhase: undefined });
+        updateResult(id, {
+          result,
+          warnings: pronounMismatches(result.final, student!.pronouns),
+          regenerating: false,
+          regenPhase: undefined,
+        });
       } catch (e) {
         updateResult(id, {
           regenerating: false,
@@ -2864,6 +2872,22 @@ function ResultsView({
               >
                 {r.result.final}
               </p>
+              {r.warnings && r.warnings.length > 0 && !r.regenerating && (
+                <p
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 5,
+                    margin: "8px 0 0 0",
+                    fontSize: 12,
+                    color: "var(--color-text-danger)",
+                  }}
+                >
+                  <Icon name="alert-circle" size={13} />
+                  Possible pronoun mismatch — found {r.warnings.map((w) => `"${w}"`).join(", ")}. Verify against this
+                  student's pronouns, and regenerate if wrong.
+                </p>
+              )}
               {r.showDrafts && (
                 <div style={{ marginTop: 10, fontSize: 12, color: "var(--color-text-secondary)" }}>
                   <details>

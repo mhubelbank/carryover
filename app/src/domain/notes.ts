@@ -1,5 +1,5 @@
 import { DEFAULT_MODEL } from "../clients/anthropic";
-import { callModel, llmErrorStatus } from "../clients/llm";
+import { callModel, llmErrorStatus, type LlmResponse } from "../clients/llm";
 import type { Provider } from "../clients/models";
 import type { GitHubClient } from "../clients/github";
 import type { Mode } from "./teacher";
@@ -283,9 +283,9 @@ const VARIETY_ORDERS = [
   "present the activities in order, weaving the student's overall response in toward the end",
 ];
 const CLOSING_ANGLES = [
-  "begin the closing by naming the long-term goal being advanced, then how it was worked toward",
-  "begin the closing with a brief back-reference to the activity (e.g. \"This session,\" \"This work\") and what it built — never re-naming the activity or echoing the opening's wording — then the goals",
-  "begin the closing with the language domain(s) addressed, then the goals",
+  "begin the closing by naming the long-term goal being advanced, then how it was worked toward — this is the week that DOES reference the long-term goal",
+  "begin the closing with a brief back-reference to the activity (e.g. \"This session,\" \"This work\") and what it built — never re-naming the activity or echoing the opening's wording — then the short-term goals; do NOT reference the long-term goal this week",
+  "begin the closing with the language domain(s) addressed, then the short-term goals; do NOT reference the long-term goal this week",
 ];
 
 // The per-session variety instruction appended to the draft prompt. `variant` is
@@ -301,23 +301,34 @@ export function varietyNote(variant: number): string {
 
 const BACKOFF_MS = [1000, 3000, 10000];
 
-async function callPass(
+// Non-negotiables sent as the system prompt on every pass. OpenAI models weight
+// system instructions heavily, which measurably curbs invented detail and pronoun
+// drift; Claude honors them too. Kept short so it reinforces, not competes with,
+// the per-pass prompt.
+const NOTE_SYSTEM =
+  "You write professional SLP clinical session notes. Use ONLY the information provided — never " +
+  "invent behaviors, details, numbers, or specifics that are not in the data. Use exactly the " +
+  "pronouns given for the student; never infer them from the student's name. Output only the note " +
+  "text itself: no preamble, no questions, no commentary. One paragraph, past tense.";
+
+// One model call with transient-error backoff (429/5xx/network). Returns the raw
+// response or throws after exhausting retries.
+async function callWithRetry(
   apiKey: string,
-  pass: Pass,
   provider: Provider,
   model: string,
   maxTokens: number,
   prompt: string,
-): Promise<string> {
+): Promise<LlmResponse> {
   let lastError: unknown;
   for (let attempt = 0; attempt <= BACKOFF_MS.length; attempt++) {
     try {
-      const res = await callModel(provider, apiKey, {
+      return await callModel(provider, apiKey, {
         model,
         max_tokens: maxTokens,
+        system: NOTE_SYSTEM,
         messages: [{ role: "user", content: prompt }],
       });
-      return cleanClaudeResponse(res.text);
     } catch (err) {
       lastError = err;
       const status = llmErrorStatus(err);
@@ -327,8 +338,30 @@ async function callPass(
       await delay(wait);
     }
   }
-  const detail = lastError instanceof Error ? lastError.message : "unknown error";
-  throw new Error(`${pass} pass failed: ${detail}`);
+  throw lastError instanceof Error ? lastError : new Error("model call failed");
+}
+
+async function callPass(
+  apiKey: string,
+  pass: Pass,
+  provider: Provider,
+  model: string,
+  maxTokens: number,
+  prompt: string,
+): Promise<string> {
+  try {
+    let res = await callWithRetry(apiKey, provider, model, maxTokens, prompt);
+    // Reasoning models (GPT-5 family) can spend the token budget on hidden
+    // reasoning and return a cut-off note; give it one retry at double the
+    // ceiling before accepting a truncated result.
+    if (res.truncated) {
+      res = await callWithRetry(apiKey, provider, model, maxTokens * 2, prompt);
+    }
+    return cleanClaudeResponse(res.text);
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : "unknown error";
+    throw new Error(`${pass} pass failed: ${detail}`);
+  }
 }
 
 // Run the three sequential passes for one student. {{draftNote}} and
