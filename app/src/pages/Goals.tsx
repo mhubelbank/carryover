@@ -412,7 +412,7 @@ function GoalsView({
                                   <input
                                     className="input"
                                     style={{ width: 170, height: 28, fontSize: 12 }}
-                                    placeholder="past-tense verb"
+                                    placeholder="base-form verb"
                                     value={goal.measuredVerb}
                                     onChange={(e) => setMeasured(goal.id, { measuredVerb: e.target.value })}
                                   />
