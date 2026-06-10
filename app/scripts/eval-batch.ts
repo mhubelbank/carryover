@@ -9,6 +9,8 @@
 //   SEED=7 npx tsx scripts/eval-batch.ts 4 8        # 4 passes of 8 students
 //   npx tsx scripts/eval-batch.ts --no-news         # regular only (skip news-day)
 //   npx tsx scripts/eval-batch.ts --news-only       # news-day only (skip regular)
+//   MODEL=chatgpt-mini OPENAI_API_KEY=... npx tsx scripts/eval-batch.ts  # pick the model
+//     (MODEL is a curated choice id; the model id lands in the output filename)
 import { mkdirSync, writeFileSync } from "node:fs";
 import {
   buildRegularActivities,
@@ -28,6 +30,7 @@ import { conjugatePastForms, generateNote, varietyNote, type PromptSet, type Tem
 import type { Role, Teacher } from "../src/domain/teacher";
 import type { TrialData, TrialEntry } from "../src/domain/trial";
 import { getGolden, getPrompts, mapPool, requireEnv } from "./_shared";
+import { resolveChoice, DEFAULT_MODEL_CHOICE } from "../src/clients/models";
 
 const argv = process.argv.slice(2);
 const dry = argv.includes("--dry") || process.env.DRY === "1";
@@ -42,6 +45,10 @@ const SEED = process.env.SEED ? Number(process.env.SEED) : 1;
 // Lower than the app's cap to stay under the Anthropic input-tokens/min rate
 // limit (golden examples make every prompt large). Override with CONCURRENCY.
 const CONCURRENCY = process.env.CONCURRENCY ? Number(process.env.CONCURRENCY) : 2;
+// Which model to generate with — a curated choice id (e.g. "claude-sonnet",
+// "claude-haiku", "chatgpt", "chatgpt-mini"), defaulting to the app default.
+// Drives the provider, the API key required, and the output filename.
+const MODEL = resolveChoice(process.env.MODEL ?? DEFAULT_MODEL_CHOICE);
 
 // Seeded PRNG (mulberry32) so a given SEED reproduces the same batch.
 function makeRng(seed: number) {
@@ -256,8 +263,12 @@ function buildNewsStudent(): BuiltStudent {
 // Conjugate the regular goal verbs to past via the LLM pass (mirrors the app),
 // so the eval exercises the same conjugation path; {} in dry runs → rules, and
 // skipped entirely when not generating regular notes.
-const apiKey = dry ? "" : requireEnv("ANTHROPIC_API_KEY");
-const pastForms = dry || !includeRegular ? {} : await conjugatePastForms(apiKey, GOALS.map((g) => g.verb));
+const apiKey = dry ? "" : requireEnv(MODEL.provider === "openai" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY");
+if (!dry) console.log(`Model: ${MODEL.label} (${MODEL.modelId}, ${MODEL.provider})`);
+const pastForms =
+  dry || !includeRegular
+    ? {}
+    : await conjugatePastForms(apiKey, GOALS.map((g) => g.verb), MODEL.provider, MODEL.modelId);
 
 // Build the enabled modes' sessions up front (reproducible from SEED).
 const flat = (ss: BuiltStudent[][]) => ss.flatMap((students, p) => students.map((s, j) => ({ p, j, s })));
@@ -275,6 +286,8 @@ async function runGen(items: { p: number; s: BuiltStudent }[], prompts: PromptSe
     // Treat each pass as a different "week" so the ordering/closing-angle variety
     // rotates across passes (mirrors the app's week-to-week rotation).
     const r = await generateNote(apiKey, prompts, s.ctx, {
+      provider: MODEL.provider,
+      model: MODEL.modelId,
       maxTokens: 1500,
       goldenExamples: golden,
       varietyNote: varietyNote(p),
@@ -310,7 +323,8 @@ function renderSection(heading: string, items: { p: number; j: number; s: BuiltS
 }
 
 mkdirSync("eval-output", { recursive: true });
-const outPath = `eval-output/batch-seed${SEED}-${PASSES}x${STUDENTS}${dry ? "-dry" : ""}.md`;
+const modelSlug = MODEL.modelId.replace(/[^a-z0-9]+/gi, "-");
+const outPath = `eval-output/batch-${modelSlug}-seed${SEED}-${PASSES}x${STUDENTS}${dry ? "-dry" : ""}.md`;
 const md =
   (flatReg.length ? renderSection(`Regular mode — ${PASSES}×${STUDENTS} (seed ${SEED})`, flatReg, regFinals) : "") +
   (flatNews.length ? renderSection(`News-day mode — ${PASSES}×${STUDENTS} (seed ${SEED})`, flatNews, newsFinals) : "");
