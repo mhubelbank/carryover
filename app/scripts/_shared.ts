@@ -7,7 +7,7 @@
 // Data-repo coords default to the live private repo; override via env.
 import { existsSync, readFileSync } from "node:fs";
 import { GitHubClient } from "../src/clients/github";
-import { loadGoldenExamples } from "../src/domain/data";
+import { loadFeedbackRules, loadGoldenExamples } from "../src/domain/data";
 import { loadPromptSet, type PromptSet } from "../src/domain/notes";
 import type { Mode } from "../src/domain/teacher";
 
@@ -95,6 +95,22 @@ export async function getGolden(): Promise<string> {
   const client = dataClient();
   if (!client) return "";
   return loadGoldenExamples(client).catch(() => "");
+}
+
+// Accumulated feedback rules (data/prompts/feedback-rules.md), appended to the
+// draft prompt in production. Empty when the file doesn't exist.
+export async function getFeedbackRules(): Promise<string> {
+  const dir = process.env.PROMPTS_DIR;
+  if (dir) {
+    try {
+      return readFileSync(`${dir}/feedback-rules.md`, "utf8");
+    } catch {
+      return "";
+    }
+  }
+  const client = dataClient();
+  if (!client) return "";
+  return loadFeedbackRules(client).catch(() => "");
 }
 
 // Run `fn` over `items` with bounded concurrency, preserving input order.

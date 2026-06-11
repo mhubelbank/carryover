@@ -12,6 +12,7 @@
     "test:watch": "vitest",
     "eval": "tsx scripts/eval-checks.ts",
     "eval:batch": "tsx scripts/eval-batch.ts",
+    "measure:prices": "tsx scripts/measure-prices.ts",
     "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {
