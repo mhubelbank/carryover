@@ -39,7 +39,7 @@ export const MODEL_CHOICES: ModelChoice[] = [
     blurb: "The recommended option, scored best on quality evaluation. Needs an Anthropic key.",
     provider: "anthropic",
     modelId: "claude-sonnet-4-6",
-    noteTokens: { input: 5632, output: 268 },
+    noteTokens: { input: 6100, output: 179 },
   },
   {
     id: "claude-opus",
@@ -47,7 +47,7 @@ export const MODEL_CHOICES: ModelChoice[] = [
     blurb: "Anthropic's most capable model — highest tier, pricier than Sonnet. Needs an Anthropic key.",
     provider: "anthropic",
     modelId: "claude-opus-4-8",
-    noteTokens: { input: 7974, output: 374 },
+    noteTokens: { input: 8591, output: 283 },
   },
   {
     id: "claude-haiku",
@@ -55,7 +55,7 @@ export const MODEL_CHOICES: ModelChoice[] = [
     blurb: "Faster and cheaper than Sonnet, with slightly less polish. Needs an Anthropic key.",
     provider: "anthropic",
     modelId: "claude-haiku-4-5-20251001",
-    noteTokens: { input: 5615, output: 251 },
+    noteTokens: { input: 6102, output: 189 },
   },
   {
     id: "chatgpt",
@@ -63,23 +63,23 @@ export const MODEL_CHOICES: ModelChoice[] = [
     blurb: "OpenAI alternative for a different voice. Needs an OpenAI key.",
     provider: "openai",
     modelId: "gpt-5.4",
-    noteTokens: { input: 5208, output: 218 },
+    noteTokens: { input: 5659, output: 165 },
   },
   {
     id: "chatgpt-pro",
     label: "ChatGPT Pro",
-    blurb: "OpenAI's most capable model — best quality, priciest. Needs an OpenAI key.",
+    blurb: "OpenAI's most capable model — the best quality option, and the priciest. Needs an OpenAI key.",
     provider: "openai",
     modelId: "gpt-5.5",
-    noteTokens: { input: 5209, output: 1540 },
+    noteTokens: { input: 5652, output: 1294 },
   },
   {
     id: "chatgpt-mini",
     label: "ChatGPT Mini",
-    blurb: "Cheapest, lowest quality. Needs an OpenAI key.",
+    blurb: "Cheapest, lowest quality option. Needs an OpenAI key.",
     provider: "openai",
     modelId: "gpt-5.4-mini",
-    noteTokens: { input: 5217, output: 230 },
+    noteTokens: { input: 5661, output: 170 },
   },
 ];
 
@@ -152,7 +152,7 @@ export function annualCostLabel(choice: ModelChoice, notesPerWeek: number): stri
 // Settings compares the live prompt size to this baseline and nudges to refresh
 // the estimates (re-run measure:prices) once they drift past the threshold.
 export const MEASURED_ON = "2026-06-11";
-export const BASELINE_PROMPT_CHARS = 30307;
+export const BASELINE_PROMPT_CHARS = 26143;
 export const PROMPT_DRIFT_THRESHOLD = 0.2;
 
 // Total characters of the generation prompt inputs that drive token cost — the
