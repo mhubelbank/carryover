@@ -60,7 +60,7 @@ export const MODEL_CHOICES: ModelChoice[] = [
   {
     id: "chatgpt",
     label: "ChatGPT",
-    blurb: "OpenAI alternative for a different voice. Needs an OpenAI key.",
+    blurb: "Primary OpenAI alternative for a different voice. Needs an OpenAI key.",
     provider: "openai",
     modelId: "gpt-5.4",
     noteTokens: { input: 5659, output: 165 },
@@ -68,18 +68,10 @@ export const MODEL_CHOICES: ModelChoice[] = [
   {
     id: "chatgpt-pro",
     label: "ChatGPT Pro",
-    blurb: "OpenAI's most capable model — the best quality option, and the priciest. Needs an OpenAI key.",
+    blurb: "OpenAI's most capable model, the priciest option by far. Needs an OpenAI key.",
     provider: "openai",
     modelId: "gpt-5.5",
     noteTokens: { input: 5652, output: 1294 },
-  },
-  {
-    id: "chatgpt-mini",
-    label: "ChatGPT Mini",
-    blurb: "Cheapest, lowest quality option. Needs an OpenAI key.",
-    provider: "openai",
-    modelId: "gpt-5.4-mini",
-    noteTokens: { input: 5661, output: 170 },
   },
 ];
 
