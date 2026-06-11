@@ -36,7 +36,7 @@ export const MODEL_CHOICES: ModelChoice[] = [
   {
     id: "claude-sonnet",
     label: "Claude Sonnet",
-    blurb: "The recommended option, scored best on quality evaluation. Needs an Anthropic key.",
+    blurb: "The recommended model, which scored the best on quality & value testing. Needs an Anthropic key.",
     provider: "anthropic",
     modelId: "claude-sonnet-4-6",
     noteTokens: { input: 6100, output: 179 },

@@ -612,8 +612,7 @@ function KeysSection() {
         />
       </div>
       <p className="field-hint" style={{ marginTop: 12 }}>
-        Stored only in this browser. The OpenAI key is only needed if you pick a ChatGPT model above. Use the credit
-        links to keep an eye on each account's balance.
+        Stored only in this browser. Use the credit links to keep an eye on each account's balance.
       </p>
     </div>
   );
