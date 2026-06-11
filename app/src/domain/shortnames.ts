@@ -1,6 +1,5 @@
-import { DEFAULT_MODEL } from "../clients/anthropic";
 import { callModel } from "../clients/llm";
-import type { Provider } from "../clients/models";
+import { DEFAULT_MODEL, type Provider } from "../clients/models";
 
 export interface SuggestGoalLabelsInput {
   longTermGoal: string;

@@ -3,7 +3,7 @@ import { Icon } from "../components/Icon";
 import { PROMPT_TYPE_ICON, LEVEL_ABBR } from "../components/promptSymbols";
 import { Nav, type NavPage } from "../components/Nav";
 import { useAuth } from "../context/AuthContext";
-import { resolveChoice, PROVIDER_META, MODEL_CHOICES } from "../clients/models";
+import { resolveChoice, PROVIDER_META, MODEL_CHOICES, perNoteCostLabel } from "../clients/models";
 import { getModelChoiceId, setModelChoiceId } from "../clients/modelPref";
 import { useTerm } from "../context/TermContext";
 import {
@@ -3142,11 +3142,15 @@ function RegenerateModal({
             onChange={(e) => onChangeModel(e.target.value)}
             style={{ width: "auto", fontSize: 13, padding: "4px 8px" }}
           >
-            {MODEL_CHOICES.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.label}
-              </option>
-            ))}
+            {MODEL_CHOICES.map((c) => {
+              const cost = perNoteCostLabel(c);
+              return (
+                <option key={c.id} value={c.id}>
+                  {c.label}
+                  {cost ? ` (${cost})` : ""}
+                </option>
+              );
+            })}
           </select>
           <span style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>
             Changing this also updates your default in Settings.

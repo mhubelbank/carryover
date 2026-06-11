@@ -1,6 +1,5 @@
-import { DEFAULT_MODEL } from "../clients/anthropic";
 import { callModel, llmErrorStatus, type LlmResponse } from "../clients/llm";
-import type { Provider } from "../clients/models";
+import { DEFAULT_MODEL, type Provider } from "../clients/models";
 import type { GitHubClient } from "../clients/github";
 import type { Mode } from "./teacher";
 import { normalizeAcronyms } from "./text";

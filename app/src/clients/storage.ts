@@ -29,6 +29,7 @@ export const StorageKeys = {
   openaiApiKey: "openai_api_key",
   githubToken: "github_token",
   modelChoice: "model_choice",
+  notesPerWeek: "notes_per_week",
   theme: "theme",
   page: "page",
 } as const;

@@ -1,14 +1,26 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Icon } from "../components/Icon";
 import { Nav, type NavPage } from "../components/Nav";
 import { AnthropicError } from "../clients/anthropic";
 import { OpenAIError } from "../clients/openai";
 import { validateKey } from "../clients/llm";
 import { GitHubError, validateGitHubToken } from "../clients/github";
-import { MODEL_CHOICES, PROVIDER_META } from "../clients/models";
+import {
+  MODEL_CHOICES,
+  PROVIDER_META,
+  perNoteCostLabel,
+  annualCostLabel,
+  promptSetChars,
+  MEASURED_ON,
+  BASELINE_PROMPT_CHARS,
+  PROMPT_DRIFT_THRESHOLD,
+} from "../clients/models";
+import { storage, StorageKeys } from "../clients/storage";
 import { getModelChoiceId, setModelChoiceId } from "../clients/modelPref";
 import { REPO_CONFIG, useAuth } from "../context/AuthContext";
 import { useTerm } from "../context/TermContext";
+import { loadFeedbackRules, loadGoldenExamples } from "../domain/data";
+import { loadPromptSet } from "../domain/notes";
 import { triggerDownload, downloadText, zipStore } from "../clients/download";
 import { buildXlsx } from "../clients/xlsx";
 import { clearNotes, getAllNotes } from "../clients/noteCache";
@@ -432,19 +444,71 @@ function CatalogsSection({ onNavigate }: { onNavigate: (page: NavPage) => void }
 // Persisted via modelPref; the Generate page reads it when she generates.
 function ModelSection() {
   const { keys } = useAuth();
+  const { client } = useTerm();
   const [choiceId, setChoiceId] = useState<string>(getModelChoiceId);
   const choose = (id: string) => {
     setChoiceId(id);
     setModelChoiceId(id);
+  };
+  // Compare the live prompt size to the size the cost estimates were measured
+  // against; a large drift means they've gone stale (re-measure needed).
+  const [promptChars, setPromptChars] = useState<number | null>(null);
+  useEffect(() => {
+    if (!client) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [p, golden, feedbackRules] = await Promise.all([
+          loadPromptSet(client, "regular"),
+          loadGoldenExamples(client).catch(() => ""),
+          loadFeedbackRules(client).catch(() => ""),
+        ]);
+        if (!cancelled) setPromptChars(promptSetChars({ ...p, golden, feedbackRules }));
+      } catch {
+        // Leave null — just show the measured-on date without a drift hint.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [client]);
+  const estimatesStale =
+    promptChars !== null &&
+    Math.abs(promptChars - BASELINE_PROMPT_CHARS) / BASELINE_PROMPT_CHARS > PROMPT_DRIFT_THRESHOLD;
+  const measuredOn = parseDate(MEASURED_ON);
+  // Weekly note volume drives the yearly estimate; persisted so it sticks.
+  const [notesPerWeek, setNotesPerWeek] = useState<number>(() => {
+    const v = Number(storage.get(StorageKeys.notesPerWeek));
+    return Number.isFinite(v) && v > 0 ? v : 40;
+  });
+  const setVolume = (v: number) => {
+    const clean = Number.isFinite(v) && v > 0 ? Math.round(v) : 0;
+    setNotesPerWeek(clean);
+    if (clean > 0) storage.set(StorageKeys.notesPerWeek, String(clean));
   };
   const selected = MODEL_CHOICES.find((c) => c.id === choiceId);
   const needsOpenAIKey = selected?.provider === "openai" && !keys?.openaiApiKey;
   return (
     <div className="card" style={{ marginBottom: "1rem" }}>
       <h3 className="card__title">Model</h3>
-      <p style={{ fontSize: 13, color: "var(--color-text-secondary)", marginBottom: 12 }}>
-        Which AI writes the notes. You can switch anytime — try a few and keep what reads best.
+      <p style={{ fontSize: 13, color: "var(--color-text-secondary)", marginBottom: 10 }}>
+        Which AI writes the notes. You can switch anytime — try a few and keep what reads best. Each shows the
+        rough cost per note and the estimated cost per year.
       </p>
+      <label
+        style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--color-text-secondary)", marginBottom: 12 }}
+      >
+        Yearly estimate assumes
+        <input
+          className="input"
+          type="number"
+          min={1}
+          value={notesPerWeek || ""}
+          onChange={(e) => setVolume(Number(e.target.value))}
+          style={{ width: 50, padding: "2px 6px", fontSize: 13, textAlign: "center" }}
+        />
+        notes per week.
+      </label>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {MODEL_CHOICES.map((c) => {
           const on = c.id === choiceId;
@@ -481,8 +545,19 @@ function ModelSection() {
               <span>
                 <span style={{ display: "block", fontWeight: 500, fontSize: 14, color: "var(--color-text-primary)" }}>
                   {c.label}
+                  {perNoteCostLabel(c) && (
+                    <span style={{ fontWeight: 400, color: "var(--color-text-tertiary)" }}>
+                      {" "}
+                      ({perNoteCostLabel(c)})
+                    </span>
+                  )}
                 </span>
                 <span style={{ fontSize: 12.5, color: "var(--color-text-secondary)" }}>{c.blurb}</span>
+                {notesPerWeek > 0 && annualCostLabel(c, notesPerWeek) && (
+                  <span style={{ display: "block", fontSize: 12, color: "var(--color-text-tertiary)", marginTop: 2 }}>
+                    ≈ {annualCostLabel(c, notesPerWeek)}
+                  </span>
+                )}
               </span>
             </button>
           );
@@ -493,6 +568,15 @@ function ModelSection() {
           Add your OpenAI key below to use this model.
         </p>
       )}
+      <p className="field-hint" style={{ marginTop: 10 }}>
+        Cost estimates measured {measuredOn ? formatShort(measuredOn) : MEASURED_ON}.
+        {estimatesStale && (
+          <span style={{ color: "var(--color-text-danger)" }}>
+            {" "}
+            Your prompts have changed a lot since then, so these may be off — reach out to Mara to update the prices.
+          </span>
+        )}
+      </p>
     </div>
   );
 }

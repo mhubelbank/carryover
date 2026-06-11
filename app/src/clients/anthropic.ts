@@ -4,9 +4,6 @@
 const API_URL = "https://api.anthropic.com/v1/messages";
 const API_VERSION = "2023-06-01";
 
-// Default draft model; review/streamline may be swapped to Haiku to cut cost.
-export const DEFAULT_MODEL = "claude-sonnet-4-6";
-
 export interface AnthropicMessage {
   role: "user" | "assistant";
   content: string;
