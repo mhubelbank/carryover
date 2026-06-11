@@ -30,7 +30,8 @@ import { conjugatePastForms, generateNote, varietyNote, type PromptSet, type Tem
 import type { Role, Teacher } from "../src/domain/teacher";
 import type { TrialData, TrialEntry } from "../src/domain/trial";
 import { getGolden, getPrompts, mapPool, requireEnv } from "./_shared";
-import { resolveChoice, DEFAULT_MODEL_CHOICE } from "../src/clients/models";
+import { resolveChoice, DEFAULT_MODEL_CHOICE, estimateCostUsd } from "../src/clients/models";
+import { resetUsage, snapshotUsage } from "../src/clients/llm";
 import { noteFlags, type NoteFlags } from "../src/__eval__/metrics";
 
 const argv = process.argv.slice(2);
@@ -266,6 +267,8 @@ function buildNewsStudent(): BuiltStudent {
 // skipped entirely when not generating regular notes.
 const apiKey = dry ? "" : requireEnv(MODEL.provider === "openai" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY");
 if (!dry) console.log(`Model: ${MODEL.label} (${MODEL.modelId}, ${MODEL.provider})`);
+// Start the run's token meter fresh, including the conjugation call below.
+resetUsage();
 const pastForms =
   dry || !includeRegular
     ? {}
@@ -358,6 +361,34 @@ function metricsSummary(): string {
   );
 }
 
+// Token usage and (if a price is set) cost for the run, from the shared meter.
+// Per-note figures divide by notes that actually generated (errors excluded), so
+// extrapolating to her weekly volume is meaningful.
+function usageSummary(): string {
+  if (dry) return "";
+  const u = snapshotUsage();
+  if (u.calls === 0) return "";
+  const generated = [...regFinals, ...newsFinals].filter((f) => !f.final.startsWith("[generation error")).length || 1;
+  const num = (x: number) => Math.round(x).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  const cost = estimateCostUsd(MODEL.modelId, u.inputTokens, u.outputTokens);
+  const lines = [
+    `# Tokens & cost — ${MODEL.label} (${MODEL.modelId})`,
+    ``,
+    `- model calls: ${num(u.calls)} · notes generated: ${generated}`,
+    `- input tokens: ${num(u.inputTokens)} · output tokens: ${num(u.outputTokens)}`,
+    `- per generated note: ${num(u.inputTokens / generated)} in / ${num(u.outputTokens / generated)} out`,
+  ];
+  if (cost === null) {
+    lines.push(`- cost: set this model's price in PRICING (src/clients/models.ts) for a $ estimate`);
+  } else {
+    lines.push(
+      `- estimated cost: $${cost.toFixed(2)} total · $${(cost / generated).toFixed(4)}/note · ` +
+        `~$${((cost / generated) * 40).toFixed(2)} for 40 notes/week`,
+    );
+  }
+  return lines.join("\n") + "\n\n---\n\n";
+}
+
 mkdirSync("eval-output", { recursive: true });
 const modelSlug = MODEL.modelId.replace(/[^a-z0-9]+/gi, "-");
 const outPath = `eval-output/batch-${modelSlug}-seed${SEED}-${PASSES}x${STUDENTS}${dry ? "-dry" : ""}.md`;
@@ -366,6 +397,7 @@ const body =
   (flatNews.length ? renderSection(`News-day mode — ${PASSES}×${STUDENTS} (seed ${SEED})`, flatNews, newsFinals) : "");
 // metricsSummary() reads the flags renderSection collected, so build it after.
 const summary = metricsSummary();
-writeFileSync(outPath, summary + body);
-if (summary) process.stdout.write("\n" + summary.replace(/^#+ /gm, "").replace(/_/g, ""));
+const usage = usageSummary();
+writeFileSync(outPath, summary + usage + body);
+if (summary || usage) process.stdout.write("\n" + (summary + usage).replace(/^#+ /gm, "").replace(/_/g, ""));
 console.log(`Wrote ${outPath}`);

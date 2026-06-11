@@ -12,6 +12,7 @@ export interface OpenAIResponse {
   // finish_reason "length" means the model hit the token ceiling (common on
   // reasoning models that spend the budget on hidden reasoning) — used to retry.
   choices: Array<{ message: { content: string | null }; finish_reason?: string }>;
+  usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
 }
 
 export class OpenAIError extends Error {
