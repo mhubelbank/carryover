@@ -307,9 +307,12 @@ const BACKOFF_MS = [1000, 3000, 10000];
 // the per-pass prompt.
 const NOTE_SYSTEM =
   "You write professional SLP clinical session notes. Use ONLY the information provided — never " +
-  "invent behaviors, details, numbers, or specifics that are not in the data. Use exactly the " +
-  "pronouns given for the student; never infer them from the student's name. Output only the note " +
-  "text itself: no preamble, no questions, no commentary. One paragraph, past tense.";
+  "invent behaviors, details, numbers, or specifics that are not in the data. Do not add evaluative " +
+  'or framing language that is not in the data — no "meaningful," "authentic," "valuable," "rich," ' +
+  '"functional opportunities to practice," or "within an authentic … context"; state plainly what ' +
+  "the student did. Use exactly the pronouns given for the student; never infer them from the " +
+  "student's name. Output only the note text itself: no preamble, no questions, no commentary. One " +
+  "paragraph, past tense.";
 
 // One model call with transient-error backoff (429/5xx/network). Returns the raw
 // response or throws after exhausting retries.
