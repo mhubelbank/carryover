@@ -32,6 +32,13 @@ export const MODEL_CHOICES: ModelChoice[] = [
     modelId: "gpt-5.4",
   },
   {
+    id: "chatgpt-pro",
+    label: "ChatGPT Pro",
+    blurb: "OpenAI's most capable model — best quality, priciest. Needs an OpenAI key.",
+    provider: "openai",
+    modelId: "gpt-5.5",
+  },
+  {
     id: "claude-sonnet",
     label: "Claude Sonnet",
     blurb: "The recommended Anthropic option. Needs an Anthropic key.",
