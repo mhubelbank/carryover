@@ -10,6 +10,24 @@ export function normalizeAcronyms(text: string): string {
   return text.replace(ACRONYM_RE, (m) => m.toUpperCase());
 }
 
+// Common clinical-term misspellings (the SLP's typo or a model slip) corrected in
+// the final note as whole words, preserving leading capitalization. Keep this map
+// tight — only unambiguous corrections of a real clinical term.
+const CLINICAL_SPELLING: Record<string, string> = {
+  disregulated: "dysregulated",
+  dysregular: "dysregulated",
+  disregulation: "dysregulation",
+  disregulate: "dysregulate",
+};
+
+export function fixClinicalSpelling(text: string): string {
+  return text.replace(/\b[A-Za-z]+\b/g, (m) => {
+    const fix = CLINICAL_SPELLING[m.toLowerCase()];
+    if (!fix) return m;
+    return /^[A-Z]/.test(m) ? fix.charAt(0).toUpperCase() + fix.slice(1) : fix;
+  });
+}
+
 // Support terms (prompting levels/types and redirection levels) the session
 // specified that don't appear in the final note — i.e. a pass dropped them. "no"
 // levels are skipped (a note legitimately omits "no prompting"). A warning, not a

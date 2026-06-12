@@ -2,7 +2,7 @@ import { callModel, llmErrorStatus, type LlmResponse } from "../clients/llm";
 import { DEFAULT_MODEL, type Provider } from "../clients/models";
 import type { GitHubClient } from "../clients/github";
 import type { Mode } from "./teacher";
-import { dropSelfCorrection, splitConcessive, normalizeAcronyms, streamlineLostClinicalDetail } from "./text";
+import { dropSelfCorrection, splitConcessive, normalizeAcronyms, fixClinicalSpelling, streamlineLostClinicalDetail } from "./text";
 import { limitMissSemicolons, spliceTrials } from "./trial";
 
 // Token ceilings ported from her existing TSX files (bump if she sees truncation).
@@ -432,7 +432,7 @@ export async function generateNote(
     spliceTrials(finalSource.trim(), replacements).replace(/\s*\n\s*/g, " "),
   );
   // Post-processing (e.g. a teacher append), then force acronym casing ("wh" → "WH").
-  const final = normalizeAcronyms(opts.postProcess ? opts.postProcess(note) : note);
+  const final = normalizeAcronyms(fixClinicalSpelling(opts.postProcess ? opts.postProcess(note) : note));
 
   return { draft, reviewed, final };
 }

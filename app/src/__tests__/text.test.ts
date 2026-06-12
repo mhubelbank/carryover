@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   normalizeAcronyms,
+  fixClinicalSpelling,
   pronounMismatches,
   dropSelfCorrection,
   splitConcessive,
@@ -16,6 +17,21 @@ describe("normalizeAcronyms", () => {
 
   it("leaves words that merely contain the letters alone", () => {
     expect(normalizeAcronyms("what is white, somewhat awhile")).toBe("what is white, somewhat awhile");
+  });
+});
+
+describe("fixClinicalSpelling", () => {
+  it("corrects common clinical misspellings, preserving capitalization", () => {
+    expect(fixClinicalSpelling("They became disregulated.")).toBe("They became dysregulated.");
+    expect(fixClinicalSpelling("Disregulation was noted; he was dysregular.")).toBe(
+      "Dysregulation was noted; he was dysregulated.",
+    );
+  });
+
+  it("leaves correct and unrelated words alone", () => {
+    expect(fixClinicalSpelling("He was dysregulated during the regular activity.")).toBe(
+      "He was dysregulated during the regular activity.",
+    );
   });
 });
 
