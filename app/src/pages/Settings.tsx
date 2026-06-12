@@ -581,7 +581,8 @@ function ModelSection() {
         </p>
       )}
       <p className="field-hint" style={{ marginTop: 10 }}>
-        Cost estimates measured {measuredOn ? formatShort(measuredOn) : MEASURED_ON}.
+        Cost estimates measured{" "}
+        {measuredOn ? `${formatShort(measuredOn)}, ${measuredOn.getFullYear()}` : MEASURED_ON}.
         {estimatesStale && (
           <span style={{ color: "var(--color-text-danger)" }}>
             {" "}
