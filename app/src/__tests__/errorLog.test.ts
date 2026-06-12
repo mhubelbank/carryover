@@ -39,12 +39,24 @@ describe("error log ring buffer", () => {
     expect(log[0]!.message).not.toContain("secretsecret");
   });
 
-  it("caps the log and keeps the most recent entries", () => {
+  it("caps the log at 5 distinct errors, newest first", () => {
     for (let i = 0; i < 30; i++) recordError({ kind: "error", error: new Error(`e${i}`) });
     const log = getErrorLog();
-    expect(log).toHaveLength(25);
+    expect(log).toHaveLength(5);
     expect(log[0]!.message).toBe("e29"); // newest first
-    expect(log.at(-1)?.message).toBe("e5"); // oldest five rolled off
+    expect(log.at(-1)?.message).toBe("e25"); // only the last 5 kept
+  });
+
+  it("dedups on message: a repeat bumps the count and floats to the top", () => {
+    recordError({ kind: "error", error: new Error("boom") });
+    recordError({ kind: "error", error: new Error("other") });
+    recordError({ kind: "error", error: new Error("boom") });
+    const log = getErrorLog();
+    expect(log).toHaveLength(2); // "boom" not duplicated
+    expect(log[0]!.message).toBe("boom");
+    expect(log[0]!.count).toBe(2);
+    expect(log[1]!.message).toBe("other");
+    expect(log[1]!.count).toBe(1);
   });
 
   it("renders a plain-text report", () => {

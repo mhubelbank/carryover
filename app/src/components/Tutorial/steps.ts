@@ -89,7 +89,7 @@ export const TOUR_STEPS: TourStep[] = [
     page: "settings",
     target: "settings-term",
     title: "Terms",
-    body: "Manage your school terms here. 'Start a new term' opens a setup wizard that carries over your caseload and schedule, so each fall you're not starting from scratch.",
+    body: "Manage your terms here. '+ Start a new term' opens a setup wizard that carries over your caseload and schedule, so you're never starting from scratch.",
   },
   {
     key: "deep-settings-catalogs",
@@ -103,14 +103,14 @@ export const TOUR_STEPS: TourStep[] = [
     page: "settings",
     target: "settings-model",
     title: "AI model",
-    body: "Choose which model writes your notes (Claude or ChatGPT), with a rough cost per note and per year.",
+    body: "Choose which model writes your notes (Claude or ChatGPT), with rough cost estimates.",
   },
   {
     key: "deep-settings-export",
     page: "settings",
     target: "settings-export",
     title: "Export",
-    body: "Download your data anytime — an Excel workbook, a CSV bundle, or a full backup.",
+    body: "Download your data anytime via an Excel workbook, recent notes text file, or full backup.",
   },
   {
     key: "outro",

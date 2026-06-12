@@ -921,6 +921,19 @@ function DiagnosticsSection() {
           <div key={i} title={`${r.at} · ${r.url} · ${r.appVersion}`}>
             <span style={{ color: "var(--color-text-tertiary)" }}>{r.at.slice(0, 16).replace("T", " ")}</span>{" "}
             {r.name}: {r.message.slice(0, 120)}
+            {(r.count ?? 1) > 1 && (
+              <span
+                style={{
+                  marginLeft: 6,
+                  padding: "0 6px",
+                  borderRadius: 999,
+                  background: "var(--color-background-pill)",
+                  color: "var(--color-text-secondary)",
+                }}
+              >
+                ×{r.count}
+              </span>
+            )}
           </div>
         ))}
       </div>

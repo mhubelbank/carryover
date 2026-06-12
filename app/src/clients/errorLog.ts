@@ -7,10 +7,11 @@
 import { storage, StorageKeys } from "./storage";
 
 export interface ErrorReport {
-  at: string; // ISO timestamp
+  at: string; // ISO timestamp of the most recent occurrence
   kind: "render" | "error" | "unhandledrejection";
   name: string;
   message: string;
+  count: number; // how many times this same message has occurred
   stack?: string;
   componentStack?: string; // React component stack (render crashes only)
   url: string; // pathname only — never the query string
@@ -18,7 +19,7 @@ export interface ErrorReport {
   userAgent: string;
 }
 
-const MAX = 25; // keep only the most recent N; a crash loop shouldn't grow forever
+const MAX = 5; // keep only the 5 most recent distinct errors
 
 // Where the "Email the report" buttons send to — the person who set the app up.
 // Plain mailto (no backend, nothing auto-transmitted): it opens a pre-filled draft
@@ -91,6 +92,7 @@ export function recordError(input: {
       kind: input.kind,
       name: scrubSecrets(name).slice(0, 200),
       message: scrubSecrets(rawMessage).slice(0, 1000),
+      count: 1,
       stack: rawStack ? scrubSecrets(rawStack).slice(0, 4000) : undefined,
       componentStack: input.componentStack
         ? scrubSecrets(input.componentStack).slice(0, 4000)
@@ -101,11 +103,22 @@ export function recordError(input: {
       appVersion: typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "dev",
       userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
     };
-    const next = [report, ...read()].slice(0, MAX);
+    // Dedup on the message: a repeat bumps the existing entry's count and floats it
+    // to the top with a fresh timestamp, rather than filling the log with copies.
+    const existing = read();
+    const dup = existing.findIndex((e) => e.message === report.message);
+    let next: ErrorReport[];
+    if (dup >= 0) {
+      const merged = { ...report, count: (existing[dup]!.count ?? 1) + 1 };
+      next = [merged, ...existing.slice(0, dup), ...existing.slice(dup + 1)].slice(0, MAX);
+    } else {
+      next = [report, ...existing].slice(0, MAX);
+    }
     storage.set(StorageKeys.errorLog, JSON.stringify(next));
+    const latest = next[0]!;
     listeners.forEach((fn) => {
       try {
-        fn(report);
+        fn(latest);
       } catch {
         // A toast failing must not break logging.
       }
@@ -121,7 +134,7 @@ export function errorLogText(reports: ErrorReport[]): string {
   return reports
     .map((r) => {
       const lines = [
-        `[${r.at}] ${r.kind}: ${r.name}: ${r.message}`,
+        `[${r.at}] ${r.kind}: ${r.name}: ${r.message}${(r.count ?? 1) > 1 ? `  (×${r.count})` : ""}`,
         `  page: ${r.url}  ·  app: ${r.appVersion}`,
         `  ${r.userAgent}`,
       ];

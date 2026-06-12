@@ -40,44 +40,65 @@ export function TutorialOverlay({
         setPos(null);
         return;
       }
+      // Measure the target's TRUE current position and lay out the spotlight +
+      // tooltip from it. Large content cards read best with the tooltip on top and
+      // the section scrolled beneath — but only if there's room ABOVE to slide it
+      // down. Small UI bits, and cards too near the top to slide, get the tooltip
+      // tucked just below them. Never predicts position — always reads the DOM.
+      const layout = () => {
+        const el = document.querySelector(`[data-tour="${target}"]`);
+        if (!el) {
+          setRect(null);
+          setPos(null);
+          return;
+        }
+        const r = el.getBoundingClientRect();
+        const ch = card.offsetHeight;
+        const vh = window.innerHeight;
+        const isCard = r.height > 100;
+        const canSlideBelowTooltip = window.scrollY + r.top - (ch + 2 * GAP) >= 0;
+        const tooltipBelow = !isCard || !canSlideBelowTooltip;
+        setRect(r);
+        const left = Math.min(Math.max(r.left, GAP), window.innerWidth - CARD_W - GAP);
+        const top = tooltipBelow ? Math.max(GAP, Math.min(r.bottom + GAP, vh - ch - GAP)) : GAP;
+        setPos({ top, left });
+      };
+      if (!allowScroll) {
+        layout();
+        return;
+      }
+      // Decide the scroll from the current geometry, scroll, then re-measure on the
+      // NEXT frame — after the browser has applied the scroll. This avoids both
+      // stale getBoundingClientRect and any error when the scroll clamps at a page
+      // edge (the bug that left the spotlight offset from the box).
       const el = document.querySelector(`[data-tour="${target}"]`);
       if (!el) {
         setRect(null);
         setPos(null);
         return;
       }
+      const r0 = el.getBoundingClientRect();
       const ch = card.offsetHeight;
       const vh = window.innerHeight;
-      let r = el.getBoundingClientRect();
-      // Large content cards read best with the tooltip on top and the section
-      // scrolled beneath it — but that only works if there's room ABOVE the target
-      // to slide it down (its absolute offset must clear the tooltip). Small UI bits
-      // (nav tabs, toggles, headings) and cards too near the top of their page to
-      // slide down get the tooltip tucked just below them instead — never overlapping.
-      const isCard = r.height > 100;
-      const canSlideBelowTooltip = window.scrollY + r.top - (ch + 2 * GAP) >= 0;
+      const isCard = r0.height > 100;
+      const canSlideBelowTooltip = window.scrollY + r0.top - (ch + 2 * GAP) >= 0;
       const tooltipBelow = !isCard || !canSlideBelowTooltip;
-      if (allowScroll) {
-        // Where we want the target's top: just under the top tooltip (tall) or near
-        // the top of the screen with room for the tooltip below it (short).
-        const desiredTop = tooltipBelow ? 2 * GAP : ch + 2 * GAP;
-        const settled = tooltipBelow
-          ? r.top >= GAP && r.bottom + GAP + ch <= vh - GAP
-          : Math.abs(r.top - desiredTop) < 2;
-        if (!settled) {
-          // Instant (not smooth): a smooth scroll hasn't moved the element yet when
-          // we re-measure below, so the spotlight/tooltip would be placed against a
-          // stale position — and a double-invoked effect (StrictMode) would scroll
-          // twice and land short. Instant keeps measure-after-scroll correct and the
-          // call idempotent (a second pass sees it already in place and no-ops).
-          window.scrollBy({ top: r.top - desiredTop });
-          r = el.getBoundingClientRect();
-        }
+      const desiredTop = tooltipBelow ? 2 * GAP : ch + 2 * GAP;
+      const settled = tooltipBelow
+        ? r0.top >= GAP && r0.bottom + GAP + ch <= vh - GAP
+        : Math.abs(r0.top - desiredTop) < 2;
+      if (settled) {
+        layout();
+      } else {
+        // Use the browser's native scrollIntoView (absolute, reliable, and it syncs
+        // layout) with a scroll-margin reserving the desired gap from the top —
+        // window.scrollBy proved flaky here (the page didn't move until a manual
+        // nudge). Re-measure next frame; the tracking loop follows any settling.
+        const node = el as HTMLElement;
+        node.style.scrollMarginTop = `${desiredTop}px`;
+        node.scrollIntoView({ block: "start" });
+        requestAnimationFrame(layout);
       }
-      setRect(r);
-      const left = Math.min(Math.max(r.left, GAP), window.innerWidth - CARD_W - GAP);
-      const top = tooltipBelow ? Math.max(GAP, Math.min(r.bottom + GAP, vh - ch - GAP)) : GAP;
-      setPos({ top, left });
     },
     [step?.target],
   );
@@ -88,8 +109,11 @@ export function TutorialOverlay({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [i]);
 
-  // Find the target (retrying until it mounts after a navigation), place it once
-  // with scrolling allowed, then keep it aligned on scroll/resize.
+  // Find the target (retrying until it mounts after a navigation), scroll it into
+  // place once, then CONTINUOUSLY track its real position for a short window —
+  // re-reading the DOM each frame and updating only when it actually moves. This is
+  // immune to scroll/layout-settle timing (the cause of the spotlight drifting off
+  // scrolled Settings cards): whenever the box settles, the spotlight follows it.
   useEffect(() => {
     if (!step?.target) {
       setRect(null);
@@ -98,21 +122,36 @@ export function TutorialOverlay({
     }
     let raf = 0;
     let startT = 0;
-    let placed = false;
-    const tick = (t: number) => {
-      if (document.querySelector(`[data-tour="${step.target}"]`)) {
-        place(!placed);
-        placed = true;
+    let scrolledAt = 0;
+    let didScroll = false;
+    let lastKey = "";
+    const frame = (t: number) => {
+      const el = document.querySelector(`[data-tour="${step.target}"]`);
+      if (el) {
+        if (!didScroll) {
+          place(true); // scroll the target into place once
+          didScroll = true;
+          scrolledAt = t;
+        } else {
+          const r = el.getBoundingClientRect();
+          const key = `${Math.round(r.top)},${Math.round(r.left)},${Math.round(r.height)}`;
+          if (key !== lastKey) {
+            lastKey = key;
+            place(false); // re-anchor to the box's current position
+          }
+        }
+        // Track for ~1.2s to absorb the scroll and any async settling, then stop.
+        if (t - scrolledAt < 1200 || !didScroll) raf = requestAnimationFrame(frame);
         return;
       }
       if (!startT) startT = t;
-      if (t - startT < 1500) raf = requestAnimationFrame(tick);
+      if (t - startT < 1500) raf = requestAnimationFrame(frame);
       else {
         setRect(null);
         setPos(null);
       }
     };
-    raf = requestAnimationFrame(tick);
+    raf = requestAnimationFrame(frame);
     const onMove = () => place(false);
     window.addEventListener("scroll", onMove, true);
     window.addEventListener("resize", onMove);
