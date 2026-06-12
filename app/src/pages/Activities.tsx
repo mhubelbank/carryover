@@ -402,13 +402,11 @@ export function Activities({ onNavigate, onOpenStudent }: Props) {
       <>
         <div style={{ marginBottom: "1rem" }}>
           <h1 style={{ fontSize: 22, fontWeight: 500, margin: 0 }}>Catalogs</h1>
-          <p style={{ margin: "4px 0 0 0", color: "var(--color-text-secondary)", fontSize: 14 }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
             <CountJump targetId="catalog-activities" label={countLabel(acts.length, "activity", "activities")} />
-            {" · "}
             <CountJump targetId="catalog-roles" label={countLabel(roles.length, "news role", "news roles")} />
-            {" · "}
             <CountJump targetId="catalog-fields" label={countLabel(sf.length, "student field", "student fields")} />
-          </p>
+          </div>
         </div>
         <CatalogTable
           id="catalog-activities"
@@ -677,25 +675,17 @@ function ReorderBtn({
   );
 }
 
-// A count in the page subheader ("11 activities") that scrolls to its catalog
-// section when clicked.
+// A count in the page subheader ("11 activities") rendered as a pill button that
+// scrolls to its catalog section when clicked.
 function CountJump({ targetId, label }: { targetId: string; label: string }) {
   return (
     <button
       type="button"
+      className="button button--small"
       onClick={() =>
         document.getElementById(targetId)?.scrollIntoView({ behavior: "smooth", block: "start" })
       }
-      style={{
-        border: "none",
-        background: "none",
-        padding: 0,
-        font: "inherit",
-        color: "var(--color-text-info)",
-        textDecoration: "underline",
-        textUnderlineOffset: 2,
-        cursor: "pointer",
-      }}
+      style={{ borderRadius: 999 }}
     >
       {label}
     </button>
