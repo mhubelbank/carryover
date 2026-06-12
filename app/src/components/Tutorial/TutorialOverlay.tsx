@@ -49,11 +49,14 @@ export function TutorialOverlay({
       const ch = card.offsetHeight;
       const vh = window.innerHeight;
       let r = el.getBoundingClientRect();
-      // Small UI bits (nav tabs, toggles, a heading) get the tooltip tucked just
-      // below them. Larger content cards (the Model/Export/Term sections, the
-      // session picker) put the tooltip on top with the section scrolled beneath
-      // it — reading top-to-bottom, never overlapping.
-      const tooltipBelow = r.height <= 100;
+      // Large content cards read best with the tooltip on top and the section
+      // scrolled beneath it — but that only works if there's room ABOVE the target
+      // to slide it down (its absolute offset must clear the tooltip). Small UI bits
+      // (nav tabs, toggles, headings) and cards too near the top of their page to
+      // slide down get the tooltip tucked just below them instead — never overlapping.
+      const isCard = r.height > 100;
+      const canSlideBelowTooltip = window.scrollY + r.top - (ch + 2 * GAP) >= 0;
+      const tooltipBelow = !isCard || !canSlideBelowTooltip;
       if (allowScroll) {
         // Where we want the target's top: just under the top tooltip (tall) or near
         // the top of the screen with room for the tooltip below it (short).
