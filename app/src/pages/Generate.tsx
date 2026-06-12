@@ -63,6 +63,7 @@ import {
   varietyNote as weekVarietyNote,
   type NoteResult,
   type Pass,
+  type PromptSet,
 } from "../domain/notes";
 import {
   activeCapturesFor,
@@ -80,6 +81,7 @@ import {
 } from "../domain/activity";
 import { resolveRoles } from "../domain/role";
 import type { Goal } from "../domain/goal";
+import { cannedNote } from "../demo/cannedNote";
 import type { SessionMetadata } from "../domain/session";
 import { displayName, fullName, isActiveOn, studentContext, type Student } from "../domain/student";
 import { teacherColor, type Activity, type Mode, type Role, type SessionCapture, type Teacher } from "../domain/teacher";
@@ -277,7 +279,7 @@ function blankNews(): NewsFieldValues {
 
 export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: Props) {
   const { state, client, saveGoals } = useTerm();
-  const { keys } = useAuth();
+  const { keys, demoMode } = useAuth();
 
   // The model she picked in Settings decides the provider, the API model id, and
   // which key the run needs. Held in state (seeded from the saved pref) so that
@@ -734,14 +736,32 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
     const d = parseDate(s.nextIepReview);
     return d != null && d.getTime() < startOfDay(new Date()).getTime();
   });
+  // Demo mode generates canned sample notes (no key needed); otherwise a real
+  // provider key is required.
+  const useCanned = demoMode && !hasModelKey;
   const canGenerate =
     teacher !== undefined &&
     includedStudents.length > 0 &&
-    hasModelKey &&
+    (hasModelKey || useCanned) &&
     client !== null;
 
+  // Demo: a believable pre-written note (no LLM). Brief delay so the progress UI
+  // still animates. `variant` differs per regeneration so the note visibly changes.
+  async function cannedResultFor(student: Student, variant = 0) {
+    await new Promise((r) => setTimeout(r, 350 + Math.random() * 450));
+    const activityNames =
+      mode === "news-day"
+        ? ["the news broadcast"]
+        : activities.map((a) => catalog.find((c) => c.id === a.activityId)?.name ?? "").filter(Boolean);
+    const goalLabels = goals
+      .filter((g) => g.studentId === student.id && !g.archived)
+      .map((g) => g.shortName || g.shortTermGoal)
+      .filter(Boolean);
+    return { draft: "", reviewed: "", final: cannedNote({ student, activityNames, goalLabels, variant }) };
+  }
+
   async function handleGenerate() {
-    if (!teacher || !client || !hasModelKey) return;
+    if (!teacher || !client || (!hasModelKey && !useCanned)) return;
     // Date and at least one activity are required (matching SESIS) — raise a
     // clear error rather than generating a dateless or activity-less note. The
     // activity requirement is regular-mode only; news day uses roles instead.
@@ -765,13 +785,15 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
     }));
     setResults(initial);
 
-    let prompts;
-    try {
-      prompts = await loadPromptSet(client, mode);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load prompts");
-      setPhase("form");
-      return;
+    let prompts: PromptSet | undefined;
+    if (!useCanned) {
+      try {
+        prompts = await loadPromptSet(client, mode);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to load prompts");
+        setPhase("form");
+        return;
+      }
     }
     // Emily's accumulated note corrections, applied to every draft. Non-fatal if
     // the file doesn't exist yet.
@@ -799,17 +821,24 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
     setProgress({ current: done, total });
     // One batched LLM pass conjugates all trial verbs to past tense (handles
     // irregulars); falls back to rules per-verb. {} for news-day / no trials.
-    const pastForms = await conjugatePastForms(
-      apiKey,
-      collectTrialVerbs(pending.map((s) => studentState[s.id]!)),
-      modelChoice.provider,
-      modelChoice.modelId,
-    );
+    const pastForms = useCanned
+      ? {}
+      : await conjugatePastForms(
+          apiKey,
+          collectTrialVerbs(pending.map((s) => studentState[s.id]!)),
+          modelChoice.provider,
+          modelChoice.modelId,
+        );
     await runPool(pending, GENERATE_CONCURRENCY, async (student) => {
       const st = studentState[student.id]!;
       try {
+        if (useCanned) {
+          const result = await cannedResultFor(student);
+          updateResult(student.id, { result, warnings: [] });
+          return;
+        }
         const ctx = buildContext(mode, teacher, student, st, activities, goals, catalog, roleCatalog, pastForms);
-        const result = await generateNote(apiKey, prompts, ctx, {
+        const result = await generateNote(apiKey, prompts!, ctx, {
           provider: modelChoice.provider,
           model: modelChoice.modelId,
           maxTokens: MAX_TOKENS_BY_MODE[mode],
@@ -889,15 +918,17 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
   // feedback to feedback-rules.md once (not per note). Notes run sequentially to
   // keep the API cadence gentle; each row shows its own phase as it goes.
   async function regenerate(studentIds: string[], feedback = "", saveAsRule = false) {
-    if (!teacher || !client || !hasModelKey || studentIds.length === 0) return;
+    if (!teacher || !client || (!hasModelKey && !useCanned) || studentIds.length === 0) return;
     const apiKey = providerKey!;
-    let prompts;
-    try {
-      prompts = await loadPromptSet(client, mode);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Failed to load prompts";
-      for (const id of studentIds) updateResult(id, { error: msg });
-      return;
+    let prompts: PromptSet | undefined;
+    if (!useCanned) {
+      try {
+        prompts = await loadPromptSet(client, mode);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Failed to load prompts";
+        for (const id of studentIds) updateResult(id, { error: msg });
+        return;
+      }
     }
     const persisted = await loadFeedbackRules(client).catch(() => "");
     // Persisted rules plus this round's one-off note feed the draft pass.
@@ -912,17 +943,24 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
         student: students.find((s) => s.id === id),
       }))
       .filter((t) => t.row && t.st && t.student && !t.row.absent);
-    const pastForms = await conjugatePastForms(
-      apiKey,
-      collectTrialVerbs(targets.map((t) => t.st!)),
-      modelChoice.provider,
-      modelChoice.modelId,
-    );
+    const pastForms = useCanned
+      ? {}
+      : await conjugatePastForms(
+          apiKey,
+          collectTrialVerbs(targets.map((t) => t.st!)),
+          modelChoice.provider,
+          modelChoice.modelId,
+        );
     await runPool(targets, GENERATE_CONCURRENCY, async ({ id, st, student }) => {
       updateResult(id, { regenerating: true, regenPhase: "draft", error: undefined });
       try {
+        if (useCanned) {
+          const result = await cannedResultFor(student!, 1 + Math.floor(Math.random() * 999));
+          updateResult(id, { result, warnings: [] });
+          return;
+        }
         const ctx = buildContext(mode, teacher, student!, st!, activities, goals, catalog, roleCatalog, pastForms);
-        const result = await generateNote(apiKey, prompts, ctx, {
+        const result = await generateNote(apiKey, prompts!, ctx, {
           provider: modelChoice.provider,
           model: modelChoice.modelId,
           maxTokens: MAX_TOKENS_BY_MODE[mode],
@@ -1367,11 +1405,15 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
 
       {hasSession && (
         <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 12, marginTop: 16 }}>
-          {!hasModelKey && (
+          {useCanned ? (
+            <span style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>
+              Demo notes are pre-written samples.
+            </span>
+          ) : !hasModelKey ? (
             <span style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>
               Add your {PROVIDER_META[modelChoice.provider].label} key in Settings to use {modelChoice.label}.
             </span>
-          )}
+          ) : null}
           <button
             className="button button--primary"
             onClick={handleGenerate}
