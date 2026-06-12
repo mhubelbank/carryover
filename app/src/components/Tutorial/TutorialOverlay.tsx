@@ -65,7 +65,12 @@ export function TutorialOverlay({
           ? r.top >= GAP && r.bottom + GAP + ch <= vh - GAP
           : Math.abs(r.top - desiredTop) < 2;
         if (!settled) {
-          window.scrollBy({ top: r.top - desiredTop, behavior: "smooth" });
+          // Instant (not smooth): a smooth scroll hasn't moved the element yet when
+          // we re-measure below, so the spotlight/tooltip would be placed against a
+          // stale position — and a double-invoked effect (StrictMode) would scroll
+          // twice and land short. Instant keeps measure-after-scroll correct and the
+          // call idempotent (a second pass sees it already in place and no-ops).
+          window.scrollBy({ top: r.top - desiredTop });
           r = el.getBoundingClientRect();
         }
       }
@@ -189,7 +194,7 @@ export function TutorialOverlay({
               cursor: "pointer",
             }}
           >
-            Skip
+            Exit
           </button>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>
