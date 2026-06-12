@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { TOUR_STEPS } from "./steps";
 import type { NavPage } from "../Nav";
 
@@ -7,6 +7,7 @@ import type { NavPage } from "../Nav";
 // through TOUR_STEPS. Hand-rolled to match the codebase's no-dependency style; no
 // portal needed (the app uses plain fixed overlays). Sits above the error toaster.
 const CARD_W = 340;
+const GAP = 12;
 
 export function TutorialOverlay({
   currentPage,
@@ -19,16 +20,56 @@ export function TutorialOverlay({
 }) {
   const [i, setI] = useState(0);
   const [rect, setRect] = useState<DOMRect | null>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
-  const [cardH, setCardH] = useState(160);
   const step = TOUR_STEPS[i];
   const isLast = i === TOUR_STEPS.length - 1;
 
-  // Measure the tooltip so placement can keep it fully on screen (content height
-  // varies per step). Per-step is enough — the body text is fixed within a step.
-  useLayoutEffect(() => {
-    if (cardRef.current) setCardH(cardRef.current.offsetHeight);
-  }, [i]);
+  // Compute the spotlight rect and tooltip position together — using one measured
+  // tooltip height so the scroll target and the placement can never disagree (the
+  // bug that overlapped the tooltip with tall cards). A short target gets the
+  // tooltip below it; a tall one (e.g. the Model card) pins the tooltip at the top
+  // and slides the target beneath it. `allowScroll` is true only on the first pass
+  // for a step; scroll/resize realignment passes just follow the target.
+  const place = useCallback(
+    (allowScroll: boolean) => {
+      const target = step?.target;
+      const card = cardRef.current;
+      if (!target || !card) {
+        setRect(null);
+        setPos(null);
+        return;
+      }
+      const el = document.querySelector(`[data-tour="${target}"]`);
+      if (!el) {
+        setRect(null);
+        setPos(null);
+        return;
+      }
+      const ch = card.offsetHeight;
+      const vh = window.innerHeight;
+      let r = el.getBoundingClientRect();
+      // Can the tooltip sit below the target once it's parked near the top?
+      const tooltipBelow = r.height + ch + 3 * GAP <= vh;
+      if (allowScroll) {
+        // Where we want the target's top: just under the top tooltip (tall) or near
+        // the top of the screen with room for the tooltip below it (short).
+        const desiredTop = tooltipBelow ? 2 * GAP : ch + 2 * GAP;
+        const settled = tooltipBelow
+          ? r.top >= GAP && r.bottom + GAP + ch <= vh - GAP
+          : Math.abs(r.top - desiredTop) < 2;
+        if (!settled) {
+          window.scrollBy({ top: r.top - desiredTop, behavior: "smooth" });
+          r = el.getBoundingClientRect();
+        }
+      }
+      setRect(r);
+      const left = Math.min(Math.max(r.left, GAP), window.innerWidth - CARD_W - GAP);
+      const top = tooltipBelow ? Math.max(GAP, Math.min(r.bottom + GAP, vh - ch - GAP)) : GAP;
+      setPos({ top, left });
+    },
+    [step?.target],
+  );
 
   // Navigate to the step's page first, if it lives on another tab.
   useEffect(() => {
@@ -36,47 +77,32 @@ export function TutorialOverlay({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [i]);
 
-  // Measure the target (retrying until it mounts after a possible navigation), and
-  // keep the spotlight aligned as the page scrolls or resizes.
+  // Find the target (retrying until it mounts after a navigation), place it once
+  // with scrolling allowed, then keep it aligned on scroll/resize.
   useEffect(() => {
-    const target = step?.target;
-    if (!target) {
+    if (!step?.target) {
       setRect(null);
+      setPos(null);
       return;
     }
-    const find = () => document.querySelector(`[data-tour="${target}"]`);
     let raf = 0;
     let startT = 0;
-    const loop = (t: number) => {
-      const el = find();
-      if (el) {
-        // Scroll the target into a spot that leaves room for the tooltip; the
-        // scroll listener below keeps the spotlight aligned as it animates.
-        const r = el.getBoundingClientRect();
-        const ch = cardRef.current?.offsetHeight ?? cardH;
-        const vh = window.innerHeight;
-        // If the target is short enough to fit with the tooltip below it, park it
-        // near the top (tooltip goes underneath). Otherwise it's tall (e.g. the
-        // Model card) — reserve room for the tooltip at the very top and slide the
-        // target just beneath it so they don't overlap.
-        const fitsTooltipBelow = r.height + ch + 48 <= vh;
-        const desiredTop = fitsTooltipBelow ? 24 : ch + 24;
-        const settled = fitsTooltipBelow
-          ? r.top >= 12 && r.bottom + 12 + ch <= vh - 12
-          : Math.abs(r.top - desiredTop) < 4;
-        if (!settled) window.scrollBy({ top: r.top - desiredTop, behavior: "smooth" });
-        setRect(el.getBoundingClientRect());
+    let placed = false;
+    const tick = (t: number) => {
+      if (document.querySelector(`[data-tour="${step.target}"]`)) {
+        place(!placed);
+        placed = true;
         return;
       }
       if (!startT) startT = t;
-      if (t - startT < 1500) raf = requestAnimationFrame(loop);
-      else setRect(null); // give up → center the card
+      if (t - startT < 1500) raf = requestAnimationFrame(tick);
+      else {
+        setRect(null);
+        setPos(null);
+      }
     };
-    raf = requestAnimationFrame(loop);
-    const onMove = () => {
-      const el = find();
-      if (el) setRect(el.getBoundingClientRect());
-    };
+    raf = requestAnimationFrame(tick);
+    const onMove = () => place(false);
     window.addEventListener("scroll", onMove, true);
     window.addEventListener("resize", onMove);
     return () => {
@@ -84,7 +110,7 @@ export function TutorialOverlay({
       window.removeEventListener("scroll", onMove, true);
       window.removeEventListener("resize", onMove);
     };
-  }, [i, currentPage, step?.target]);
+  }, [i, currentPage, step?.target, place]);
 
   // Escape skips the tour.
   useEffect(() => {
@@ -97,23 +123,9 @@ export function TutorialOverlay({
 
   if (!step) return null;
 
-  // Prefer below the target, flip above if it won't fit, and finally clamp so the
-  // card is always fully on screen even when the target is tall (e.g. the Model
-  // card) or near an edge.
-  let cardPos: CSSProperties;
-  if (rect) {
-    const left = Math.min(Math.max(rect.left, 12), window.innerWidth - CARD_W - 12);
-    const below = rect.bottom + 12;
-    const above = rect.top - 12 - cardH;
-    let top: number;
-    if (below + cardH <= window.innerHeight - 12) top = below;
-    else if (above >= 12) top = above;
-    else top = 12; // target too tall for either side — sit at the top of the screen
-    top = Math.max(12, Math.min(top, window.innerHeight - cardH - 12));
-    cardPos = { left, top };
-  } else {
-    cardPos = { left: "50%", top: "42%", transform: "translate(-50%, -50%)" };
-  }
+  const cardPos: CSSProperties = pos
+    ? { position: "fixed", top: pos.top, left: pos.left }
+    : { position: "fixed", left: "50%", top: "42%", transform: "translate(-50%, -50%)" };
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 1100, pointerEvents: "none" }}>
@@ -147,7 +159,6 @@ export function TutorialOverlay({
         ref={cardRef}
         className="card"
         style={{
-          position: "fixed",
           width: CARD_W,
           maxWidth: "calc(100vw - 24px)",
           pointerEvents: "auto",
