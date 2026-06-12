@@ -25,7 +25,7 @@ import { triggerDownload, downloadText, zipStore } from "../clients/download";
 import { buildXlsx } from "../clients/xlsx";
 import { clearNotes, getAllNotes } from "../clients/noteCache";
 import { loadThemePref, setThemePref, type ThemePref } from "../clients/theme";
-import { getErrorLog, clearErrorLog, errorLogText, type ErrorReport } from "../clients/errorLog";
+import { getErrorLog, clearErrorLog, errorLogText, errorMailto, type ErrorReport } from "../clients/errorLog";
 import { backupJson, csvBundleEntries, recentNotesTxt, termSlug, workbookSheets } from "../domain/export";
 import { formatShort, parseDate, startOfDay, toISODate } from "../domain/dates";
 import { termLabel, type ArchivedTerm, type StudentSnapshot } from "../domain/term";
@@ -49,11 +49,11 @@ export function Settings({ onNavigate, onStartNewTerm }: SettingsProps) {
       </p>
 
       <TermSection onStartNewTerm={onStartNewTerm} />
-      <AppearanceSection />
       <CatalogsSection onNavigate={onNavigate} />
       <ModelSection />
       <KeysSection />
       <ExportSection />
+      <AppearanceSection />
       <DiagnosticsSection />
       <ResetSection onSignOut={signOut} onTestMode={enterTestMode} />
     </div>
@@ -518,7 +518,7 @@ function ModelSection() {
           const annual = notesPerWeek > 0 ? annualCostLabel(c, notesPerWeek) : null;
           const priceLabel = perNote
             ? annual
-              ? `${perNote}/note · ${annual}`
+              ? `${perNote}/note ≈ ${annual}`
               : `${perNote}/note`
             : null;
           return (
@@ -888,6 +888,9 @@ function DiagnosticsSection() {
         ))}
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <a className="button button--small" href={errorMailto(reports)}>
+          Email report
+        </a>
         <button className="button button--small" onClick={copyAll}>
           {copied ? "Copied ✓" : "Copy report"}
         </button>

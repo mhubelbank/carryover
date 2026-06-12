@@ -3,6 +3,7 @@ import { confirmNavAway } from "./hooks/useUnsavedGuard";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { TermProvider, useTerm } from "./context/TermContext";
 import { Banner } from "./components/Banner";
+import { ErrorToaster } from "./components/ErrorToaster";
 import { Nav, type NavPage } from "./components/Nav";
 import { storage, StorageKeys } from "./clients/storage";
 import { Welcome } from "./pages/Welcome";
@@ -194,6 +195,7 @@ export function App() {
   return (
     <AuthProvider>
       <Router />
+      <ErrorToaster />
     </AuthProvider>
   );
 }

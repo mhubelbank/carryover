@@ -20,6 +20,21 @@ export interface ErrorReport {
 
 const MAX = 25; // keep only the most recent N; a crash loop shouldn't grow forever
 
+// Where the "Email the report" buttons send to — the person who set the app up.
+// Plain mailto (no backend, nothing auto-transmitted): it opens a pre-filled draft
+// the clinician sends herself. Change this if support moves to someone else.
+export const SUPPORT_EMAIL = "mhubelbank@gmail.com";
+
+// New-error subscribers (the on-screen toast). Kept separate from the stored log so
+// the UI can react the instant an error lands instead of only on the next render.
+type Listener = (report: ErrorReport) => void;
+const listeners = new Set<Listener>();
+
+export function subscribeErrors(fn: Listener): () => void {
+  listeners.add(fn);
+  return () => void listeners.delete(fn);
+}
+
 // Redact things that must never sit in a stored report even though the report
 // stays on-device: API keys / tokens (Anthropic sk-ant-…, OpenAI sk-…, GitHub
 // ghp_/gho_/…, generic Bearer …) and any long opaque secret-looking run. Names and
@@ -88,6 +103,13 @@ export function recordError(input: {
     };
     const next = [report, ...read()].slice(0, MAX);
     storage.set(StorageKeys.errorLog, JSON.stringify(next));
+    listeners.forEach((fn) => {
+      try {
+        fn(report);
+      } catch {
+        // A toast failing must not break logging.
+      }
+    });
   } catch {
     // Never let diagnostics break the app.
   }
@@ -108,6 +130,22 @@ export function errorLogText(reports: ErrorReport[]): string {
       return lines.join("\n");
     })
     .join("\n\n");
+}
+
+// A mailto: link that opens a pre-filled draft to SUPPORT_EMAIL with the report in
+// the body. mailto bodies get truncated by some mail clients, so cap the length and
+// point at Diagnostics for the full text. Already-scrubbed, so no secrets ride along.
+const MAILTO_BODY_LIMIT = 1500;
+
+export function errorMailto(reports: ErrorReport[]): string {
+  const subject = "Carryover error report";
+  let body = `Hi,\n\nCarryover ran into an error. Details below (sent from the app).\n\n${errorLogText(reports)}`;
+  if (body.length > MAILTO_BODY_LIMIT) {
+    body =
+      body.slice(0, MAILTO_BODY_LIMIT) +
+      "\n…(truncated — open Settings → Diagnostics → Copy report for the full text)";
+  }
+  return `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
 let installed = false;
