@@ -200,8 +200,9 @@ function StudentsList({
         <div
           style={{
             display: "flex",
-            flexDirection: "column",
-            gap: 8,
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 10,
             padding: "10px 14px",
             marginBottom: "1rem",
             border: "0.5px solid var(--color-border-warning)",
@@ -211,17 +212,13 @@ function StudentsList({
             fontSize: 13,
           }}
         >
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <span>
               {departed.length} student{departed.length === 1 ? " is" : "s are"} past their last day
               — ready to archive.
             </span>
-            <button className="button button--small" onClick={archiveDeparted} disabled={busy}>
-              {busy ? "Archiving…" : `Archive ${departed.length}`}
-            </button>
-          </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-            {departed.map((s) => (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {departed.map((s) => (
               <button
                 key={s.id}
                 onClick={() => onOpen(s.id)}
@@ -240,7 +237,11 @@ function StudentsList({
                 {fullName(s)}
               </button>
             ))}
+            </div>
           </div>
+          <button className="button button--small" onClick={archiveDeparted} disabled={busy}>
+            {busy ? "Archiving…" : `Archive ${departed.length}`}
+          </button>
         </div>
       )}
 
