@@ -1,6 +1,7 @@
 import { useState, type CSSProperties, type ReactNode } from "react";
 import { Icon } from "../components/Icon";
 import { validateApiKey, AnthropicError } from "../clients/anthropic";
+import { validateOpenAIKey, OpenAIError } from "../clients/openai";
 import { validateGitHubToken, GitHubError } from "../clients/github";
 import { REPO_CONFIG, useAuth } from "../context/AuthContext";
 
@@ -17,10 +18,12 @@ type ValidationState = "idle" | "validating" | "error";
 export function Welcome() {
   const { signIn } = useAuth();
   const [anthropicKey, setAnthropicKey] = useState("");
+  const [openaiKey, setOpenaiKey] = useState("");
   const [githubKey, setGithubKey] = useState("");
   const [state, setState] = useState<ValidationState>("idle");
   const [error, setError] = useState<string | null>(null);
 
+  // OpenAI is optional — the default model is Claude, so don't gate sign-in on it.
   const canSubmit =
     anthropicKey.trim().length > 0 && githubKey.trim().length > 0 && state !== "validating";
 
@@ -28,21 +31,25 @@ export function Welcome() {
     setState("validating");
     setError(null);
     try {
-      // Validate both keys in parallel — fail fast and show whichever broke.
-      await Promise.all([
+      // Validate the keys in parallel — fail fast and show whichever broke. The
+      // OpenAI key is only checked if she entered one.
+      const checks: Promise<unknown>[] = [
         validateApiKey(anthropicKey.trim()),
         validateGitHubToken(githubKey.trim(), REPO_CONFIG.owner, REPO_CONFIG.repo),
-      ]);
+      ];
+      if (openaiKey.trim()) checks.push(validateOpenAIKey(openaiKey.trim()));
+      await Promise.all(checks);
       signIn({
         anthropicApiKey: anthropicKey.trim(),
-        // OpenAI is optional and added later in Settings if she wants a ChatGPT model.
-        openaiApiKey: "",
+        openaiApiKey: openaiKey.trim(),
         githubToken: githubKey.trim(),
       });
     } catch (err) {
       setState("error");
       if (err instanceof AnthropicError) {
         setError(`Anthropic key rejected: ${err.message}`);
+      } else if (err instanceof OpenAIError) {
+        setError(`OpenAI key rejected: ${err.message}`);
       } else if (err instanceof GitHubError) {
         setError(`GitHub token rejected: ${err.message}`);
       } else {
@@ -59,7 +66,7 @@ export function Welcome() {
           <h1 style={{ fontSize: 22 }}>Welcome to Carryover</h1>
         </div>
         <p style={{ color: "var(--color-text-secondary)", fontSize: 14, marginBottom: "1.75rem" }}>
-          Add two keys, then you'll start adding students.
+          Add your keys, then you'll start adding students.
         </p>
 
         <KeyField
@@ -81,6 +88,25 @@ export function Welcome() {
 
         <KeyField
           number={2}
+          optional
+          title="OpenAI API key"
+          help={
+            <>
+              Optional — only needed if you switch to a ChatGPT model in Settings. You can add it
+              now or later.{" "}
+              <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer">
+                Get one <Icon name="external-link" size={12} />
+              </a>
+            </>
+          }
+          hint="Stored only in this browser. Leave blank to use Claude (the default)."
+          placeholder="sk-..."
+          value={openaiKey}
+          onChange={setOpenaiKey}
+        />
+
+        <KeyField
+          number={3}
           title="GitHub personal access token"
           help={
             <>
@@ -151,6 +177,7 @@ export function Welcome() {
 interface KeyFieldProps {
   number: number;
   title: string;
+  optional?: boolean;
   help: ReactNode;
   hint: ReactNode;
   placeholder: string;
@@ -158,7 +185,7 @@ interface KeyFieldProps {
   onChange: (value: string) => void;
 }
 
-function KeyField({ number, title, help, hint, placeholder, value, onChange }: KeyFieldProps) {
+function KeyField({ number, title, optional, help, hint, placeholder, value, onChange }: KeyFieldProps) {
   return (
     <div
       style={{
@@ -188,7 +215,12 @@ function KeyField({ number, title, help, hint, placeholder, value, onChange }: K
           {number}
         </div>
         <div style={{ flex: 1 }}>
-          <p style={{ fontWeight: 500, fontSize: 15 }}>{title}</p>
+          <p style={{ fontWeight: 500, fontSize: 15 }}>
+            {title}
+            {optional && (
+              <span style={{ fontWeight: 400, color: "var(--color-text-tertiary)" }}> (optional)</span>
+            )}
+          </p>
           <div style={{ fontSize: 13, color: "var(--color-text-secondary)", marginTop: 4 }}>
             {help}
           </div>
