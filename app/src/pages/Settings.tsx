@@ -514,6 +514,13 @@ function ModelSection() {
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {MODEL_CHOICES.map((c) => {
           const on = c.id === choiceId;
+          const perNote = perNoteCostLabel(c);
+          const annual = notesPerWeek > 0 ? annualCostLabel(c, notesPerWeek) : null;
+          const priceLabel = perNote
+            ? annual
+              ? `${perNote}/note · ${annual}`
+              : `${perNote}/note`
+            : null;
           return (
             <button
               key={c.id}
@@ -544,22 +551,25 @@ function ModelSection() {
                     : "1.5px solid var(--color-border-secondary)",
                 }}
               />
-              <span>
-                <span style={{ display: "block", fontWeight: 500, fontSize: 14, color: "var(--color-text-primary)" }}>
-                  {c.label}
-                  {perNoteCostLabel(c) && (
-                    <span style={{ fontWeight: 400, color: "var(--color-text-tertiary)" }}>
-                      {" "}
-                      ({perNoteCostLabel(c)})
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10 }}>
+                  <span style={{ fontWeight: 500, fontSize: 14, color: "var(--color-text-primary)" }}>{c.label}</span>
+                  {priceLabel && (
+                    <span
+                      style={{
+                        fontSize: 14,
+                        fontWeight: 400,
+                        color: "var(--color-text-tertiary)",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {priceLabel}
                     </span>
                   )}
                 </span>
-                <span style={{ fontSize: 12.5, color: "var(--color-text-secondary)" }}>{c.blurb}</span>
-                {notesPerWeek > 0 && annualCostLabel(c, notesPerWeek) && (
-                  <span style={{ display: "block", fontSize: 12, color: "var(--color-text-tertiary)", marginTop: 2 }}>
-                    ≈ {annualCostLabel(c, notesPerWeek)}
-                  </span>
-                )}
+                <span style={{ display: "block", fontSize: 12.5, color: "var(--color-text-secondary)" }}>
+                  {c.blurb}
+                </span>
               </span>
             </button>
           );
