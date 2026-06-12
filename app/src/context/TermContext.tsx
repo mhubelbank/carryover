@@ -55,6 +55,9 @@ interface TermContextValue {
   // The data-repo client, available once keys exist (null in test mode or
   // before sign-in). Pages use it for lazy loads like session usage counts.
   client: DataClient | null;
+  // True when the last data load failed with a 401 — the GitHub token has expired
+  // or is invalid. Drives the "Expired" status on the Settings token row.
+  tokenInvalid: boolean;
   // Id lookups, populated only when ready (empty maps otherwise).
   teacherById: Map<string, Teacher>;
   studentById: Map<string, Student>;
@@ -98,6 +101,7 @@ const TermContext = createContext<TermContextValue | null>(null);
 export function TermProvider({ children }: { children: ReactNode }) {
   const { keys, testMode, demoMode } = useAuth();
   const [state, setState] = useState<TermState>({ status: "loading" });
+  const [tokenInvalid, setTokenInvalid] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const shasRef = useRef<FileShas>({});
   // The current field catalog, mirrored in a ref so saveStudents (a [client]-dep
@@ -146,6 +150,7 @@ export function TermProvider({ children }: { children: ReactNode }) {
       .then(() => Promise.all([loadTermData(client), loadTermHistory(client)]))
       .then(([loaded, hist]) => {
         if (cancelled) return;
+        setTokenInvalid(false);
         setTermHistory(hist.history);
         if (loaded) {
           shasRef.current = { ...loaded.shas, termHistory: hist.sha };
@@ -162,6 +167,7 @@ export function TermProvider({ children }: { children: ReactNode }) {
         // An expired/invalid GitHub token reads as 401 — surface a clear renewal
         // message (graceful expiry) instead of the raw "Bad credentials".
         const expired = err instanceof GitHubError && err.status === 401;
+        setTokenInvalid(expired);
         const message = expired
           ? "Your GitHub access token has expired or is invalid. Open Settings → Keys and paste a new one to reconnect."
           : err instanceof Error
@@ -394,6 +400,7 @@ export function TermProvider({ children }: { children: ReactNode }) {
       state,
       reload,
       client,
+      tokenInvalid,
       teacherById,
       studentById,
       saveStudents,
@@ -415,6 +422,7 @@ export function TermProvider({ children }: { children: ReactNode }) {
       state,
       reload,
       client,
+      tokenInvalid,
       teacherById,
       studentById,
       saveStudents,

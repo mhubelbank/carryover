@@ -5,6 +5,7 @@ import { Nav, type NavPage } from "../components/Nav";
 import { useTerm } from "../context/TermContext";
 import { useAuth } from "../context/AuthContext";
 import { isTokenRenewalDue } from "../domain/tokenRenewal";
+import { requestSettingsSection } from "../clients/settingsNav";
 import { daysBetween, formatLong, formatShort, mondayOf, parseDate, startOfDay, stepWeekday, toISODate, toWeekday, weekdayName } from "../domain/dates";
 import { loadSessions, loadWeekSchedule } from "../domain/data";
 import { slotStartMinutes, type ScheduleEntry } from "../domain/schedule";
@@ -232,7 +233,13 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate, on
             variant="warning"
             icon="alert-circle"
             action={
-              <button className="button button--small" onClick={() => onNavigate("settings")}>
+              <button
+                className="button button--small"
+                onClick={() => {
+                  requestSettingsSection("keys");
+                  onNavigate("settings");
+                }}
+              >
                 Update token →
               </button>
             }

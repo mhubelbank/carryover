@@ -17,6 +17,8 @@ import {
 } from "../clients/models";
 import { storage, StorageKeys } from "../clients/storage";
 import { getModelChoiceId, setModelChoiceId } from "../clients/modelPref";
+import { consumeSettingsSection } from "../clients/settingsNav";
+import { isTokenRenewalDue } from "../domain/tokenRenewal";
 import { REPO_CONFIG, useAuth } from "../context/AuthContext";
 import { useTerm } from "../context/TermContext";
 import { useTutorial } from "../context/TutorialContext";
@@ -39,6 +41,15 @@ interface SettingsProps {
 
 export function Settings({ onNavigate, onStartNewTerm }: SettingsProps) {
   const { signOut, enterTestMode } = useAuth();
+
+  // Scroll to a requested section on open (e.g. the Today token banner → Keys).
+  useEffect(() => {
+    const section = consumeSettingsSection();
+    if (!section) return;
+    requestAnimationFrame(() => {
+      document.getElementById(`settings-${section}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, []);
 
   return (
     <div className="shell">
@@ -597,9 +608,15 @@ function ModelSection() {
 }
 
 function KeysSection() {
-  const { keys, updateKeys } = useAuth();
+  const { keys, updateKeys, githubTokenSavedOn } = useAuth();
+  const { tokenInvalid } = useTerm();
+  const githubStatus = tokenInvalid
+    ? { label: "Expired", tone: "danger" as const }
+    : isTokenRenewalDue(githubTokenSavedOn)
+      ? { label: "Renewal due", tone: "warning" as const }
+      : undefined;
   return (
-    <div className="card" style={{ marginBottom: "1rem" }}>
+    <div id="settings-keys" className="card" style={{ marginBottom: "1rem" }}>
       <h3 className="card__title">Keys</h3>
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         <KeyRow
@@ -622,6 +639,7 @@ function KeysSection() {
           label="GitHub personal access token"
           value={keys?.githubToken ?? ""}
           placeholder="github_pat_… or ghp_…"
+          status={githubStatus}
           validate={(v) => validateGitHubToken(v, REPO_CONFIG.owner, REPO_CONFIG.repo)}
           onSave={(v) => updateKeys({ githubToken: v })}
         />
@@ -655,6 +673,7 @@ function KeyRow({
   value,
   placeholder,
   creditsUrl,
+  status,
   validate,
   onSave,
 }: {
@@ -662,6 +681,7 @@ function KeyRow({
   value: string;
   placeholder: string;
   creditsUrl?: string;
+  status?: { label: string; tone: "warning" | "danger" };
   validate: (value: string) => Promise<unknown>;
   onSave: (value: string) => void;
 }) {
@@ -695,7 +715,29 @@ function KeyRow({
   return (
     <div>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
-        <label className="label">{label}</label>
+        <span style={{ display: "inline-flex", alignItems: "baseline", gap: 8 }}>
+          <label className="label">{label}</label>
+          {status && (
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 500,
+                padding: "1px 7px",
+                borderRadius: 999,
+                background:
+                  status.tone === "danger"
+                    ? "var(--color-background-danger)"
+                    : "var(--color-background-warning)",
+                color:
+                  status.tone === "danger"
+                    ? "var(--color-text-danger)"
+                    : "var(--color-text-warning)",
+              }}
+            >
+              {status.label}
+            </span>
+          )}
+        </span>
         {creditsUrl && (
           <a
             href={creditsUrl}
@@ -847,10 +889,11 @@ function ExportSection() {
 // nav bar) so the user sees the first step in context.
 function HelpSection({ onNavigate }: { onNavigate: (page: NavPage) => void }) {
   const { start } = useTutorial();
+  const { demoMode, enterDemoMode } = useAuth();
   return (
     <div className="card" style={{ marginBottom: "1rem" }}>
-      <h3 className="card__title">Tutorial</h3>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14 }}>
+      <h3 className="card__title">Tutorial &amp; demo</h3>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, marginBottom: 12 }}>
         <p style={{ flex: 1, fontSize: 13, color: "var(--color-text-secondary)", margin: 0 }}>
           Take the guided tour of the app again.
         </p>
@@ -864,6 +907,22 @@ function HelpSection({ onNavigate }: { onNavigate: (page: NavPage) => void }) {
           Replay tutorial
         </button>
       </div>
+      {!demoMode && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14 }}>
+          <p style={{ flex: 1, fontSize: 13, color: "var(--color-text-secondary)", margin: 0 }}>
+            Explore a sandbox with sample data — your real data stays untouched.
+          </p>
+          <button
+            className="button button--small"
+            onClick={() => {
+              enterDemoMode();
+              onNavigate("today");
+            }}
+          >
+            Try demo mode
+          </button>
+        </div>
+      )}
     </div>
   );
 }
