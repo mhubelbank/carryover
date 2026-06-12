@@ -2,7 +2,7 @@ import { callModel, llmErrorStatus, type LlmResponse } from "../clients/llm";
 import { DEFAULT_MODEL, type Provider } from "../clients/models";
 import type { GitHubClient } from "../clients/github";
 import type { Mode } from "./teacher";
-import { dropSelfCorrection, splitConcessive, normalizeAcronyms } from "./text";
+import { dropSelfCorrection, splitConcessive, normalizeAcronyms, streamlineLostClinicalDetail } from "./text";
 import { limitMissSemicolons, spliceTrials } from "./trial";
 
 // Token ceilings ported from her existing TSX files (bump if she sees truncation).
@@ -421,12 +421,15 @@ export async function generateNote(
     maxTokens,
     renderTemplate(prompts.streamline, { ...ctx, draftNote: draft, reviewedNote: reviewed }),
   );
+  // If the streamline pass dropped clinical detail the review had (a redirection
+  // clause, or all prompting), it regressed — keep the clean review note instead.
+  const finalSource = streamlineLostClinicalDetail(reviewed, streamlined) ? reviewed : streamlined;
   // Splice the exact trial sentences back in for any [[TRIAL:n]] tokens the note
   // carried through the passes (regularContext put them there). Collapse any
   // internal line breaks the model inserted — the note is one continuous paragraph.
   const replacements = (ctx.trialReplacements as Record<string, string> | undefined) ?? {};
   const note = limitMissSemicolons(
-    spliceTrials(streamlined.trim(), replacements).replace(/\s*\n\s*/g, " "),
+    spliceTrials(finalSource.trim(), replacements).replace(/\s*\n\s*/g, " "),
   );
   // Post-processing (e.g. a teacher append), then force acronym casing ("wh" → "WH").
   const final = normalizeAcronyms(opts.postProcess ? opts.postProcess(note) : note);

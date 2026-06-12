@@ -10,6 +10,20 @@ export function normalizeAcronyms(text: string): string {
   return text.replace(ACRONYM_RE, (m) => m.toUpperCase());
 }
 
+// True when the streamline pass dropped clinical detail the review pass had — a
+// "redirection to task" clause vanished, or all prompting disappeared. The
+// streamline is only meant to lightly clean prose, so a lost clause is a
+// regression and the caller should keep the (clean) review note instead. Counts,
+// not exact text, so a legitimate combine ("verbal and visual prompting") doesn't
+// trip it — only an actual disappearance does.
+export function streamlineLostClinicalDetail(reviewed: string, streamlined: string): boolean {
+  const redirections = (s: string) => (s.match(/redirection to task/gi) ?? []).length;
+  const hasPrompting = (s: string) => /\bprompting\b/i.test(s);
+  if (redirections(streamlined) < redirections(reviewed)) return true;
+  if (hasPrompting(reviewed) && !hasPrompting(streamlined)) return true;
+  return false;
+}
+
 // First-person / self-correction language that a third-person clinical note never
 // contains — its presence means the model leaked its thinking into the output
 // (e.g. "Wait, I need to re-read the original…" then re-emitting the note).

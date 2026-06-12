@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { normalizeAcronyms, pronounMismatches, dropSelfCorrection, splitConcessive } from "../domain/text";
+import {
+  normalizeAcronyms,
+  pronounMismatches,
+  dropSelfCorrection,
+  splitConcessive,
+  streamlineLostClinicalDetail,
+} from "../domain/text";
 
 describe("normalizeAcronyms", () => {
   it("upper-cases WH as a whole token, however typed", () => {
@@ -67,5 +73,26 @@ describe("splitConcessive", () => {
     expect(splitConcessive(legit)).toBe(legit);
     const temporal = "He maintained attention while she presented the weather.";
     expect(splitConcessive(temporal)).toBe(temporal);
+  });
+});
+
+describe("streamlineLostClinicalDetail", () => {
+  const review = "Fabian chose the segment, given minimal tactile prompting and continuous redirection to task. This work built pragmatic language.";
+
+  it("flags a dropped redirection clause", () => {
+    const streamlined = "Fabian chose the segment, given minimal tactile prompting. This work built pragmatic language.";
+    expect(streamlineLostClinicalDetail(review, streamlined)).toBe(true);
+  });
+
+  it("flags all prompting disappearing", () => {
+    const streamlined = "Fabian chose the segment. This work built pragmatic language.";
+    expect(streamlineLostClinicalDetail(review, streamlined)).toBe(true);
+  });
+
+  it("does not flag a legitimate prompting combine or an unchanged note", () => {
+    const before = "He sorted cards given minimal verbal prompting and minimal visual prompting.";
+    const combined = "He sorted cards given minimal verbal and visual prompting.";
+    expect(streamlineLostClinicalDetail(before, combined)).toBe(false);
+    expect(streamlineLostClinicalDetail(review, review)).toBe(false);
   });
 });
