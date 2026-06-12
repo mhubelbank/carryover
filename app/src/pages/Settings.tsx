@@ -842,12 +842,10 @@ function ExportSection() {
 
 // Recent errors & crashes, captured locally (clients/errorLog) and never sent
 // anywhere on their own. Lets the clinician copy a report to whoever supports the
-// app when something breaks. Hidden entirely while the log is empty.
+// app when something breaks. Always shown, so a clean run reads as reassurance.
 function DiagnosticsSection() {
   const [reports, setReports] = useState<ErrorReport[]>(getErrorLog);
   const [copied, setCopied] = useState(false);
-
-  if (reports.length === 0) return null;
 
   const copyAll = () => {
     void navigator.clipboard.writeText(errorLogText(reports));
@@ -859,13 +857,24 @@ function DiagnosticsSection() {
     setReports([]);
   };
 
+  if (reports.length === 0) {
+    return (
+      <div className="card" style={{ marginBottom: "1rem" }}>
+        <h3 className="card__title">Diagnostics</h3>
+        <p style={{ fontSize: 13, color: "var(--color-text-secondary)", margin: 0 }}>
+          No errors have been detected. If something goes wrong, it'll show up here so you can send
+          the report to Mara.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="card" style={{ marginBottom: "1rem" }}>
       <h3 className="card__title">Diagnostics</h3>
       <p style={{ fontSize: 13, color: "var(--color-text-secondary)", marginBottom: 14 }}>
         {reports.length} recent {reports.length === 1 ? "error was" : "errors were"} recorded on
-        this device. If something isn't working, copy the report and send it to whoever set up the
-        app. Nothing here is shared automatically.
+        this device. If something isn't working, copy the report and send it to Mara. Nothing here is shared automatically.
       </p>
       <div
         style={{
