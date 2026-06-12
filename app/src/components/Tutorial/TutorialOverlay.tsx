@@ -49,8 +49,11 @@ export function TutorialOverlay({
       const ch = card.offsetHeight;
       const vh = window.innerHeight;
       let r = el.getBoundingClientRect();
-      // Can the tooltip sit below the target once it's parked near the top?
-      const tooltipBelow = r.height + ch + 3 * GAP <= vh;
+      // Small UI bits (nav tabs, toggles, a heading) get the tooltip tucked just
+      // below them. Larger content cards (the Model/Export/Term sections, the
+      // session picker) put the tooltip on top with the section scrolled beneath
+      // it — reading top-to-bottom, never overlapping.
+      const tooltipBelow = r.height <= 100;
       if (allowScroll) {
         // Where we want the target's top: just under the top tooltip (tall) or near
         // the top of the screen with room for the tooltip below it (short).
