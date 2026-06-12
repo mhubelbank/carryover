@@ -184,6 +184,7 @@ function StudentsList({
         }}
       >
         <div>
+          <h1 style={{ fontSize: 22, fontWeight: 500, margin: "0 0 12px 0" }}>People</h1>
           <PeopleToggle current="students" onNavigate={onNavigate} />
           <p style={{ margin: "8px 0 0 0", color: "var(--color-text-secondary)", fontSize: 14 }}>
             {pool.length} {archivedView ? "archived" : "active"} student
