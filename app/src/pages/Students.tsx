@@ -152,7 +152,9 @@ function StudentsList({
   if (!data) return null;
 
   const pool = data.students.filter((s) => s.archived === archivedView);
-  const departed = !archivedView ? pool.filter((s) => isDeparted(s)) : [];
+  // Active students past their last day — eligible to archive. Computed off the
+  // full active set (not the current view) so the nudge shows in Archived mode too.
+  const departed = data.students.filter((s) => !s.archived && isDeparted(s));
   const q = query.trim().toLowerCase();
   const filtered = pool
     .filter((s) => (teacherFilter === "all" ? true : s.teacherId === teacherFilter))
@@ -198,9 +200,8 @@ function StudentsList({
         <div
           style={{
             display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: 10,
+            flexDirection: "column",
+            gap: 8,
             padding: "10px 14px",
             marginBottom: "1rem",
             border: "0.5px solid var(--color-border-warning)",
@@ -210,13 +211,36 @@ function StudentsList({
             fontSize: 13,
           }}
         >
-          <span>
-            {departed.length} student{departed.length === 1 ? " is" : "s are"} past their last day
-            — ready to archive.
-          </span>
-          <button className="button button--small" onClick={archiveDeparted} disabled={busy}>
-            {busy ? "Archiving…" : `Archive ${departed.length}`}
-          </button>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+            <span>
+              {departed.length} student{departed.length === 1 ? " is" : "s are"} past their last day
+              — ready to archive.
+            </span>
+            <button className="button button--small" onClick={archiveDeparted} disabled={busy}>
+              {busy ? "Archiving…" : `Archive ${departed.length}`}
+            </button>
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {departed.map((s) => (
+              <button
+                key={s.id}
+                onClick={() => onOpen(s.id)}
+                title="Open student"
+                style={{
+                  font: "inherit",
+                  fontSize: 12,
+                  padding: "1px 8px",
+                  borderRadius: "var(--border-radius-md)",
+                  background: "var(--color-background-primary)",
+                  border: "0.5px solid var(--color-border-warning)",
+                  color: "inherit",
+                  cursor: "pointer",
+                }}
+              >
+                {fullName(s)}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
