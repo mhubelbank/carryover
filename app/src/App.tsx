@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { confirmNavAway } from "./hooks/useUnsavedGuard";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { TermProvider, useTerm } from "./context/TermContext";
@@ -26,17 +26,31 @@ function Router() {
   );
 }
 
-// State-driven page selection (no router yet). Students/Teachers keep their own
-// list-vs-detail sub-state internally, so the top-level route stays a flat tab.
-// Goals are reached per-student from within Students, not as a top-level tab.
+// State-driven page selection backed by the History API (Tier-1 routing): each
+// top-level page maps to a path (/today, /generate, …) so Back/Forward move between
+// tabs and a refresh stays put. Students/Teachers keep their own list-vs-detail
+// sub-state internally, so detail views are NOT in the URL — Back from a detail
+// returns to the previous tab, not the list. Goals are reached per-student.
 const NAV_PAGES: NavPage[] = ["today", "generate", "students", "teachers", "activities", "schedule", "settings"];
+
+// First path segment → page, if it's a known page (else null).
+function pageFromPath(path: string): NavPage | null {
+  const seg = path.replace(/^\/+/, "").split("/")[0] ?? "";
+  return (NAV_PAGES as string[]).includes(seg) ? (seg as NavPage) : null;
+}
+const pathForPage = (p: NavPage): string => `/${p}`;
+
 function loadStoredPage(): NavPage {
   const v = storage.get(StorageKeys.page);
   return v && (NAV_PAGES as string[]).includes(v) ? (v as NavPage) : "today";
 }
+// Prefer the URL on load (deep link / refresh), falling back to the last stored tab.
+function initialPage(): NavPage {
+  return pageFromPath(window.location.pathname) ?? loadStoredPage();
+}
 
 function Pages() {
-  const [page, setPage] = useState<NavPage>(loadStoredPage);
+  const [page, setPage] = useState<NavPage>(initialPage);
   const [studentTarget, setStudentTarget] = useState<
     { id: string; view: "detail" | "goals" | "iep-review" } | null
   >(null);
@@ -60,15 +74,50 @@ function Pages() {
     storage.set(StorageKeys.page, page);
   }, [page]);
 
-  // All navigation goes through `nav` so an editor with unsaved changes can
-  // prompt before the page switches out from under it (the SaveBar's mount
+  // Track the live page for the popstate handler (registered once, so it would
+  // otherwise capture a stale `page`).
+  const pageRef = useRef(page);
+  useEffect(() => {
+    pageRef.current = page;
+  }, [page]);
+
+  // Browser Back/Forward → page. Registered once on mount; also normalizes the URL
+  // and seeds history state so the first Back has somewhere to return to.
+  useEffect(() => {
+    window.history.replaceState({ page: pageRef.current }, "", pathForPage(pageRef.current));
+    const onPop = () => {
+      const target = pageFromPath(window.location.pathname) ?? "today";
+      if (target === pageRef.current) return;
+      if (confirmNavAway()) {
+        setPage(target);
+      } else {
+        // User kept their unsaved work — undo the Back by restoring the URL.
+        window.history.pushState({ page: pageRef.current }, "", pathForPage(pageRef.current));
+      }
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
+  // Switch page and push a history entry so Back returns here. The guard against a
+  // matching path avoids stacking duplicate entries (e.g. opening a second student
+  // while already on /students).
+  const pushPage = useCallback((p: NavPage) => {
+    setPage(p);
+    if (pageFromPath(window.location.pathname) !== p) {
+      window.history.pushState({ page: p }, "", pathForPage(p));
+    }
+  }, []);
+
+  // All navigation goes through `nav`/`pushPage` so an editor with unsaved changes
+  // can prompt before the page switches out from under it (the SaveBar's mount
   // state drives the guard; see useUnsavedGuard).
   const nav = useCallback(
     (p: NavPage) => {
       if (p === page) return; // re-clicking the current tab shouldn't prompt
-      if (confirmNavAway()) setPage(p);
+      if (confirmNavAway()) pushPage(p);
     },
-    [page],
+    [page, pushPage],
   );
 
   const clearStudentTarget = useCallback(() => setStudentTarget(null), []);
@@ -76,24 +125,27 @@ function Pages() {
     (id: string, view: "detail" | "goals" | "iep-review" = "detail") => {
       if (!confirmNavAway()) return;
       setStudentTarget({ id, view });
-      setPage("students");
+      pushPage("students");
     },
-    [],
+    [pushPage],
   );
   const clearOpenTeacher = useCallback(() => setOpenTeacherId(null), []);
-  const openTeacher = useCallback((id: string) => {
-    if (!confirmNavAway()) return;
-    setOpenTeacherId(id);
-    setPage("teachers");
-  }, []);
+  const openTeacher = useCallback(
+    (id: string) => {
+      if (!confirmNavAway()) return;
+      setOpenTeacherId(id);
+      pushPage("teachers");
+    },
+    [pushPage],
+  );
   const clearGenerateTarget = useCallback(() => setGenerateTarget(null), []);
   const openGenerate = useCallback(
     (date: string, teacherId: string, studentIds: string[], timeSlot?: string) => {
       if (!confirmNavAway()) return;
       setGenerateTarget({ date, teacherId, studentIds, timeSlot });
-      setPage("generate");
+      pushPage("generate");
     },
-    [],
+    [pushPage],
   );
 
   // The new-term wizard takes over the whole view when open (checked before the
