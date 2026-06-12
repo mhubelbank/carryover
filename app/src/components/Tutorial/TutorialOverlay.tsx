@@ -50,12 +50,21 @@ export function TutorialOverlay({
     const loop = (t: number) => {
       const el = find();
       if (el) {
-        // Bring off-screen targets (e.g. lower Settings sections) into view; the
+        // Scroll the target into a spot that leaves room for the tooltip; the
         // scroll listener below keeps the spotlight aligned as it animates.
         const r = el.getBoundingClientRect();
-        if (r.top < 0 || r.bottom > window.innerHeight) {
-          el.scrollIntoView({ block: "center", behavior: "smooth" });
-        }
+        const ch = cardRef.current?.offsetHeight ?? cardH;
+        const vh = window.innerHeight;
+        // If the target is short enough to fit with the tooltip below it, park it
+        // near the top (tooltip goes underneath). Otherwise it's tall (e.g. the
+        // Model card) — reserve room for the tooltip at the very top and slide the
+        // target just beneath it so they don't overlap.
+        const fitsTooltipBelow = r.height + ch + 48 <= vh;
+        const desiredTop = fitsTooltipBelow ? 24 : ch + 24;
+        const settled = fitsTooltipBelow
+          ? r.top >= 12 && r.bottom + 12 + ch <= vh - 12
+          : Math.abs(r.top - desiredTop) < 4;
+        if (!settled) window.scrollBy({ top: r.top - desiredTop, behavior: "smooth" });
         setRect(el.getBoundingClientRect());
         return;
       }
