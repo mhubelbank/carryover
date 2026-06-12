@@ -162,7 +162,7 @@ function TermSection({ onStartNewTerm }: { onStartNewTerm: () => void }) {
   };
 
   return (
-    <div className="card" style={{ marginBottom: "1rem" }}>
+    <div data-tour="settings-term" className="card" style={{ marginBottom: "1rem" }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: 12 }}>
         <h3 className="card__title" style={{ margin: 0 }}>
           Term
@@ -429,7 +429,7 @@ function AppearanceSection() {
 
 function CatalogsSection({ onNavigate }: { onNavigate: (page: NavPage) => void }) {
   return (
-    <div className="card" style={{ marginBottom: "1rem" }}>
+    <div data-tour="settings-catalogs" className="card" style={{ marginBottom: "1rem" }}>
       <h3 className="card__title">Catalogs</h3>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14 }}>
         <p style={{ flex: 1, fontSize: 13, color: "var(--color-text-secondary)" }}>
@@ -493,7 +493,7 @@ function ModelSection() {
   const selected = MODEL_CHOICES.find((c) => c.id === choiceId);
   const needsOpenAIKey = selected?.provider === "openai" && !keys?.openaiApiKey;
   return (
-    <div className="card" style={{ marginBottom: "1rem" }}>
+    <div data-tour="settings-model" className="card" style={{ marginBottom: "1rem" }}>
       <h3 className="card__title">Model</h3>
       <p style={{ fontSize: 13, color: "var(--color-text-secondary)", marginBottom: 10 }}>
         Which AI writes the notes. You can switch anytime — try a few and keep what reads best. Each shows the
@@ -809,7 +809,7 @@ function ExportSection() {
   };
 
   return (
-    <div className="card" style={{ marginBottom: "1rem" }}>
+    <div data-tour="settings-export" className="card" style={{ marginBottom: "1rem" }}>
       <h3 className="card__title">Export</h3>
       <p style={{ fontSize: 13, color: "var(--color-text-secondary)", marginBottom: 14 }}>
         Download your data for backup or sharing.

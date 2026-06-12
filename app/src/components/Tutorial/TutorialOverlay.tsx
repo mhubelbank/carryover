@@ -42,6 +42,12 @@ export function TutorialOverlay({
     const loop = (t: number) => {
       const el = find();
       if (el) {
+        // Bring off-screen targets (e.g. lower Settings sections) into view; the
+        // scroll listener below keeps the spotlight aligned as it animates.
+        const r = el.getBoundingClientRect();
+        if (r.top < 0 || r.bottom > window.innerHeight) {
+          el.scrollIntoView({ block: "center", behavior: "smooth" });
+        }
         setRect(el.getBoundingClientRect());
         return;
       }

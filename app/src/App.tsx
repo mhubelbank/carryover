@@ -171,6 +171,19 @@ function Pages() {
     [pushPage],
   );
 
+  // Rendered alongside the active page so the guided tour can spotlight elements on
+  // any page (including Settings, which is a special early return below).
+  const overlay = tourActive && (
+    <TutorialOverlay
+      currentPage={page}
+      nav={tourNavigate}
+      onFinish={() => {
+        stopTour();
+        markTutorialDone();
+      }}
+    />
+  );
+
   // The new-term wizard takes over the whole view when open (checked before the
   // page routes, including Settings, which is where it's launched from).
   if (newTerm && state.status === "ready")
@@ -186,7 +199,12 @@ function Pages() {
 
   // Settings is reachable regardless of how data loading went.
   if (page === "settings")
-    return <Settings onNavigate={nav} onStartNewTerm={() => setNewTerm(true)} />;
+    return (
+      <>
+        <Settings onNavigate={nav} onStartNewTerm={() => setNewTerm(true)} />
+        {overlay}
+      </>
+    );
 
   if (state.status === "loading") {
     return <StatusScreen page={page} onNavigate={nav} variant="info" message="Loading your data…" />;
@@ -251,16 +269,7 @@ function Pages() {
   return (
     <>
       {content}
-      {tourActive && (
-        <TutorialOverlay
-          currentPage={page}
-          nav={tourNavigate}
-          onFinish={() => {
-            stopTour();
-            markTutorialDone();
-          }}
-        />
-      )}
+      {overlay}
     </>
   );
 }
