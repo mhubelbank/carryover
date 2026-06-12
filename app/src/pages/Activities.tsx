@@ -401,14 +401,17 @@ export function Activities({ onNavigate, onOpenStudent }: Props) {
     body = (
       <>
         <div style={{ marginBottom: "1rem" }}>
-          <h1 style={{ fontSize: 22, fontWeight: 500, margin: 0 }}>Activities</h1>
+          <h1 style={{ fontSize: 22, fontWeight: 500, margin: 0 }}>Catalogs</h1>
           <p style={{ margin: "4px 0 0 0", color: "var(--color-text-secondary)", fontSize: 14 }}>
-            {countLabel(acts.length, "activity", "activities")} ·{" "}
-            {countLabel(roles.length, "news role", "news roles")} ·{" "}
-            {countLabel(sf.length, "student field", "student fields")}
+            <CountJump targetId="catalog-activities" label={countLabel(acts.length, "activity", "activities")} />
+            {" · "}
+            <CountJump targetId="catalog-roles" label={countLabel(roles.length, "news role", "news roles")} />
+            {" · "}
+            <CountJump targetId="catalog-fields" label={countLabel(sf.length, "student field", "student fields")} />
           </p>
         </div>
         <CatalogTable
+          id="catalog-activities"
           title="Activities"
           addLabel="Add activity"
           onAdd={addAct}
@@ -436,6 +439,7 @@ export function Activities({ onNavigate, onOpenStudent }: Props) {
           ]}
         />
         <CatalogTable
+          id="catalog-roles"
           title="News roles"
           addLabel="Add role"
           onAdd={addRole}
@@ -463,6 +467,7 @@ export function Activities({ onNavigate, onOpenStudent }: Props) {
           ]}
         />
         <CatalogTable
+          id="catalog-fields"
           title="Student fields"
           addLabel="Add field"
           onAdd={addField}
@@ -672,6 +677,31 @@ function ReorderBtn({
   );
 }
 
+// A count in the page subheader ("11 activities") that scrolls to its catalog
+// section when clicked.
+function CountJump({ targetId, label }: { targetId: string; label: string }) {
+  return (
+    <button
+      type="button"
+      onClick={() =>
+        document.getElementById(targetId)?.scrollIntoView({ behavior: "smooth", block: "start" })
+      }
+      style={{
+        border: "none",
+        background: "none",
+        padding: 0,
+        font: "inherit",
+        color: "var(--color-text-info)",
+        textDecoration: "underline",
+        textUnderlineOffset: 2,
+        cursor: "pointer",
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
 function CatalogTable({
   title,
   addLabel,
@@ -679,6 +709,7 @@ function CatalogTable({
   usedHeader,
   rows,
   onMove,
+  id,
 }: {
   title: string;
   addLabel: string;
@@ -686,11 +717,12 @@ function CatalogTable({
   usedHeader: string;
   rows: CatalogRow[];
   onMove?: (id: string, dir: -1 | 1) => void;
+  id?: string;
 }) {
   // Movable rows come first; pinned rows (e.g. "Other") sit at the bottom.
   const movableCount = rows.filter((r) => !r.pinned).length;
   return (
-    <section style={SECTION_BOX}>
+    <section id={id} style={SECTION_BOX}>
       <SectionHeader title={title} onAdd={onAdd} addLabel={addLabel} />
       {rows.length === 0 ? (
         <p style={{ fontSize: 13, color: "var(--color-text-tertiary)", margin: 0 }}>None yet.</p>
