@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { normalizeAcronyms, pronounMismatches } from "../domain/text";
+import { normalizeAcronyms, pronounMismatches, dropSelfCorrection, splitConcessive } from "../domain/text";
 
 describe("normalizeAcronyms", () => {
   it("upper-cases WH as a whole token, however typed", () => {
@@ -30,5 +30,42 @@ describe("pronounMismatches", () => {
 
   it("returns nothing when pronouns are unset", () => {
     expect(pronounMismatches("He did the thing.", "")).toEqual([]);
+  });
+});
+
+describe("dropSelfCorrection", () => {
+  it("leaves a clean note untouched", () => {
+    const note = "Alex sorted picture cards. He was distracted. This session built receptive language.";
+    expect(dropSelfCorrection(note)).toBe(note);
+  });
+
+  it("drops the meta sentence and keeps the re-emitted (corrected) copy", () => {
+    const v1 = "Alisia worked on writing the script. She was dysregular during the activity.";
+    const v2 = "Alisia worked on writing the script. She was dysregulated during the activity.";
+    const leaked = `${v1} Wait, I need to re-read the original and fix only the listed issues. ${v2}`;
+    expect(dropSelfCorrection(leaked)).toBe(v2);
+  });
+
+  it("drops a trailing meta sentence when the note wasn't re-emitted", () => {
+    const note = "Alex sorted picture cards. This session built receptive language.";
+    expect(dropSelfCorrection(`${note} Let me reconsider whether that's right.`)).toBe(note);
+  });
+});
+
+describe("splitConcessive", () => {
+  it("splits a concessive-fused affect into its own sentence", () => {
+    expect(
+      splitConcessive("Alisia wrote the script given minimal prompting, though she was dysregulated throughout."),
+    ).toBe("Alisia wrote the script given minimal prompting. She was dysregulated throughout.");
+    expect(splitConcessive("He sorted cards, although they were distracted.")).toBe(
+      "He sorted cards. They were distracted.",
+    );
+  });
+
+  it("leaves legitimate 'though'/'while' and clean notes alone", () => {
+    const legit = "She answered 3/5, though with prompting on the last two.";
+    expect(splitConcessive(legit)).toBe(legit);
+    const temporal = "He maintained attention while she presented the weather.";
+    expect(splitConcessive(temporal)).toBe(temporal);
   });
 });

@@ -10,6 +10,39 @@ export function normalizeAcronyms(text: string): string {
   return text.replace(ACRONYM_RE, (m) => m.toUpperCase());
 }
 
+// First-person / self-correction language that a third-person clinical note never
+// contains — its presence means the model leaked its thinking into the output
+// (e.g. "Wait, I need to re-read the original…" then re-emitting the note).
+const SELF_CORRECTION = /\b(wait,|let me\b|i need to\b|i'll\b|i should\b|on second thought|re-read the (original|note))/i;
+
+// The student's response/affect must be its own sentence, not fused onto the
+// action with a concessive ("…redirection to task, though she was dysregulated"),
+// which wrongly implies success despite the state. Split any ", though/although
+// [pronoun] …" fusion into a standalone sentence. Targeted to subject pronouns so
+// it never mangles a legitimate "though with prompting" or temporal "while".
+export function splitConcessive(text: string): string {
+  return text.replace(
+    /,\s+(?:even though|though|although)\s+(he|she|they)\b/gi,
+    (_m, p: string) => `. ${p.charAt(0).toUpperCase()}${p.slice(1).toLowerCase()}`,
+  );
+}
+
+// Salvage a note when the model leaked a self-correction mid-output and usually
+// re-emitted the corrected note. Only activates when that marker is present, so a
+// normal note passes through untouched. Drops the meta sentences; if the note was
+// emitted twice (its opening sentence repeats verbatim), keeps the last copy.
+export function dropSelfCorrection(note: string): string {
+  if (!SELF_CORRECTION.test(note)) return note;
+  const sentences = note.split(/(?<=[.!?])\s+/).filter((s) => s.trim() && !SELF_CORRECTION.test(s));
+  let out = sentences.join(" ").trim();
+  const first = sentences[0]?.trim();
+  if (first && first.length > 12) {
+    const last = out.lastIndexOf(first);
+    if (last > 0) out = out.slice(last).trim();
+  }
+  return out || note;
+}
+
 const MASCULINE = ["he", "him", "his", "himself"];
 const FEMININE = ["she", "her", "hers", "herself"];
 

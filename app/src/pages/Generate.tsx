@@ -818,7 +818,7 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
           goldenExamples,
           varietyNote,
         });
-        updateResult(student.id, { result, warnings: pronounMismatches(result.final, student.pronouns) });
+        updateResult(student.id, { result, warnings: pronounMismatches(result.final, effectivePronouns(student.pronouns)) });
       } catch (e) {
         updateResult(student.id, { error: e instanceof Error ? e.message : "Failed" });
       } finally {
@@ -934,7 +934,7 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
         });
         updateResult(id, {
           result,
-          warnings: pronounMismatches(result.final, student!.pronouns),
+          warnings: pronounMismatches(result.final, effectivePronouns(student!.pronouns)),
           regenerating: false,
           regenPhase: undefined,
         });
@@ -3249,6 +3249,13 @@ function goalsWithMeasuredFromTrials(goals: Goal[], states: StudentState[]): Goa
   return changed ? next : null;
 }
 
+// A student with no pronouns recorded falls back to singular they/them, so notes
+// can alternate name → pronoun (instead of repeating the name) and still never
+// guess a gender from the name. Set the student's pronouns to override.
+function effectivePronouns(p: string): string {
+  return p.trim() || "they/them";
+}
+
 function buildContext(
   mode: Mode,
   teacher: Teacher,
@@ -3260,7 +3267,8 @@ function buildContext(
   roleCatalog: Role[],
   pastForms?: Record<string, string>,
 ) {
-  const pronoun = student.pronouns.split("/")[0]?.trim() || student.pronouns;
+  const pronouns = effectivePronouns(student.pronouns);
+  const pronoun = pronouns.split("/")[0]?.trim() || pronouns;
   if (mode === "news-day") {
     const role = resolveRoles(teacher, roleCatalog).find((r) => r.id === st.roleId);
     if (!role) throw new Error(`Pick a role for ${fullName(student)}`);
@@ -3271,7 +3279,7 @@ function buildContext(
       // Narrative uses first name only for natural clinical prose; the all-notes
       // block separately uses displayName for the colon-label disambiguation.
       studentName: student.firstName,
-      pronouns: student.pronouns,
+      pronouns,
       teacher,
       role: { ...role, name: role.name },
       rolePhrase: phrase,
@@ -3315,7 +3323,7 @@ function buildContext(
   }, student.firstName, pronoun, pastForms);
   return regularContext({
     studentName: student.firstName,
-    pronouns: student.pronouns,
+    pronouns,
     pronoun,
     individualSession: false,
     teacher,

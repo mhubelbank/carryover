@@ -39,7 +39,7 @@ export const MODEL_CHOICES: ModelChoice[] = [
     blurb: "The recommended model, which scored the best on quality & value testing. Needs an Anthropic key.",
     provider: "anthropic",
     modelId: "claude-sonnet-4-6",
-    noteTokens: { input: 6100, output: 179 },
+    noteTokens: { input: 7369, output: 170 },
   },
   {
     id: "claude-opus",
@@ -47,7 +47,7 @@ export const MODEL_CHOICES: ModelChoice[] = [
     blurb: "Anthropic's most capable model — highest tier, pricier than Sonnet. Needs an Anthropic key.",
     provider: "anthropic",
     modelId: "claude-opus-4-8",
-    noteTokens: { input: 8591, output: 283 },
+    noteTokens: { input: 10368, output: 271 },
   },
   {
     id: "claude-haiku",
@@ -55,7 +55,7 @@ export const MODEL_CHOICES: ModelChoice[] = [
     blurb: "Faster and cheaper than Sonnet, with slightly less polish. Needs an Anthropic key.",
     provider: "anthropic",
     modelId: "claude-haiku-4-5-20251001",
-    noteTokens: { input: 6102, output: 189 },
+    noteTokens: { input: 7361, output: 150 },
   },
   {
     id: "chatgpt",
@@ -63,7 +63,7 @@ export const MODEL_CHOICES: ModelChoice[] = [
     blurb: "Primary OpenAI alternative for a different voice. Needs an OpenAI key.",
     provider: "openai",
     modelId: "gpt-5.4",
-    noteTokens: { input: 5659, output: 165 },
+    noteTokens: { input: 6839, output: 153 },
   },
   {
     id: "chatgpt-pro",
@@ -71,7 +71,7 @@ export const MODEL_CHOICES: ModelChoice[] = [
     blurb: "OpenAI's most capable model, the priciest option by far. Needs an OpenAI key.",
     provider: "openai",
     modelId: "gpt-5.5",
-    noteTokens: { input: 5652, output: 1294 },
+    noteTokens: { input: 6839, output: 1467 },
   },
 ];
 
@@ -143,8 +143,8 @@ export function annualCostLabel(choice: ModelChoice, notesPerWeek: number): stri
 // last measured, and the total prompt size (chars) they were measured against.
 // Settings compares the live prompt size to this baseline and nudges to refresh
 // the estimates (re-run measure:prices) once they drift past the threshold.
-export const MEASURED_ON = "2026-06-11";
-export const BASELINE_PROMPT_CHARS = 26143;
+export const MEASURED_ON = "2026-06-12";
+export const BASELINE_PROMPT_CHARS = 31806;
 export const PROMPT_DRIFT_THRESHOLD = 0.2;
 
 // Total characters of the generation prompt inputs that drive token cost — the

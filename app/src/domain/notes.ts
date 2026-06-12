@@ -2,7 +2,7 @@ import { callModel, llmErrorStatus, type LlmResponse } from "../clients/llm";
 import { DEFAULT_MODEL, type Provider } from "../clients/models";
 import type { GitHubClient } from "../clients/github";
 import type { Mode } from "./teacher";
-import { normalizeAcronyms } from "./text";
+import { dropSelfCorrection, splitConcessive, normalizeAcronyms } from "./text";
 import { limitMissSemicolons, spliceTrials } from "./trial";
 
 // Token ceilings ported from her existing TSX files (bump if she sees truncation).
@@ -39,7 +39,7 @@ export type TemplateContext = Record<string, unknown>;
 // strip). Applied after every pass; cleaned output of pass N feeds pass N+1.
 export function cleanClaudeResponse(text: string): string {
   if (!text) return "";
-  return text
+  const cleaned = text
     .replace(/```json\s*/g, "")
     .replace(/```\s*/g, "")
     .replace(/\*\*/g, "")
@@ -47,6 +47,10 @@ export function cleanClaudeResponse(text: string): string {
     .replace(/#{1,6}\s+/g, "")
     .replace(/<[^>]*>/g, "")
     .trim();
+  // Salvage a note where the model leaked its thinking ("Wait, I need to…") and
+  // re-emitted the note, then split any concessive-fused affect ("…task, though
+  // she was distracted"). Both are no-ops on a clean note.
+  return splitConcessive(dropSelfCorrection(cleaned));
 }
 
 // ---------------------------------------------------------------------------
