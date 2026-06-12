@@ -99,7 +99,7 @@ export function TutorialOverlay({
     let top: number;
     if (below + cardH <= window.innerHeight - 12) top = below;
     else if (above >= 12) top = above;
-    else top = window.innerHeight - cardH - 12;
+    else top = 12; // target too tall for either side — sit at the top of the screen
     top = Math.max(12, Math.min(top, window.innerHeight - cardH - 12));
     cardPos = { left, top };
   } else {
