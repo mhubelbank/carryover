@@ -72,7 +72,7 @@ import {
   buildPostProcess,
   evalCondition,
 } from "../domain/captures";
-import { pronounMismatches } from "../domain/text";
+import { pronounMismatches, missingSupportTerms } from "../domain/text";
 import {
   activityOptionsForGenerate,
   catalogById,
@@ -818,7 +818,7 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
           goldenExamples,
           varietyNote,
         });
-        updateResult(student.id, { result, warnings: pronounMismatches(result.final, effectivePronouns(student.pronouns)) });
+        updateResult(student.id, { result, warnings: noteWarnings(result.final, effectivePronouns(student.pronouns), st) });
       } catch (e) {
         updateResult(student.id, { error: e instanceof Error ? e.message : "Failed" });
       } finally {
@@ -934,7 +934,7 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
         });
         updateResult(id, {
           result,
-          warnings: pronounMismatches(result.final, effectivePronouns(student!.pronouns)),
+          warnings: noteWarnings(result.final, effectivePronouns(student!.pronouns), st!),
           regenerating: false,
           regenPhase: undefined,
         });
@@ -2886,22 +2886,22 @@ function ResultsView({
               >
                 {r.result.final}
               </p>
-              {r.warnings && r.warnings.length > 0 && !r.regenerating && (
-                <p
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 5,
-                    margin: "8px 0 0 0",
-                    fontSize: 12,
-                    color: "var(--color-text-danger)",
-                  }}
-                >
-                  <Icon name="alert-circle" size={13} />
-                  Possible pronoun mismatch — found {r.warnings.map((w) => `"${w}"`).join(", ")}. Verify against this
-                  student's pronouns, and regenerate if wrong.
-                </p>
-              )}
+              {r.warnings && !r.regenerating &&
+                r.warnings.map((w, i) => (
+                  <p
+                    key={i}
+                    style={{
+                      display: "flex",
+                      alignItems: "flex-start",
+                      gap: 5,
+                      margin: "8px 0 0 0",
+                      fontSize: 12,
+                      color: "var(--color-text-danger)",
+                    }}
+                  >
+                    <Icon name="alert-circle" size={13} /> {w}
+                  </p>
+                ))}
               {r.showDrafts && (
                 <div style={{ marginTop: 10, fontSize: 12, color: "var(--color-text-secondary)" }}>
                   <details>
@@ -3268,6 +3268,27 @@ function goalsWithMeasuredFromTrials(goals: Goal[], states: StudentState[]): Goa
 // guess a gender from the name. Set the student's pronouns to override.
 function effectivePronouns(p: string): string {
   return p.trim() || "they/them";
+}
+
+// Deterministic post-generation warnings shown on the result card: a wrong-gender
+// pronoun, or a prompting/redirection level/type the session set that a pass
+// dropped from the note. Each entry is a full message; empty array = clean.
+function noteWarnings(final: string, pronouns: string, st: StudentState): string[] {
+  const out: string[] = [];
+  const pron = pronounMismatches(final, pronouns);
+  if (pron.length > 0) {
+    out.push(
+      `Possible pronoun mismatch — found ${pron.map((w) => `"${w}"`).join(", ")}; verify against this student's pronouns and regenerate if wrong.`,
+    );
+  }
+  const terms = st.regular.flatMap((a) => [...a.promptingLevel, ...a.promptingType, ...a.redirection]);
+  const missing = missingSupportTerms(final, terms);
+  if (missing.length > 0) {
+    out.push(
+      `Note may be missing prompting/redirection the session set: ${missing.map((w) => `"${w}"`).join(", ")} — check it didn't get dropped.`,
+    );
+  }
+  return out;
 }
 
 function buildContext(

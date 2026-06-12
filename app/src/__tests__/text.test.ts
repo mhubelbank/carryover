@@ -5,6 +5,7 @@ import {
   dropSelfCorrection,
   splitConcessive,
   streamlineLostClinicalDetail,
+  missingSupportTerms,
 } from "../domain/text";
 
 describe("normalizeAcronyms", () => {
@@ -94,5 +95,17 @@ describe("streamlineLostClinicalDetail", () => {
     const combined = "He sorted cards given minimal verbal and visual prompting.";
     expect(streamlineLostClinicalDetail(before, combined)).toBe(false);
     expect(streamlineLostClinicalDetail(review, review)).toBe(false);
+  });
+});
+
+describe("missingSupportTerms", () => {
+  it("flags a level/type the session set but the note omits", () => {
+    const note = "Imane chose the segment given visual prompting and redirection to task.";
+    expect(missingSupportTerms(note, ["significant", "visual", "occasional"])).toEqual(["significant", "occasional"]);
+  });
+
+  it("returns nothing when all terms are present, and ignores 'no'", () => {
+    const note = "He answered given significant visual prompting and occasional redirection to task.";
+    expect(missingSupportTerms(note, ["significant", "visual", "occasional", "no"])).toEqual([]);
   });
 });

@@ -10,6 +10,16 @@ export function normalizeAcronyms(text: string): string {
   return text.replace(ACRONYM_RE, (m) => m.toUpperCase());
 }
 
+// Support terms (prompting levels/types and redirection levels) the session
+// specified that don't appear in the final note — i.e. a pass dropped them. "no"
+// levels are skipped (a note legitimately omits "no prompting"). A warning, not a
+// fix: these are exact session facts, so a missing one means clinical data was lost.
+export function missingSupportTerms(note: string, terms: string[]): string[] {
+  const lower = note.toLowerCase();
+  const wanted = [...new Set(terms.map((t) => t.trim().toLowerCase()).filter((t) => t && t !== "no"))];
+  return wanted.filter((t) => !new RegExp(`\\b${t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(lower));
+}
+
 // True when the streamline pass dropped clinical detail the review pass had — a
 // "redirection to task" clause vanished, or all prompting disappeared. The
 // streamline is only meant to lightly clean prose, so a lost clause is a
