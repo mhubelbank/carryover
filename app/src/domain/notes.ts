@@ -384,9 +384,15 @@ export async function generateNote(
 
   let draftPrompt = renderTemplate(prompts.draft, ctx);
   const appends: string[] = [];
-  if (opts.feedbackRules?.trim()) {
-    appends.push(`Additional rules from prior feedback:\n${opts.feedbackRules.trim()}`);
-  }
+  // Her feedback — one-off corrections from "regenerate with feedback" (including
+  // the quick-fix chips) plus the accumulated feedback-rules.md — is applied to
+  // BOTH the draft (so it's written in) and the review (so it's enforced when the
+  // draft doesn't fully comply). The streamline pass stays untouched; it only
+  // lightly cleans, and shouldn't be handed correction instructions.
+  const feedbackAppend = opts.feedbackRules?.trim()
+    ? `Apply these corrections from the clinician's feedback — they take priority where they conflict with the defaults:\n${opts.feedbackRules.trim()}`
+    : "";
+  if (feedbackAppend) appends.push(feedbackAppend);
   if (opts.goldenExamples?.trim()) {
     appends.push(
       "Below are example notes whose style and structure to follow. Use the SAME structure and " +
@@ -409,7 +415,7 @@ export async function generateNote(
     provider,
     model,
     maxTokens,
-    renderTemplate(prompts.review, { ...ctx, draftNote: draft }),
+    renderTemplate(prompts.review, { ...ctx, draftNote: draft }) + (feedbackAppend ? `\n\n${feedbackAppend}` : ""),
   );
 
   opts.onPhase?.("streamline");

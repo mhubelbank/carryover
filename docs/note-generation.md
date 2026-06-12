@@ -72,3 +72,27 @@ Both fall out of "vary by the calendar, not the content":
 Three variants is the minimum that guarantees a week differs from the previous
 **two** before repeating — the "previous two weeks" window the clinician wanted —
 with zero storage and full determinism (same date → same variant).
+
+## Regenerating with feedback
+
+A first-pass note is rarely perfect, so any note can be regenerated with a
+correction — and one flow handles both a one-off fix and a standing house rule.
+
+- **Free-text feedback** — the clinician types what's wrong in the regenerate
+  dialog ("don't say he used specific phrases — I didn't write that").
+- **Quick-fix chips** — one-click canned corrections (*Too long*, *Sounds robotic*,
+  *Made up details*, *Wrong tone*) that append their phrasing to the same feedback
+  box, so they travel the identical path as typed feedback.
+- **Save as a rule** — optionally persist the correction to
+  `data/prompts/feedback-rules.md`, after which it applies to **every** future note,
+  not just this regeneration.
+
+**Where the feedback lands.** Both the one-off text and the accumulated
+`feedback-rules.md` are injected into **two** passes — the **draft** (so the
+correction is written in from the start) and the **review** (so it's *enforced* when
+the draft doesn't fully comply). The **streamline** pass is deliberately excluded:
+it's a conservative final clean-up, and handing it correction instructions is what
+made it over-edit and drop clinical detail. There is **no per-type routing** —
+"sounds robotic" and "don't invent details" follow the same draft+review path. The
+two passes cover the two jobs (write it in, then enforce it), which is more reliable
+than trying to classify feedback and guess which single pass should own it.
