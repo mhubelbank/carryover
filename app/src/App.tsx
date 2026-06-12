@@ -125,6 +125,13 @@ function Pages() {
     }
   }, []);
 
+  // Navigation used by the tutorial as it tabs through pages — replaceState rather
+  // than pushState so stepping the tour doesn't litter the Back history.
+  const tourNavigate = useCallback((p: NavPage) => {
+    setPage(p);
+    window.history.replaceState({ page: p }, "", pathForPage(p));
+  }, []);
+
   // All navigation goes through `nav`/`pushPage` so an editor with unsaved changes
   // can prompt before the page switches out from under it (the SaveBar's mount
   // state drives the guard; see useUnsavedGuard).
@@ -247,7 +254,7 @@ function Pages() {
       {tourActive && (
         <TutorialOverlay
           currentPage={page}
-          nav={nav}
+          nav={tourNavigate}
           onFinish={() => {
             stopTour();
             markTutorialDone();
