@@ -184,53 +184,14 @@ function StudentsList({
         }}
       >
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 500, margin: "0 0 12px 0" }}>People</h1>
-          <PeopleToggle current="students" onNavigate={onNavigate} />
-          <p style={{ margin: "8px 0 0 0", color: "var(--color-text-secondary)", fontSize: 14 }}>
+          <h1 style={{ fontSize: 22, fontWeight: 500, margin: 0 }}>People</h1>
+          <p style={{ margin: "4px 0 0 0", color: "var(--color-text-secondary)", fontSize: 14 }}>
             {pool.length} {archivedView ? "archived" : "active"} student
             {pool.length === 1 ? "" : "s"} across {data.teachers.length} teacher
             {data.teachers.length === 1 ? "" : "s"}
           </p>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <div
-            style={{
-              display: "inline-flex",
-              border: "0.5px solid var(--color-border-secondary)",
-              borderRadius: "var(--border-radius-md)",
-              overflow: "hidden",
-            }}
-          >
-            <button
-              className="button button--small"
-              onClick={() => setArchivedView(false)}
-              style={{
-                border: "none",
-                borderRadius: 0,
-                background: !archivedView ? "var(--color-background-secondary)" : "transparent",
-              }}
-            >
-              Active
-            </button>
-            <button
-              className="button button--small"
-              onClick={() => setArchivedView(true)}
-              style={{
-                border: "none",
-                borderRadius: 0,
-                background: archivedView ? "var(--color-background-secondary)" : "transparent",
-              }}
-            >
-              Archived
-            </button>
-          </div>
-          {!archivedView && (
-            <button className="button button--small" onClick={onAdd}>
-              <Icon name="plus" size={14} />
-              Add student
-            </button>
-          )}
-        </div>
+        <PeopleToggle current="students" onNavigate={onNavigate} />
       </div>
 
       {departed.length > 0 && (
@@ -259,7 +220,7 @@ function StudentsList({
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 8, marginBottom: "1rem" }}>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: "1rem" }}>
         <div style={{ flex: 1, position: "relative" }}>
           <span
             style={{
@@ -294,6 +255,43 @@ function StudentsList({
             </option>
           ))}
         </select>
+        <div
+          style={{
+            display: "inline-flex",
+            border: "0.5px solid var(--color-border-secondary)",
+            borderRadius: "var(--border-radius-md)",
+            overflow: "hidden",
+          }}
+        >
+          <button
+            className="button button--small"
+            onClick={() => setArchivedView(false)}
+            style={{
+              border: "none",
+              borderRadius: 0,
+              background: !archivedView ? "var(--color-background-secondary)" : "transparent",
+            }}
+          >
+            Active
+          </button>
+          <button
+            className="button button--small"
+            onClick={() => setArchivedView(true)}
+            style={{
+              border: "none",
+              borderRadius: 0,
+              background: archivedView ? "var(--color-background-secondary)" : "transparent",
+            }}
+          >
+            Archived
+          </button>
+        </div>
+        {!archivedView && (
+          <button className="button button--small" onClick={onAdd} style={{ whiteSpace: "nowrap" }}>
+            <Icon name="plus" size={14} />
+            Add student
+          </button>
+        )}
       </div>
 
       <div

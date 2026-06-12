@@ -114,51 +114,52 @@ function TeacherList({
         }}
       >
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 500, margin: "0 0 12px 0" }}>People</h1>
-          <PeopleToggle current="teachers" onNavigate={onNavigate} />
-          <p style={{ margin: "8px 0 0 0", color: "var(--color-text-secondary)", fontSize: 14 }}>
+          <h1 style={{ fontSize: 22, fontWeight: 500, margin: 0 }}>People</h1>
+          <p style={{ margin: "4px 0 0 0", color: "var(--color-text-secondary)", fontSize: 14 }}>
             {pool.length} {archivedView ? "archived" : "active"} teacher{pool.length === 1 ? "" : "s"}
           </p>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <div
+        <PeopleToggle current="teachers" onNavigate={onNavigate} />
+      </div>
+
+      <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "flex-end", marginBottom: "1rem" }}>
+        <div
+          style={{
+            display: "inline-flex",
+            border: "0.5px solid var(--color-border-secondary)",
+            borderRadius: "var(--border-radius-md)",
+            overflow: "hidden",
+          }}
+        >
+          <button
+            className="button button--small"
+            onClick={() => setArchivedView(false)}
             style={{
-              display: "inline-flex",
-              border: "0.5px solid var(--color-border-secondary)",
-              borderRadius: "var(--border-radius-md)",
-              overflow: "hidden",
+              border: "none",
+              borderRadius: 0,
+              background: !archivedView ? "var(--color-background-secondary)" : "transparent",
             }}
           >
-            <button
-              className="button button--small"
-              onClick={() => setArchivedView(false)}
-              style={{
-                border: "none",
-                borderRadius: 0,
-                background: !archivedView ? "var(--color-background-secondary)" : "transparent",
-              }}
-            >
-              Active
-            </button>
-            <button
-              className="button button--small"
-              onClick={() => setArchivedView(true)}
-              style={{
-                border: "none",
-                borderRadius: 0,
-                background: archivedView ? "var(--color-background-secondary)" : "transparent",
-              }}
-            >
-              Archived
-            </button>
-          </div>
-          {!archivedView && (
-            <button className="button button--small" onClick={onAdd}>
-              <Icon name="plus" size={14} />
-              Add teacher
-            </button>
-          )}
+            Active
+          </button>
+          <button
+            className="button button--small"
+            onClick={() => setArchivedView(true)}
+            style={{
+              border: "none",
+              borderRadius: 0,
+              background: archivedView ? "var(--color-background-secondary)" : "transparent",
+            }}
+          >
+            Archived
+          </button>
         </div>
+        {!archivedView && (
+          <button className="button button--small" onClick={onAdd} style={{ whiteSpace: "nowrap" }}>
+            <Icon name="plus" size={14} />
+            Add teacher
+          </button>
+        )}
       </div>
 
       <div
