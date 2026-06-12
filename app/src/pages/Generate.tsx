@@ -2680,6 +2680,31 @@ function CheckGroup({
 // Results view
 // ---------------------------------------------------------------------------
 
+// Copy-to-clipboard button that flips to "Copied ✓" for a moment as confirmation.
+function CopyButton({ text, label, disabled }: { text: string; label: string; disabled?: boolean }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      className="button button--small"
+      disabled={disabled}
+      style={{ whiteSpace: "nowrap" }}
+      onClick={() => {
+        void navigator.clipboard.writeText(text);
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1500);
+      }}
+    >
+      {copied ? (
+        <>
+          <Icon name="check" size={13} /> Copied
+        </>
+      ) : (
+        label
+      )}
+    </button>
+  );
+}
+
 function ResultsView({
   date,
   timeSlot,
@@ -2753,12 +2778,7 @@ function ResultsView({
           <h3 className="card__title" style={{ margin: 0 }}>
             All notes
           </h3>
-          <button
-            className="button button--small"
-            onClick={() => navigator.clipboard.writeText(allNotes)}
-          >
-            <Icon name="check" size={13} /> Copy all
-          </button>
+          <CopyButton text={allNotes} label="Copy all" />
         </div>
         <textarea
           className="input"
@@ -2822,13 +2842,7 @@ function ResultsView({
               {r.name}
             </span>
             <div style={{ display: "flex", gap: 6 }}>
-              <button
-                className="button button--small"
-                onClick={() => navigator.clipboard.writeText(r.result?.final ?? "")}
-                disabled={!r.result}
-              >
-                Copy
-              </button>
+              <CopyButton text={r.result?.final ?? ""} label="Copy" disabled={!r.result} />
               {!r.absent && (
                 <>
                   <button
