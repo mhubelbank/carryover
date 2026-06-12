@@ -13,46 +13,81 @@ export interface TourStep {
 }
 
 export const TOUR_STEPS: TourStep[] = [
+  // --- Overview: a quick left-to-right pass over the nav bar (stays on Today) ---
   {
     key: "intro",
     page: "today",
     title: "Welcome to Carryover",
-    body: "Here's a quick tour of where everything lives. You can skip anytime, and replay it later from Settings.",
+    body: "Let's take a quick tour. First the lay of the land, then we'll step into each part. You can skip anytime and replay it later from Settings.",
   },
   {
-    key: "today",
+    key: "ov-today",
     page: "today",
     target: "nav-today",
     title: "Today",
-    body: "Your home base — view the students you're seeing today and jump straight into their notes.",
+    body: "Your daily home base — the students you're seeing today, ready to write up.",
   },
   {
-    key: "generate",
-    page: "generate",
+    key: "ov-generate",
+    page: "today",
     target: "nav-generate",
-    title: "Generate notes",
-    body: "Write session notes here: pick a student, capture what happened, and the assistant drafts a clean clinical note you can refine.",
+    title: "Generate",
+    body: "Where you write session notes with the assistant.",
   },
   {
-    key: "people",
-    page: "students",
-    target: "nav-students",
-    title: "People",
-    body: "Your students and teacher tables live here.",
-  },
-  {
-    key: "schedule",
-    page: "schedule",
+    key: "ov-schedule",
+    page: "today",
     target: "nav-schedule",
     title: "Schedule",
-    body: "Your weekly schedule — who you see and when. Notes you've generated get checked off here.",
+    body: "Your weekly plan of who you see and when.",
   },
   {
-    // No page: the overlay doesn't render on the Settings page (it's a special
-    // early-return), so stay on Schedule and just spotlight the gear.
-    key: "settings",
+    key: "ov-people",
+    page: "today",
+    target: "nav-students",
+    title: "People",
+    body: "Your students and teachers.",
+  },
+  {
+    key: "ov-settings",
+    page: "today",
     target: "nav-settings",
     title: "Settings",
-    body: "Your keys, the AI model, data export, and appearance — and you can replay this tour anytime from here.",
+    body: "Keys, the AI model, data export, and appearance.",
+  },
+  // --- Deep dive: into each page, left to right ---
+  {
+    key: "deep-today",
+    page: "today",
+    target: "today-date",
+    title: "Today, in depth",
+    body: "This is the day you're viewing — use the arrows to move between days. Each student you're seeing is listed below, with a button to start their note.",
+  },
+  {
+    key: "deep-generate",
+    page: "generate",
+    target: "generate-picker",
+    title: "Generating a note",
+    body: "Pick the date, teacher, and time slot to load a session. Then capture what happened — activities, trials, prompting — and generate a clean clinical note you can refine.",
+  },
+  {
+    key: "deep-schedule",
+    page: "schedule",
+    target: "schedule-mode",
+    title: "Your schedule",
+    body: "Keep a 'usual' weekly template, or switch to a specific week to customize just that one. Notes you've generated get checked off here.",
+  },
+  {
+    key: "deep-people",
+    page: "students",
+    target: "people-toggle",
+    title: "Students & teachers",
+    body: "Toggle between Students and Teachers. Search, add, and archive from the controls beside each table.",
+  },
+  {
+    key: "outro",
+    page: "students",
+    title: "You're all set",
+    body: "That's the tour! Replay it anytime from Settings → Tutorial.",
   },
 ];

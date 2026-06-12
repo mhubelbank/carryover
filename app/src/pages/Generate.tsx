@@ -1066,6 +1066,7 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
           Deep-linking from Today pre-fills date/teacher/slot. A top accent in the
           teacher's color ties the screen to them, mirroring Today's session cards. */}
       <div
+        data-tour="generate-picker"
         className="card"
         style={{
           marginBottom: "1rem",

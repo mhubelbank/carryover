@@ -290,6 +290,7 @@ export function Schedule({ onNavigate, onOpenStudent }: Props) {
         }}
       >
         <div
+          data-tour="schedule-mode"
           style={{
             display: "inline-flex",
             border: "0.5px solid var(--color-border-secondary)",

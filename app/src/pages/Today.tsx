@@ -201,7 +201,9 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate, on
         }}
       >
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 500, margin: 0 }}>{formatLong(selected)}</h1>
+          <h1 data-tour="today-date" style={{ fontSize: 22, fontWeight: 500, margin: 0 }}>
+            {formatLong(selected)}
+          </h1>
           <p style={{ margin: "4px 0 0 0", color: "var(--color-text-secondary)", fontSize: 14 }}>
             {sessions.length} session{sessions.length === 1 ? "" : "s"} · {studentCount} student
             {studentCount === 1 ? "" : "s"}

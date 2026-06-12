@@ -16,6 +16,7 @@ export function PeopleToggle({
   ];
   return (
     <div
+      data-tour="people-toggle"
       role="group"
       aria-label="People"
       style={{
