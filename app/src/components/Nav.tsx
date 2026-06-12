@@ -47,6 +47,7 @@ export function Nav({ current, onNavigate }: NavProps) {
           return (
             <button
               key={tab.id}
+              data-tour={`nav-${tab.id}`}
               className="button button--ghost"
               onClick={() => onNavigate(tab.id)}
               style={{
@@ -64,6 +65,7 @@ export function Nav({ current, onNavigate }: NavProps) {
         })}
       </div>
       <button
+        data-tour="nav-settings"
         className="button button--ghost"
         onClick={() => onNavigate("settings")}
         title="Settings"

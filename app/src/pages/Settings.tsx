@@ -19,6 +19,7 @@ import { storage, StorageKeys } from "../clients/storage";
 import { getModelChoiceId, setModelChoiceId } from "../clients/modelPref";
 import { REPO_CONFIG, useAuth } from "../context/AuthContext";
 import { useTerm } from "../context/TermContext";
+import { useTutorial } from "../context/TutorialContext";
 import { loadFeedbackRules, loadGoldenExamples } from "../domain/data";
 import { loadPromptSet } from "../domain/notes";
 import { triggerDownload, downloadText, zipStore } from "../clients/download";
@@ -54,6 +55,7 @@ export function Settings({ onNavigate, onStartNewTerm }: SettingsProps) {
       <KeysSection />
       <ExportSection />
       <AppearanceSection />
+      <HelpSection onNavigate={onNavigate} />
       <DiagnosticsSection />
       <ResetSection onSignOut={signOut} onTestMode={enterTestMode} />
     </div>
@@ -837,6 +839,31 @@ function ExportSection() {
           {notesMsg}
         </p>
       )}
+    </div>
+  );
+}
+
+// Replay the guided tour. Starting it navigates to Today (the tour highlights the
+// nav bar) so the user sees the first step in context.
+function HelpSection({ onNavigate }: { onNavigate: (page: NavPage) => void }) {
+  const { start } = useTutorial();
+  return (
+    <div className="card" style={{ marginBottom: "1rem" }}>
+      <h3 className="card__title">Tutorial</h3>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14 }}>
+        <p style={{ flex: 1, fontSize: 13, color: "var(--color-text-secondary)", margin: 0 }}>
+          Take the guided tour of the app again.
+        </p>
+        <button
+          className="button button--small"
+          onClick={() => {
+            start();
+            onNavigate("today");
+          }}
+        >
+          Replay tutorial
+        </button>
+      </div>
     </div>
   );
 }

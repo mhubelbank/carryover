@@ -1,9 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { confirmNavAway } from "./hooks/useUnsavedGuard";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { TermProvider, useTerm } from "./context/TermContext";
+import { TutorialProvider, useTutorial } from "./context/TutorialContext";
 import { Banner } from "./components/Banner";
 import { ErrorToaster } from "./components/ErrorToaster";
+import { TutorialOverlay } from "./components/Tutorial/TutorialOverlay";
+import { isTutorialDone, markTutorialDone } from "./clients/tutorial";
 import { Nav, type NavPage } from "./components/Nav";
 import { storage, StorageKeys } from "./clients/storage";
 import { Welcome } from "./pages/Welcome";
@@ -62,6 +65,19 @@ function Pages() {
   // Settings with existing data). The empty/first-run case renders it directly.
   const [newTerm, setNewTerm] = useState(false);
   const { state } = useTerm();
+  const { active: tourActive, start: startTour, stop: stopTour } = useTutorial();
+
+  // Auto-start the guided tour once, the first time real data is loaded — so a
+  // brand-new user sees it after the new-term wizard (not over an empty app), and
+  // a demo/seeded user sees it immediately.
+  const tourAutoStarted = useRef(false);
+  useEffect(() => {
+    if (tourAutoStarted.current) return;
+    if (state.status === "ready" && !isTutorialDone()) {
+      tourAutoStarted.current = true;
+      startTour();
+    }
+  }, [state.status, startTour]);
 
   // Reset scroll to top when the page changes — it's a single document, so the
   // window scroll otherwise carries over between screens.
@@ -180,17 +196,15 @@ function Pages() {
   }
   if (state.status === "empty") return <NewTermWizard onNavigate={nav} />;
 
+  let content: ReactNode;
   switch (page) {
     case "students":
-      return (
-        <Students
-          onNavigate={nav}
-          target={studentTarget}
-          onTargetConsumed={clearStudentTarget}
-        />
+      content = (
+        <Students onNavigate={nav} target={studentTarget} onTargetConsumed={clearStudentTarget} />
       );
+      break;
     case "teachers":
-      return (
+      content = (
         <Teachers
           onNavigate={nav}
           openTeacherId={openTeacherId}
@@ -198,12 +212,15 @@ function Pages() {
           onOpenStudent={openStudent}
         />
       );
+      break;
     case "activities":
-      return <Activities onNavigate={nav} onOpenStudent={openStudent} />;
+      content = <Activities onNavigate={nav} onOpenStudent={openStudent} />;
+      break;
     case "schedule":
-      return <Schedule onNavigate={nav} onOpenStudent={openStudent} />;
+      content = <Schedule onNavigate={nav} onOpenStudent={openStudent} />;
+      break;
     case "generate":
-      return (
+      content = (
         <Generate
           onNavigate={nav}
           target={generateTarget}
@@ -211,8 +228,9 @@ function Pages() {
           onReviewIep={(id) => openStudent(id, "iep-review")}
         />
       );
+      break;
     default:
-      return (
+      content = (
         <Today
           onNavigate={nav}
           onOpenStudent={openStudent}
@@ -222,6 +240,22 @@ function Pages() {
         />
       );
   }
+
+  return (
+    <>
+      {content}
+      {tourActive && (
+        <TutorialOverlay
+          currentPage={page}
+          nav={nav}
+          onFinish={() => {
+            stopTour();
+            markTutorialDone();
+          }}
+        />
+      )}
+    </>
+  );
 }
 
 function StatusScreen({
@@ -246,8 +280,10 @@ function StatusScreen({
 export function App() {
   return (
     <AuthProvider>
-      <Router />
-      <ErrorToaster />
+      <TutorialProvider>
+        <Router />
+        <ErrorToaster />
+      </TutorialProvider>
     </AuthProvider>
   );
 }

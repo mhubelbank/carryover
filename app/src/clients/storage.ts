@@ -33,4 +33,5 @@ export const StorageKeys = {
   theme: "theme",
   page: "page",
   errorLog: "error_log",
+  tutorialDone: "tutorial_done",
 } as const;
