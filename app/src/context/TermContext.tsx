@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { GitHubClient, type DataClient } from "../clients/github";
+import { GitHubClient, GitHubError, type DataClient } from "../clients/github";
 import { LocalFsClient } from "../clients/localFsClient";
 import { seedDemoFs } from "../demo/seed";
 import {
@@ -159,7 +159,14 @@ export function TermProvider({ children }: { children: ReactNode }) {
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        const message = err instanceof Error ? err.message : "Failed to load data";
+        // An expired/invalid GitHub token reads as 401 — surface a clear renewal
+        // message (graceful expiry) instead of the raw "Bad credentials".
+        const expired = err instanceof GitHubError && err.status === 401;
+        const message = expired
+          ? "Your GitHub access token has expired or is invalid. Open Settings → Keys and paste a new one to reconnect."
+          : err instanceof Error
+            ? err.message
+            : "Failed to load data";
         setState({ status: "error", message });
       });
     return () => {

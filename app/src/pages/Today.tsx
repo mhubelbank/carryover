@@ -3,6 +3,8 @@ import { Banner } from "../components/Banner";
 import { Icon } from "../components/Icon";
 import { Nav, type NavPage } from "../components/Nav";
 import { useTerm } from "../context/TermContext";
+import { useAuth } from "../context/AuthContext";
+import { isTokenRenewalDue } from "../domain/tokenRenewal";
 import { daysBetween, formatLong, formatShort, mondayOf, parseDate, startOfDay, stepWeekday, toISODate, toWeekday, weekdayName } from "../domain/dates";
 import { loadSessions, loadWeekSchedule } from "../domain/data";
 import { slotStartMinutes, type ScheduleEntry } from "../domain/schedule";
@@ -116,6 +118,8 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate, on
     weekSchedule !== null && !(templateCells.get(`${teacherId}|${timeSlot}`)?.has(studentId) ?? false);
 
   const now = startOfDay(new Date());
+  const { githubTokenSavedOn, demoMode } = useAuth();
+  const tokenRenewalDue = !demoMode && isTokenRenewalDue(githubTokenSavedOn, now);
 
   // Overdue is relative to the real current date (a standing reminder on any day
   // you preview). "Tomorrow" is relative to the PREVIEWED day, so it shows only
@@ -223,6 +227,20 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate, on
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: "1.25rem" }}>
+        {tokenRenewalDue && (
+          <Banner
+            variant="warning"
+            icon="alert-circle"
+            action={
+              <button className="button button--small" onClick={() => onNavigate("settings")}>
+                Update token →
+              </button>
+            }
+          >
+            Time for your yearly access-token renewal. Ask Mara for a new token, or make your own,
+            then paste it in Settings → Keys.
+          </Banner>
+        )}
         {autoArchiveNotice && (
           <Banner
             variant="info"

@@ -37,7 +37,12 @@ interface AuthContextValue {
   demoMode: boolean;
   enterDemoMode: () => void;
   exitDemoMode: () => void;
+  // ISO date the GitHub token was last saved, for the annual renewal reminder.
+  // Null if unknown (set before this was tracked) or signed out.
+  githubTokenSavedOn: string | null;
 }
+
+const todayISO = () => new Date().toISOString().slice(0, 10);
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
@@ -52,6 +57,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [keys, setKeys] = useState<Keys | null>(() => loadKeys());
   const [testMode, setTestMode] = useState(false);
   const [demoMode, setDemoMode] = useState(() => storage.get(StorageKeys.demoMode) === "1");
+  const [githubTokenSavedOn, setGithubTokenSavedOn] = useState<string | null>(() =>
+    storage.get(StorageKeys.githubTokenSavedOn),
+  );
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -60,6 +68,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         storage.set(StorageKeys.anthropicApiKey, newKeys.anthropicApiKey);
         storage.set(StorageKeys.openaiApiKey, newKeys.openaiApiKey);
         storage.set(StorageKeys.githubToken, newKeys.githubToken);
+        const savedOn = todayISO();
+        storage.set(StorageKeys.githubTokenSavedOn, savedOn);
+        setGithubTokenSavedOn(savedOn);
         setKeys(newKeys);
       },
       updateKeys: (partial) => {
@@ -74,6 +85,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         if (partial.githubToken !== undefined) {
           storage.set(StorageKeys.githubToken, next.githubToken);
+          const savedOn = todayISO();
+          storage.set(StorageKeys.githubTokenSavedOn, savedOn);
+          setGithubTokenSavedOn(savedOn);
         }
         setKeys(next);
       },
@@ -85,6 +99,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         void clearNotes().catch(() => {});
         setKeys(null);
         setTestMode(false);
+        setGithubTokenSavedOn(null);
       },
       testMode,
       enterTestMode: () => setTestMode(true),
@@ -99,8 +114,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         void clearNotes().catch(() => {});
         setDemoMode(false);
       },
+      githubTokenSavedOn,
     }),
-    [keys, testMode, demoMode],
+    [keys, testMode, demoMode, githubTokenSavedOn],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

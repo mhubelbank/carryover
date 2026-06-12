@@ -36,4 +36,5 @@ export const StorageKeys = {
   tutorialDone: "tutorial_done",
   demoMode: "demo_mode",
   demoFs: "demo_fs",
+  githubTokenSavedOn: "github_token_saved_on",
 } as const;
