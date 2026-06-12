@@ -14,12 +14,14 @@ interface NavProps {
   onNavigate: (page: NavPage) => void;
 }
 
+// Students and Teachers share one "People" tab (the tab navigates to Students, the
+// default; a toggle on the page flips to Teachers). The tab stays highlighted on
+// both underlying pages.
 const TABS: Array<{ id: Exclude<NavPage, "settings">; label: string }> = [
   { id: "today", label: "Today" },
   { id: "generate", label: "Generate" },
   { id: "schedule", label: "Schedule" },
-  { id: "students", label: "Students" },
-  { id: "teachers", label: "Teachers" },
+  { id: "students", label: "People" },
 ];
 
 export function Nav({ current, onNavigate }: NavProps) {
@@ -40,7 +42,8 @@ export function Nav({ current, onNavigate }: NavProps) {
       </div>
       <div style={{ display: "flex", gap: 4, flex: 1 }}>
         {TABS.map((tab) => {
-          const active = tab.id === current;
+          // "People" (the Students tab) stays active on the Teachers page too.
+          const active = tab.id === current || (tab.id === "students" && current === "teachers");
           return (
             <button
               key={tab.id}

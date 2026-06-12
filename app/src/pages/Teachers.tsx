@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Icon } from "../components/Icon";
 import { Nav, type NavPage } from "../components/Nav";
+import { PeopleToggle } from "../components/PeopleToggle";
 import { SaveBar } from "../components/SaveBar";
 import { useTerm } from "../context/TermContext";
 import {
@@ -113,8 +114,8 @@ function TeacherList({
         }}
       >
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 500, margin: 0 }}>Teachers</h1>
-          <p style={{ margin: "4px 0 0 0", color: "var(--color-text-secondary)", fontSize: 14 }}>
+          <PeopleToggle current="teachers" onNavigate={onNavigate} />
+          <p style={{ margin: "8px 0 0 0", color: "var(--color-text-secondary)", fontSize: 14 }}>
             {pool.length} {archivedView ? "archived" : "active"} teacher{pool.length === 1 ? "" : "s"}
           </p>
         </div>

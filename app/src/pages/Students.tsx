@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Icon } from "../components/Icon";
 import { Nav, type NavPage } from "../components/Nav";
+import { PeopleToggle } from "../components/PeopleToggle";
 import { SaveBar } from "../components/SaveBar";
 import { confirmNavAway } from "../hooks/useUnsavedGuard";
 import { useTerm } from "../context/TermContext";
@@ -183,8 +184,8 @@ function StudentsList({
         }}
       >
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 500, margin: 0 }}>Students</h1>
-          <p style={{ margin: "4px 0 0 0", color: "var(--color-text-secondary)", fontSize: 14 }}>
+          <PeopleToggle current="students" onNavigate={onNavigate} />
+          <p style={{ margin: "8px 0 0 0", color: "var(--color-text-secondary)", fontSize: 14 }}>
             {pool.length} {archivedView ? "archived" : "active"} student
             {pool.length === 1 ? "" : "s"} across {data.teachers.length} teacher
             {data.teachers.length === 1 ? "" : "s"}
