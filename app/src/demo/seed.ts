@@ -16,13 +16,16 @@ import {
   writeTerm,
   writeTermHistory,
 } from "../domain/data";
+import { writeSessionMetadata } from "../domain/data";
 import { RESERVED_OTHER_ID } from "../domain/activity";
+import { addDays, parseDate, toISODate } from "../domain/dates";
 import type { Student } from "../domain/student";
 import type { Teacher, Activity, Role } from "../domain/teacher";
 import type { Goal } from "../domain/goal";
 import type { ScheduleEntry, Weekday } from "../domain/schedule";
 import type { StudentField } from "../domain/studentField";
 import type { Term } from "../domain/term";
+import type { SessionMetadata } from "../domain/session";
 
 const TERM: Term = {
   termType: "school-year",
@@ -189,6 +192,52 @@ const SCHEDULE: ScheduleEntry[] = [
   sched("t_001", "Friday", SLOT_B, "s_001"),
 ];
 
+// Weekly sessions with a rising accuracy/independence trend, so the Progress view
+// has data to chart. Dates are a fixed series of Mondays (plotted chronologically,
+// regardless of when the demo is viewed).
+const WEEK0 = parseDate("2026-03-02")!;
+function weekDate(i: number): string {
+  return toISODate(addDays(WEEK0, i * 7));
+}
+function progressSessions(studentId: string, teacherId: string, goal: Goal): SessionMetadata[] {
+  return Array.from({ length: 8 }, (_, i) => {
+    const total = 10;
+    const noSupport = Math.min(2 + i, 9); // independence climbs over the weeks
+    const successful = Math.min(6 + i, total); // accuracy climbs too
+    const minimal = Math.max(0, successful - noSupport);
+    return {
+      date: weekDate(i),
+      teacherId,
+      students: [
+        {
+          studentId,
+          goalIds: [goal.id],
+          mode: "regular",
+          trials: [
+            {
+              goalId: goal.id,
+              verb: goal.measuredVerb,
+              noun: goal.measuredNoun,
+              total: String(total),
+              rows: [
+                { level: "no support", types: [], count: String(noSupport) },
+                { level: "minimal", types: ["verbal"], count: String(minimal) },
+              ],
+              failed: "",
+            },
+          ],
+        },
+      ],
+    };
+  });
+}
+
+const SESSIONS: SessionMetadata[] = [
+  ...progressSessions("s_001", "t_001", GOALS[0]!), // Maya — WH questions
+  ...progressSessions("s_005", "t_003", GOALS[5]!), // Sofia — /s/ blends
+  ...progressSessions("s_003", "t_002", GOALS[3]!), // Aisha — requesting
+];
+
 async function writeSeed(client: DataClient): Promise<void> {
   await writeStudentFields(client, STUDENT_FIELDS, undefined);
   await writeActivities(client, ACTIVITIES, undefined);
@@ -199,6 +248,7 @@ async function writeSeed(client: DataClient): Promise<void> {
   await writeSchedule(client, SCHEDULE, undefined);
   await writeTerm(client, TERM, undefined);
   await writeTermHistory(client, [], undefined);
+  for (const session of SESSIONS) await writeSessionMetadata(client, session, undefined);
 }
 
 // Seed the sandbox only if it's empty (idempotent — preserves a visitor's edits
