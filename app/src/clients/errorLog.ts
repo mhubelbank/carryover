@@ -1,0 +1,127 @@
+// Client-side error & crash capture. The app is a BYOK single-page app served as
+// static assets (no backend), so there is nowhere to *send* a crash report and no
+// third party we want student data flowing to. Instead we keep a small local ring
+// buffer of recent errors in localStorage, scrubbed of anything secret, and surface
+// it in Settings → Diagnostics so the clinician can copy a report when something
+// breaks. Nothing here ever leaves the device on its own.
+import { storage, StorageKeys } from "./storage";
+
+export interface ErrorReport {
+  at: string; // ISO timestamp
+  kind: "render" | "error" | "unhandledrejection";
+  name: string;
+  message: string;
+  stack?: string;
+  componentStack?: string; // React component stack (render crashes only)
+  url: string; // pathname only — never the query string
+  appVersion: string;
+  userAgent: string;
+}
+
+const MAX = 25; // keep only the most recent N; a crash loop shouldn't grow forever
+
+// Redact things that must never sit in a stored report even though the report
+// stays on-device: API keys / tokens (Anthropic sk-ant-…, OpenAI sk-…, GitHub
+// ghp_/gho_/…, generic Bearer …) and any long opaque secret-looking run. Names and
+// note text are out of scope — those already live on this device (note cache,
+// roster) and the log is never auto-transmitted; the redaction here is specifically
+// to keep credentials out of a report the clinician might paste somewhere.
+const SECRET_PATTERNS: RegExp[] = [
+  /\bsk-ant-[A-Za-z0-9_-]{8,}/g,
+  /\bsk-[A-Za-z0-9_-]{16,}/g,
+  /\bgh[posru]_[A-Za-z0-9]{16,}/g,
+  /\bBearer\s+[A-Za-z0-9._-]{12,}/gi,
+  /\b[A-Za-z0-9_-]{40,}\b/g, // catch-all for long opaque tokens
+];
+
+export function scrubSecrets(text: string): string {
+  let out = text;
+  for (const re of SECRET_PATTERNS) out = out.replace(re, "[redacted]");
+  return out;
+}
+
+function read(): ErrorReport[] {
+  try {
+    const raw = storage.get(StorageKeys.errorLog);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as ErrorReport[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function getErrorLog(): ErrorReport[] {
+  return read();
+}
+
+export function clearErrorLog(): void {
+  storage.remove(StorageKeys.errorLog);
+}
+
+// Build a scrubbed report and prepend it to the ring buffer. Wrapped so a failure
+// in logging can never itself crash the app (or recurse through the handlers).
+export function recordError(input: {
+  kind: ErrorReport["kind"];
+  error: unknown;
+  componentStack?: string;
+}): void {
+  try {
+    const err = input.error;
+    const name = err instanceof Error ? err.name : typeof err;
+    const rawMessage = err instanceof Error ? err.message : String(err);
+    const rawStack = err instanceof Error ? err.stack : undefined;
+    const report: ErrorReport = {
+      at: new Date().toISOString(),
+      kind: input.kind,
+      name: scrubSecrets(name).slice(0, 200),
+      message: scrubSecrets(rawMessage).slice(0, 1000),
+      stack: rawStack ? scrubSecrets(rawStack).slice(0, 4000) : undefined,
+      componentStack: input.componentStack
+        ? scrubSecrets(input.componentStack).slice(0, 4000)
+        : undefined,
+      url: typeof location !== "undefined" ? location.pathname : "",
+      // `define` rewrites this token to a string literal at build time; the typeof
+      // guard keeps it safe anywhere the define isn't applied (e.g. unit tests).
+      appVersion: typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "dev",
+      userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
+    };
+    const next = [report, ...read()].slice(0, MAX);
+    storage.set(StorageKeys.errorLog, JSON.stringify(next));
+  } catch {
+    // Never let diagnostics break the app.
+  }
+}
+
+// A plain-text dump of the whole log for the "Copy report" button.
+export function errorLogText(reports: ErrorReport[]): string {
+  if (reports.length === 0) return "No errors recorded.";
+  return reports
+    .map((r) => {
+      const lines = [
+        `[${r.at}] ${r.kind}: ${r.name}: ${r.message}`,
+        `  page: ${r.url}  ·  app: ${r.appVersion}`,
+        `  ${r.userAgent}`,
+      ];
+      if (r.stack) lines.push(r.stack.replace(/^/gm, "  "));
+      if (r.componentStack) lines.push("  component stack:" + r.componentStack.replace(/^/gm, "  "));
+      return lines.join("\n");
+    })
+    .join("\n\n");
+}
+
+let installed = false;
+
+// Register global handlers once. StrictMode mounts effects twice in dev, so this is
+// idempotent. Catches uncaught errors and unhandled promise rejections — the React
+// error boundary handles render crashes separately.
+export function installGlobalErrorHandlers(): void {
+  if (installed) return;
+  installed = true;
+  window.addEventListener("error", (e) => {
+    recordError({ kind: "error", error: e.error ?? e.message });
+  });
+  window.addEventListener("unhandledrejection", (e) => {
+    recordError({ kind: "unhandledrejection", error: e.reason });
+  });
+}

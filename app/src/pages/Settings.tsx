@@ -25,6 +25,7 @@ import { triggerDownload, downloadText, zipStore } from "../clients/download";
 import { buildXlsx } from "../clients/xlsx";
 import { clearNotes, getAllNotes } from "../clients/noteCache";
 import { loadThemePref, setThemePref, type ThemePref } from "../clients/theme";
+import { getErrorLog, clearErrorLog, errorLogText, type ErrorReport } from "../clients/errorLog";
 import { backupJson, csvBundleEntries, recentNotesTxt, termSlug, workbookSheets } from "../domain/export";
 import { formatShort, parseDate, startOfDay, toISODate } from "../domain/dates";
 import { termLabel, type ArchivedTerm, type StudentSnapshot } from "../domain/term";
@@ -53,6 +54,7 @@ export function Settings({ onNavigate, onStartNewTerm }: SettingsProps) {
       <ModelSection />
       <KeysSection />
       <ExportSection />
+      <DiagnosticsSection />
       <ResetSection onSignOut={signOut} onTestMode={enterTestMode} />
     </div>
   );
@@ -824,6 +826,65 @@ function ExportSection() {
           {notesMsg}
         </p>
       )}
+    </div>
+  );
+}
+
+// Recent errors & crashes, captured locally (clients/errorLog) and never sent
+// anywhere on their own. Lets the clinician copy a report to whoever supports the
+// app when something breaks. Hidden entirely while the log is empty.
+function DiagnosticsSection() {
+  const [reports, setReports] = useState<ErrorReport[]>(getErrorLog);
+  const [copied, setCopied] = useState(false);
+
+  if (reports.length === 0) return null;
+
+  const copyAll = () => {
+    void navigator.clipboard.writeText(errorLogText(reports));
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1500);
+  };
+  const clearAll = () => {
+    clearErrorLog();
+    setReports([]);
+  };
+
+  return (
+    <div className="card" style={{ marginBottom: "1rem" }}>
+      <h3 className="card__title">Diagnostics</h3>
+      <p style={{ fontSize: 13, color: "var(--color-text-secondary)", marginBottom: 14 }}>
+        {reports.length} recent {reports.length === 1 ? "error was" : "errors were"} recorded on
+        this device. If something isn't working, copy the report and send it to whoever set up the
+        app. Nothing here is shared automatically.
+      </p>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 6,
+          maxHeight: 180,
+          overflowY: "auto",
+          marginBottom: 14,
+          fontSize: 12,
+          fontFamily: "var(--font-mono, monospace)",
+          color: "var(--color-text-secondary)",
+        }}
+      >
+        {reports.map((r, i) => (
+          <div key={i} title={`${r.at} · ${r.url} · ${r.appVersion}`}>
+            <span style={{ color: "var(--color-text-tertiary)" }}>{r.at.slice(0, 16).replace("T", " ")}</span>{" "}
+            {r.name}: {r.message.slice(0, 120)}
+          </div>
+        ))}
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <button className="button button--small" onClick={copyAll}>
+          {copied ? "Copied ✓" : "Copy report"}
+        </button>
+        <button className="button button--small" onClick={clearAll}>
+          Clear
+        </button>
+      </div>
     </div>
   );
 }

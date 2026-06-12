@@ -32,4 +32,5 @@ export const StorageKeys = {
   notesPerWeek: "notes_per_week",
   theme: "theme",
   page: "page",
+  errorLog: "error_log",
 } as const;
