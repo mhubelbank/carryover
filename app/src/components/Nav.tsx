@@ -65,12 +65,21 @@ export function Nav({ current, onNavigate }: NavProps) {
         onClick={() => onNavigate("settings")}
         title="Settings"
         style={{
-          padding: 8,
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          fontSize: 14,
+          padding: "6px 12px",
+          border: "none",
           background:
             current === "settings" ? "var(--color-background-secondary)" : "transparent",
+          color:
+            current === "settings" ? "var(--color-text-primary)" : "var(--color-text-secondary)",
+          fontWeight: current === "settings" ? 500 : 400,
         }}
       >
-        <Icon name="settings" size={18} label="Settings" />
+        <Icon name="settings" size={18} />
+        Settings
       </button>
     </nav>
   );
