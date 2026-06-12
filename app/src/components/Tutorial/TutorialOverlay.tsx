@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { TOUR_STEPS } from "./steps";
 import type { NavPage } from "../Nav";
 
@@ -19,8 +19,16 @@ export function TutorialOverlay({
 }) {
   const [i, setI] = useState(0);
   const [rect, setRect] = useState<DOMRect | null>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [cardH, setCardH] = useState(160);
   const step = TOUR_STEPS[i];
   const isLast = i === TOUR_STEPS.length - 1;
+
+  // Measure the tooltip so placement can keep it fully on screen (content height
+  // varies per step). Per-step is enough — the body text is fixed within a step.
+  useLayoutEffect(() => {
+    if (cardRef.current) setCardH(cardRef.current.offsetHeight);
+  }, [i]);
 
   // Navigate to the step's page first, if it lives on another tab.
   useEffect(() => {
@@ -80,15 +88,23 @@ export function TutorialOverlay({
 
   if (!step) return null;
 
-  const placeAbove = !!rect && rect.bottom > window.innerHeight - 220;
-  const cardPos: CSSProperties = rect
-    ? {
-        left: Math.min(Math.max(rect.left, 12), window.innerWidth - CARD_W - 12),
-        ...(placeAbove
-          ? { top: rect.top - 12, transform: "translateY(-100%)" }
-          : { top: rect.bottom + 12 }),
-      }
-    : { left: "50%", top: "42%", transform: "translate(-50%, -50%)" };
+  // Prefer below the target, flip above if it won't fit, and finally clamp so the
+  // card is always fully on screen even when the target is tall (e.g. the Model
+  // card) or near an edge.
+  let cardPos: CSSProperties;
+  if (rect) {
+    const left = Math.min(Math.max(rect.left, 12), window.innerWidth - CARD_W - 12);
+    const below = rect.bottom + 12;
+    const above = rect.top - 12 - cardH;
+    let top: number;
+    if (below + cardH <= window.innerHeight - 12) top = below;
+    else if (above >= 12) top = above;
+    else top = window.innerHeight - cardH - 12;
+    top = Math.max(12, Math.min(top, window.innerHeight - cardH - 12));
+    cardPos = { left, top };
+  } else {
+    cardPos = { left: "50%", top: "42%", transform: "translate(-50%, -50%)" };
+  }
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 1100, pointerEvents: "none" }}>
@@ -119,6 +135,7 @@ export function TutorialOverlay({
         />
       )}
       <div
+        ref={cardRef}
         className="card"
         style={{
           position: "fixed",
