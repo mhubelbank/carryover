@@ -1,6 +1,6 @@
 import { callModel, llmErrorStatus, type LlmResponse } from "../clients/llm";
 import { DEFAULT_MODEL, type Provider } from "../clients/models";
-import type { GitHubClient } from "../clients/github";
+import type { DataClient } from "../clients/github";
 import type { Mode } from "./teacher";
 import { dropSelfCorrection, splitConcessive, normalizeAcronyms, fixClinicalSpelling, streamlineLostClinicalDetail } from "./text";
 import { limitMissSemicolons, spliceTrials } from "./trial";
@@ -194,7 +194,7 @@ const PROMPT_DIR = "data/prompts";
 // Loads the three templates for a mode from data/prompts/{mode}-{pass}.md.
 // Throws when any file is missing rather than substituting a placeholder — a
 // silent fallback would burn API calls and yield a fake clinical note.
-export async function loadPromptSet(client: GitHubClient, mode: Mode): Promise<PromptSet> {
+export async function loadPromptSet(client: DataClient, mode: Mode): Promise<PromptSet> {
   const files = await Promise.all(
     PASSES.map((pass) => client.readFile(`${PROMPT_DIR}/${mode}-${pass}.md`)),
   );

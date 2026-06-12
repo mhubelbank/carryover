@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import { TermProvider, useTerm } from "./context/TermContext";
 import { TutorialProvider, useTutorial } from "./context/TutorialContext";
 import { Banner } from "./components/Banner";
+import { DemoBanner } from "./components/DemoBanner";
 import { ErrorToaster } from "./components/ErrorToaster";
 import { TutorialOverlay } from "./components/Tutorial/TutorialOverlay";
 import { isTutorialDone, markTutorialDone } from "./clients/tutorial";
@@ -20,8 +21,8 @@ import { Generate } from "./pages/Generate";
 import { NewTermWizard } from "./pages/NewTermWizard";
 
 function Router() {
-  const { keys } = useAuth();
-  if (!keys) return <Welcome />;
+  const { keys, demoMode } = useAuth();
+  if (!keys && !demoMode) return <Welcome />;
   return (
     <TermProvider>
       <Pages />
@@ -65,6 +66,7 @@ function Pages() {
   // Settings with existing data). The empty/first-run case renders it directly.
   const [newTerm, setNewTerm] = useState(false);
   const { state } = useTerm();
+  const { demoMode } = useAuth();
   const { active: tourActive, start: startTour, stop: stopTour } = useTutorial();
 
   // Auto-start the guided tour once, the first time real data is loaded — so a
@@ -73,11 +75,13 @@ function Pages() {
   const tourAutoStarted = useRef(false);
   useEffect(() => {
     if (tourAutoStarted.current) return;
-    if (state.status === "ready" && !isTutorialDone()) {
+    // Demo mode starts the tour explicitly from the welcome screen (opt-in), so
+    // don't auto-pop it there.
+    if (!demoMode && state.status === "ready" && !isTutorialDone()) {
       tourAutoStarted.current = true;
       startTour();
     }
-  }, [state.status, startTour]);
+  }, [state.status, startTour, demoMode]);
 
   // Reset scroll to top when the page changes — it's a single document, so the
   // window scroll otherwise carries over between screens.
@@ -171,6 +175,9 @@ function Pages() {
     [pushPage],
   );
 
+  // Persistent demo strip, shown above every page while in the sandbox.
+  const demoBanner = demoMode ? <DemoBanner /> : null;
+
   // Rendered alongside the active page so the guided tour can spotlight elements on
   // any page (including Settings, which is a special early return below).
   const overlay = tourActive && (
@@ -201,6 +208,7 @@ function Pages() {
   if (page === "settings")
     return (
       <>
+        {demoBanner}
         <Settings onNavigate={nav} onStartNewTerm={() => setNewTerm(true)} />
         {overlay}
       </>
@@ -268,6 +276,7 @@ function Pages() {
 
   return (
     <>
+      {demoBanner}
       {content}
       {overlay}
     </>

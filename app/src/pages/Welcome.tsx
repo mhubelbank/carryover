@@ -4,6 +4,7 @@ import { validateApiKey, AnthropicError } from "../clients/anthropic";
 import { validateOpenAIKey, OpenAIError } from "../clients/openai";
 import { validateGitHubToken, GitHubError } from "../clients/github";
 import { REPO_CONFIG, useAuth } from "../context/AuthContext";
+import { useTutorial } from "../context/TutorialContext";
 
 // Inline code style for the literal token settings shown in the GitHub field.
 const monoStyle: CSSProperties = {
@@ -16,7 +17,8 @@ const monoStyle: CSSProperties = {
 type ValidationState = "idle" | "validating" | "error";
 
 export function Welcome() {
-  const { signIn } = useAuth();
+  const { signIn, enterDemoMode } = useAuth();
+  const { start: startTutorial } = useTutorial();
   const [anthropicKey, setAnthropicKey] = useState("");
   const [openaiKey, setOpenaiKey] = useState("");
   const [githubKey, setGithubKey] = useState("");
@@ -168,6 +170,37 @@ export function Welcome() {
           >
             {state === "validating" ? "Validating…" : "Save and continue →"}
           </button>
+        </div>
+
+        <div
+          style={{
+            marginTop: "1.75rem",
+            paddingTop: "1.25rem",
+            borderTop: "0.5px solid var(--color-border-tertiary)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <span style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>
+            Just looking? Explore a sandbox with sample data — no keys needed.
+          </span>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="button button--small" onClick={() => enterDemoMode()}>
+              Explore the demo
+            </button>
+            <button
+              className="button button--small button--primary"
+              onClick={() => {
+                startTutorial();
+                enterDemoMode();
+              }}
+            >
+              Take the tour
+            </button>
+          </div>
         </div>
       </div>
     </div>

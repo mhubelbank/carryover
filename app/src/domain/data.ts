@@ -1,4 +1,4 @@
-import type { GitHubClient } from "../clients/github";
+import type { DataClient } from "../clients/github";
 import { parseCsv, serializeCsv } from "./csv";
 import type { Goal } from "./goal";
 import type { IepReview } from "./iep";
@@ -89,7 +89,7 @@ const FIELD_VALUE_SEP = "|";
 
 // Loads the full term bundle. Returns null when there's no term.json yet —
 // the signal for the first-run / empty state.
-export async function loadTermData(client: GitHubClient): Promise<LoadedTerm | null> {
+export async function loadTermData(client: DataClient): Promise<LoadedTerm | null> {
   const termFile = await client.readFile(PATHS.term);
   if (!termFile) return null;
   const term = JSON.parse(termFile.text) as Term;
@@ -200,7 +200,7 @@ export function studentsToCsv(students: Student[], fieldDefs: StudentField[]): s
 
 // Writes students.csv; returns the new blob sha for the next safe overwrite.
 export function writeStudents(
-  client: GitHubClient,
+  client: DataClient,
   students: Student[],
   fieldDefs: StudentField[],
   sha: string | undefined,
@@ -233,7 +233,7 @@ export function goalsToCsv(goals: Goal[]): string {
 
 // Writes goals.csv; returns the new blob sha for the next safe overwrite.
 export function writeGoals(
-  client: GitHubClient,
+  client: DataClient,
   goals: Goal[],
   sha: string | undefined,
 ): Promise<string> {
@@ -242,7 +242,7 @@ export function writeGoals(
 
 // Writes term.json; returns the new blob sha for the next safe overwrite.
 export function writeTerm(
-  client: GitHubClient,
+  client: DataClient,
   term: Term,
   sha: string | undefined,
 ): Promise<string> {
@@ -261,7 +261,7 @@ export function writeTerm(
 // the tracked sha. (Re-reading for the sha would hit GitHub's CDN-cached contents
 // API, which can serve a stale sha right after a write and 409 the next save.)
 export async function loadTermHistory(
-  client: GitHubClient,
+  client: DataClient,
 ): Promise<{ history: ArchivedTerm[]; sha: string | undefined }> {
   const file = await client.readFile(PATHS.termHistory);
   return { history: file ? (JSON.parse(file.text) as ArchivedTerm[]) : [], sha: file?.sha };
@@ -294,7 +294,7 @@ export function removeFromTermHistory(history: ArchivedTerm[], term: Term): Arch
 
 // Persist the history array; returns the new blob sha for the next safe overwrite.
 export function writeTermHistory(
-  client: GitHubClient,
+  client: DataClient,
   history: ArchivedTerm[],
   sha: string | undefined,
 ): Promise<string> {
@@ -308,7 +308,7 @@ export function writeTermHistory(
 
 // Writes teachers.json; returns the new blob sha for the next safe overwrite.
 export function writeTeachers(
-  client: GitHubClient,
+  client: DataClient,
   teachers: Teacher[],
   sha: string | undefined,
 ): Promise<string> {
@@ -322,7 +322,7 @@ export function writeTeachers(
 
 // Writes activities.json (the shared catalog); returns the new blob sha.
 export function writeActivities(
-  client: GitHubClient,
+  client: DataClient,
   activities: Activity[],
   sha: string | undefined,
 ): Promise<string> {
@@ -336,7 +336,7 @@ export function writeActivities(
 
 // Writes news-roles.json (the shared catalog); returns the new blob sha.
 export function writeNewsRoles(
-  client: GitHubClient,
+  client: DataClient,
   roles: Role[],
   sha: string | undefined,
 ): Promise<string> {
@@ -350,7 +350,7 @@ export function writeNewsRoles(
 
 // Writes student-fields.json (the configurable field catalog); returns the sha.
 export function writeStudentFields(
-  client: GitHubClient,
+  client: DataClient,
   fields: StudentField[],
   sha: string | undefined,
 ): Promise<string> {
@@ -364,21 +364,21 @@ export function writeStudentFields(
 
 // data/prompts/feedback-rules.md — accumulated note corrections, appended to
 // every draft prompt. Empty string when the file doesn't exist yet.
-export async function loadFeedbackRules(client: GitHubClient): Promise<string> {
+export async function loadFeedbackRules(client: DataClient): Promise<string> {
   const file = await client.readFile(PATHS.feedbackRules);
   return file?.text ?? "";
 }
 
 // data/prompts/golden_output.txt — example notes given to the draft pass as a
 // style/structure reference. Empty string when the file doesn't exist.
-export async function loadGoldenExamples(client: GitHubClient): Promise<string> {
+export async function loadGoldenExamples(client: DataClient): Promise<string> {
   const file = await client.readFile(PATHS.goldenExamples);
   return file?.text ?? "";
 }
 
 // Appends one feedback rule as a markdown bullet (creating the file if needed),
 // so future generations pick it up via loadFeedbackRules.
-export async function appendFeedbackRule(client: GitHubClient, rule: string): Promise<void> {
+export async function appendFeedbackRule(client: DataClient, rule: string): Promise<void> {
   const trimmed = rule.trim();
   if (!trimmed) return;
   const existing = await client.readFile(PATHS.feedbackRules);
@@ -402,7 +402,7 @@ export function scheduleToCsv(entries: ScheduleEntry[]): string {
 
 // Writes schedule.csv (the usual/template schedule); returns the new blob sha.
 export function writeSchedule(
-  client: GitHubClient,
+  client: DataClient,
   entries: ScheduleEntry[],
   sha: string | undefined,
 ): Promise<string> {
@@ -423,7 +423,7 @@ export interface LoadedWeekSchedule {
 // Reads a week's deviation file. Returns null when the week hasn't diverged —
 // the caller then falls back to the usual template.
 export async function loadWeekSchedule(
-  client: GitHubClient,
+  client: DataClient,
   weekKey: string,
 ): Promise<LoadedWeekSchedule | null> {
   const file = await client.readFile(weekSchedulePath(weekKey));
@@ -433,7 +433,7 @@ export async function loadWeekSchedule(
 
 // Writes a week's full-snapshot deviation file; returns the new blob sha.
 export function writeWeekSchedule(
-  client: GitHubClient,
+  client: DataClient,
   weekKey: string,
   entries: ScheduleEntry[],
   sha: string | undefined,
@@ -448,7 +448,7 @@ export function writeWeekSchedule(
 
 // Removes a week's deviation file, reverting that week to the usual template.
 export function deleteWeekSchedule(
-  client: GitHubClient,
+  client: DataClient,
   weekKey: string,
   sha: string,
 ): Promise<void> {
@@ -461,7 +461,7 @@ export function deleteWeekSchedule(
 
 // Loads every session-metadata file. Safe when sessions/ is missing (-> []).
 // Used for goal usage counts; the volume is one file per (date, teacher).
-export async function loadSessions(client: GitHubClient): Promise<SessionMetadata[]> {
+export async function loadSessions(client: DataClient): Promise<SessionMetadata[]> {
   const entries = await client.listDir(SESSIONS_DIR);
   const files = entries.filter((e) => e.type === "file" && e.name.endsWith(".json"));
   const contents = await Promise.all(files.map((e) => client.readFile(e.path)));
@@ -488,7 +488,7 @@ export interface LoadedSession {
 
 // One session's metadata (for prefilling the Generate form / safe overwrite).
 export async function loadSession(
-  client: GitHubClient,
+  client: DataClient,
   date: string,
   teacherId: string,
 ): Promise<LoadedSession | null> {
@@ -504,7 +504,7 @@ export async function loadSession(
 // Persists session metadata (date, teacher, per-student goals + mode) — never
 // the note narrative. Returns the new blob sha.
 export function writeSessionMetadata(
-  client: GitHubClient,
+  client: DataClient,
   metadata: SessionMetadata,
   sha: string | undefined,
 ): Promise<string> {
@@ -518,7 +518,7 @@ export function writeSessionMetadata(
 
 // Per-student append-only IEP review log. Most recent first. [] when absent.
 export async function loadIepHistory(
-  client: GitHubClient,
+  client: DataClient,
   studentId: string,
 ): Promise<IepReview[]> {
   const file = await client.readFile(`data/iep-history/${studentId}.jsonl`);
@@ -540,7 +540,7 @@ export async function loadIepHistory(
 // are infrequent (≤ a couple per student per year), so the read-for-sha here
 // won't hit the rapid read-after-write staleness that term-history avoids.
 export async function appendIepReview(
-  client: GitHubClient,
+  client: DataClient,
   studentId: string,
   review: IepReview,
 ): Promise<void> {

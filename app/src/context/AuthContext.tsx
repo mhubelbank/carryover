@@ -31,6 +31,12 @@ interface AuthContextValue {
   // actually deleting anything. Refresh exits test mode.
   testMode: boolean;
   enterTestMode: () => void;
+  // Demo mode: a keyless, seeded sandbox for portfolio viewers. Data lives only in
+  // localStorage (never GitHub), generation is canned, and it persists across
+  // refreshes until exited. Distinct from testMode (a signed-in dev's empty repo).
+  demoMode: boolean;
+  enterDemoMode: () => void;
+  exitDemoMode: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -45,6 +51,7 @@ function loadKeys(): Keys | null {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [keys, setKeys] = useState<Keys | null>(() => loadKeys());
   const [testMode, setTestMode] = useState(false);
+  const [demoMode, setDemoMode] = useState(() => storage.get(StorageKeys.demoMode) === "1");
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -81,8 +88,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       testMode,
       enterTestMode: () => setTestMode(true),
+      demoMode,
+      enterDemoMode: () => {
+        storage.set(StorageKeys.demoMode, "1");
+        setDemoMode(true);
+      },
+      exitDemoMode: () => {
+        storage.remove(StorageKeys.demoMode);
+        storage.remove(StorageKeys.demoFs);
+        void clearNotes().catch(() => {});
+        setDemoMode(false);
+      },
     }),
-    [keys, testMode],
+    [keys, testMode, demoMode],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

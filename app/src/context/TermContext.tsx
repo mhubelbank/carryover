@@ -8,7 +8,9 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { GitHubClient } from "../clients/github";
+import { GitHubClient, type DataClient } from "../clients/github";
+import { LocalFsClient } from "../clients/localFsClient";
+import { seedDemoFs } from "../demo/seed";
 import {
   loadTermData,
   loadTermHistory,
@@ -52,7 +54,7 @@ interface TermContextValue {
   reload: () => void;
   // The data-repo client, available once keys exist (null in test mode or
   // before sign-in). Pages use it for lazy loads like session usage counts.
-  client: GitHubClient | null;
+  client: DataClient | null;
   // Id lookups, populated only when ready (empty maps otherwise).
   teacherById: Map<string, Teacher>;
   studentById: Map<string, Student>;
@@ -94,7 +96,7 @@ interface TermContextValue {
 const TermContext = createContext<TermContextValue | null>(null);
 
 export function TermProvider({ children }: { children: ReactNode }) {
-  const { keys, testMode } = useAuth();
+  const { keys, testMode, demoMode } = useAuth();
   const [state, setState] = useState<TermState>({ status: "loading" });
   const [reloadKey, setReloadKey] = useState(0);
   const shasRef = useRef<FileShas>({});
@@ -120,10 +122,11 @@ export function TermProvider({ children }: { children: ReactNode }) {
   // on-open check fires at most once per term (idempotent under StrictMode).
   const autoArchiveKeyRef = useRef<string | null>(null);
 
-  const client = useMemo(
-    () => (keys ? new GitHubClient({ token: keys.githubToken, ...REPO_CONFIG }) : null),
-    [keys],
-  );
+  const client = useMemo<DataClient | null>(() => {
+    // Demo mode reads/writes the localStorage sandbox; otherwise the GitHub repo.
+    if (demoMode) return new LocalFsClient();
+    return keys ? new GitHubClient({ token: keys.githubToken, ...REPO_CONFIG }) : null;
+  }, [keys, demoMode]);
 
   useEffect(() => {
     // Test mode pretends the repo is empty without touching GitHub.
@@ -138,7 +141,9 @@ export function TermProvider({ children }: { children: ReactNode }) {
     }
     let cancelled = false;
     setState({ status: "loading" });
-    Promise.all([loadTermData(client), loadTermHistory(client)])
+    // In demo mode, seed the sandbox first (idempotent — no-op once populated).
+    (demoMode ? seedDemoFs(client) : Promise.resolve())
+      .then(() => Promise.all([loadTermData(client), loadTermHistory(client)]))
       .then(([loaded, hist]) => {
         if (cancelled) return;
         setTermHistory(hist.history);
@@ -160,7 +165,7 @@ export function TermProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [client, testMode, reloadKey]);
+  }, [client, testMode, demoMode, reloadKey]);
 
   const reload = useCallback(() => setReloadKey((k) => k + 1), []);
 

@@ -34,4 +34,6 @@ export const StorageKeys = {
   page: "page",
   errorLog: "error_log",
   tutorialDone: "tutorial_done",
+  demoMode: "demo_mode",
+  demoFs: "demo_fs",
 } as const;

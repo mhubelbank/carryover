@@ -29,6 +29,17 @@ export interface DirEntry {
   type: "file" | "dir";
 }
 
+// The minimal "data store" surface the domain data layer (domain/data.ts) needs.
+// GitHubClient satisfies it (its methods are public); the demo's localStorage-
+// backed LocalFsClient implements the same shape, so the entire load/save layer
+// works against either without changes.
+export interface DataClient {
+  readFile(path: string): Promise<FileContent | null>;
+  listDir(path: string): Promise<DirEntry[]>;
+  writeFile(path: string, content: string, message: string, sha?: string): Promise<string>;
+  deleteFile(path: string, message: string, sha: string): Promise<void>;
+}
+
 export class GitHubError extends Error {
   constructor(
     message: string,
