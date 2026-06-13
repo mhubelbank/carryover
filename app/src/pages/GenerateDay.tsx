@@ -6,9 +6,11 @@ import { useTerm } from "../context/TermContext";
 import { resolvePipeline, PROVIDER_META, type PipelineId, type Provider } from "../clients/models";
 import { isOutOfCredits } from "../clients/llm";
 import { getPipelineId, setPipelineId } from "../clients/modelPref";
-import { removeFromBatch } from "../clients/batch";
+import { addToBatch, removeFromBatch } from "../clients/batch";
+import { getAllNotes } from "../clients/noteCache";
 import { appendFeedbackRule, loadFeedbackRules, loadGoldenExamples, loadSession, writeSessionMetadata } from "../domain/data";
-import { formatLong, parseDate } from "../domain/dates";
+import { formatLong, parseDate, weekdayName } from "../domain/dates";
+import { slotStartMinutes } from "../domain/schedule";
 import { activityOptionsForGenerate } from "../domain/activity";
 import { resolveRoles } from "../domain/role";
 import { absentNote, type ActivityDef } from "../domain/generate";
@@ -18,6 +20,7 @@ import { displayName, isActiveOn, type Student } from "../domain/student";
 import { teacherColor, type Mode } from "../domain/teacher";
 import { cannedNote } from "../demo/cannedNote";
 import { storage, StorageKeys } from "../clients/storage";
+import { buildSessions } from "./Today";
 import {
   SessionInputs,
   ResultsView,
@@ -124,14 +127,63 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }
       </div>
     ) : null;
 
-  // Build per-session drafts once on mount, restoring any saved snapshot for the
-  // session (date · teacher · slot) and seeding fresh otherwise.
+  // Sessions on this day that already have generated notes (in the local cache),
+  // keyed by sessionKey → earliest generation timestamp. Drives the "✓ generated"
+  // rail markers and the "restored from generation at …" note. Loaded on mount;
+  // the cache may be wiped (Settings → Reset), in which case generated sessions
+  // simply appear like any other — not a correctness issue.
+  const [genAt, setGenAt] = useState<Map<string, number>>(new Map());
+  useEffect(() => {
+    let cancelled = false;
+    getAllNotes()
+      .then((all) => {
+        if (cancelled) return;
+        const m = new Map<string, number>();
+        for (const n of all) {
+          if (n.date !== date) continue;
+          const k = sessionKey(n.teacherId, n.timeSlot);
+          const prev = m.get(k);
+          m.set(k, prev == null ? n.generatedAt : Math.min(prev, n.generatedAt));
+        }
+        setGenAt(m);
+      })
+      .catch(() => {
+        if (!cancelled) setGenAt(new Map());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [date]);
+
+  // The rail shows the sessions she queued for the batch PLUS any already-generated
+  // sessions for the day (so they don't vanish after generation) — the latter
+  // appear disabled with a ✓ until she clicks to re-edit them. Passed-in batch
+  // specs win on roster (they reflect this week's deviations).
+  const railSpecs = useMemo<SessionSpec[]>(() => {
+    if (state.status !== "ready") return sessions;
+    const day = parseDate(date);
+    const daySessions = day ? buildSessions(state.data.schedule, weekdayName(day)) : [];
+    const byKey = new Map<string, SessionSpec>();
+    for (const sp of daySessions) byKey.set(sessionKey(sp.teacherId, sp.timeSlot), sp);
+    for (const sp of sessions) byKey.set(sessionKey(sp.teacherId, sp.timeSlot), sp);
+    const batchedKeys = new Set(sessions.map((sp) => sessionKey(sp.teacherId, sp.timeSlot)));
+    return [...byKey.values()]
+      .filter((sp) => {
+        const k = sessionKey(sp.teacherId, sp.timeSlot);
+        return batchedKeys.has(k) || genAt.has(k);
+      })
+      .sort((a, b) => slotStartMinutes(a.timeSlot) - slotStartMinutes(b.timeSlot));
+  }, [state, sessions, date, genAt]);
+
+  // Build per-session drafts, restoring any saved snapshot for the session
+  // (date · teacher · slot) and seeding fresh otherwise. Generated sessions keep
+  // their snapshot (re-saved at generation), so re-editing restores those inputs.
   const initialDrafts = useMemo<Record<string, SessionDraft>>(() => {
     if (state.status !== "ready") return {};
     const { students: allStudents, teachers } = state.data;
     const day = parseDate(date);
     const out: Record<string, SessionDraft> = {};
-    for (const sp of sessions) {
+    for (const sp of railSpecs) {
       const teacher = teachers.find((t) => t.id === sp.teacherId);
       const key = sessionKey(sp.teacherId, sp.timeSlot);
       const snap = loadFormSnapshot(date, sp.teacherId, sp.timeSlot);
@@ -158,11 +210,12 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }
       out[key] = { mode: defaultMode, activities: [blankActivity()], studentState };
     }
     return out;
-  }, [state, sessions, date]);
+  }, [state, railSpecs, date]);
 
   const [drafts, setDrafts] = useState<Record<string, SessionDraft>>(initialDrafts);
-  // Reseed if the day/sessions change (a fresh takeover always remounts, but be safe).
-  useEffect(() => setDrafts(initialDrafts), [initialDrafts]);
+  // Merge in new drafts (e.g. generated sessions once the cache loads) without
+  // clobbering edits already made to existing sessions.
+  useEffect(() => setDrafts((prev) => ({ ...initialDrafts, ...prev })), [initialDrafts]);
   // This is a full-screen takeover, so reset scroll to the top when it opens
   // (otherwise it inherits Today's scroll position).
   useEffect(() => window.scrollTo(0, 0), []);
@@ -177,6 +230,12 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
   // Drives the "Saved" indicator so she can trust the form auto-saves.
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  // Generated sessions she's clicked to re-edit (re-added to the batch). Until
+  // clicked, a generated session is "locked" — shown disabled with a ✓ in the rail.
+  const [reactivated, setReactivated] = useState<Set<string>>(new Set());
+  // Per-session "restored from generation at <ts>" note, shown after re-editing a
+  // generated session and cleared on the first edit.
+  const [restoredAt, setRestoredAt] = useState<Map<string, number>>(new Map());
 
   // Debounced snapshot save per session whenever its draft changes (mirrors
   // Generate's autosave, but straight to the per-session snapshot store).
@@ -205,47 +264,70 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }
   const roleCatalog = state.data.newsRoles;
   const day = parseDate(date);
 
-  const specByKey = new Map(sessions.map((sp) => [sessionKey(sp.teacherId, sp.timeSlot), sp]));
+  const specByKey = new Map(railSpecs.map((sp) => [sessionKey(sp.teacherId, sp.timeSlot), sp]));
   const activeSpec = specByKey.get(activeKey);
   const activeTeacher = teachers.find((t) => t.id === activeSpec?.teacherId);
   const activeDraft = drafts[activeKey];
+
+  // A generated session stays "locked" (disabled, ✓) until she clicks to re-edit it.
+  const isLocked = (key: string) => genAt.has(key) && !reactivated.has(key);
 
   const caseloadFor = (teacherId: string) =>
     allStudents.filter(
       (s) => !s.archived && s.teacherId === teacherId && (!day || isActiveOn(s, day)),
     );
 
-  // Total included, non-absent students across READY sessions (the batch size).
+  // Per-session readiness across the rail. Locked (generated, not re-edited)
+  // sessions are excluded from generation, so their readiness is moot.
   const readyByKey = useMemo(() => {
     const m: Record<string, ReadyState> = {};
-    for (const sp of sessions) {
+    for (const sp of railSpecs) {
       const key = sessionKey(sp.teacherId, sp.timeSlot);
       const d = drafts[key];
       m[key] = d ? draftReadiness(d) : "empty";
     }
     return m;
-  }, [drafts, sessions]);
+  }, [drafts, railSpecs]);
 
+  // Total included, non-absent students across ready, non-locked sessions.
   const readyCount = useMemo(() => {
     let n = 0;
-    for (const sp of sessions) {
+    for (const sp of railSpecs) {
       const key = sessionKey(sp.teacherId, sp.timeSlot);
-      if (readyByKey[key] !== "ready") continue;
+      if (readyByKey[key] !== "ready" || isLocked(key)) continue;
       const d = drafts[key];
       if (!d) continue;
       n += Object.values(d.studentState).filter((st) => st.included && !st.absent).length;
     }
     return n;
-  }, [readyByKey, drafts, sessions]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readyByKey, drafts, railSpecs, genAt, reactivated]);
 
   const readySessionCount = useMemo(
     () =>
-      sessions.filter((sp) => readyByKey[sessionKey(sp.teacherId, sp.timeSlot)] === "ready").length,
-    [readyByKey, sessions],
+      railSpecs.filter((sp) => {
+        const key = sessionKey(sp.teacherId, sp.timeSlot);
+        return readyByKey[key] === "ready" && !isLocked(key);
+      }).length,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [readyByKey, railSpecs, genAt, reactivated],
   );
 
   const updateActiveDraft = (patch: Partial<SessionDraft>) => {
     if (!activeSpec) return;
+    // Editing a locked (generated) session re-enables it — same as clicking it in
+    // the rail — so it's included again in the next "Generate all".
+    if (isLocked(activeKey)) {
+      setReactivated((s) => new Set(s).add(activeKey));
+      addToBatch(date, activeSpec.teacherId, activeSpec.timeSlot);
+    }
+    // First edit to a just-restored session dismisses the "restored from …" note.
+    setRestoredAt((m) => {
+      if (!m.has(activeKey)) return m;
+      const next = new Map(m);
+      next.delete(activeKey);
+      return next;
+    });
     setDrafts((prev) => {
       const cur = prev[activeKey]!;
       const next = { ...cur, ...patch };
@@ -254,10 +336,22 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }
     });
   };
 
+  // Click a locked (generated) session to re-edit it: re-queue it in the batch,
+  // restore its inputs (already in the draft via the preserved snapshot), and show
+  // the "restored from generation at …" note.
+  const reactivate = (sp: SessionSpec) => {
+    const key = sessionKey(sp.teacherId, sp.timeSlot);
+    setReactivated((s) => new Set(s).add(key));
+    addToBatch(date, sp.teacherId, sp.timeSlot);
+    const ts = genAt.get(key);
+    if (ts != null) setRestoredAt((m) => new Map(m).set(key, ts));
+    setActiveKey(key);
+  };
+
   // The form auto-saves as she types (scheduleSave). On close, flush every
   // session's pending debounced save immediately so nothing in-flight is lost.
   const flushAndClose = () => {
-    for (const sp of sessions) {
+    for (const sp of railSpecs) {
       const key = sessionKey(sp.teacherId, sp.timeSlot);
       const d = drafts[key];
       if (!d) continue;
@@ -312,6 +406,12 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }
       sessionSig: `${activeSpec.teacherId}|${date}|${activeSpec.timeSlot}|${activeSpec.studentIds.join(",")}`,
     });
     setSavedAt(Date.now());
+    setRestoredAt((m) => {
+      if (!m.has(activeKey)) return m;
+      const n = new Map(m);
+      n.delete(activeKey);
+      return n;
+    });
   };
 
   const setActivities = (
@@ -398,9 +498,10 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }
 
   async function handleGenerateAll() {
     setError(null);
-    const readySpecs = sessions.filter(
-      (sp) => readyByKey[sessionKey(sp.teacherId, sp.timeSlot)] === "ready",
-    );
+    const readySpecs = railSpecs.filter((sp) => {
+      const key = sessionKey(sp.teacherId, sp.timeSlot);
+      return readyByKey[key] === "ready" && !isLocked(key);
+    });
     if (readySpecs.length === 0) return;
     if (!client || (!hasModelKey && !useCanned)) return;
 
@@ -559,6 +660,26 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }
       removeFromBatch(date, sp.teacherId, sp.timeSlot);
     }
 
+    // Re-lock the just-generated sessions so the rail shows them with a ✓ (and
+    // they're excluded from the next "Generate all") when she returns to the form.
+    const generatedKeys = readySpecs.map((sp) => sessionKey(sp.teacherId, sp.timeSlot));
+    const stamp = Date.now();
+    setGenAt((m) => {
+      const next = new Map(m);
+      for (const k of generatedKeys) next.set(k, stamp);
+      return next;
+    });
+    setReactivated((s) => {
+      const next = new Set(s);
+      for (const k of generatedKeys) next.delete(k);
+      return next;
+    });
+    setRestoredAt((m) => {
+      const next = new Map(m);
+      for (const k of generatedKeys) next.delete(k);
+      return next;
+    });
+
     setPhase("results");
   }
 
@@ -568,7 +689,7 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }
     // Resolve each studentId back to its owning session's target.
     const lookups = studentIds
       .map((id) => {
-        for (const sp of sessions) {
+        for (const sp of railSpecs) {
           const key = sessionKey(sp.teacherId, sp.timeSlot);
           const draft = drafts[key];
           if (!draft) continue;
@@ -687,9 +808,16 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }
 
   const longDate = day ? formatLong(day) : date;
   const STATUS_DOT: Record<ReadyState, { glyph: string; color: string; title: string }> = {
-    ready: { glyph: "✓", color: "var(--color-text-success)", title: "Ready" },
+    ready: { glyph: "●", color: "var(--color-text-success)", title: "Ready to generate" },
     partial: { glyph: "◐", color: "var(--color-text-warning)", title: "Partially filled in" },
     empty: { glyph: "○", color: "var(--color-text-tertiary)", title: "Empty" },
+  };
+  // Already-generated sessions: a ✓ in the rail (vs the ● for a complete-but-not-
+  // yet-generated form). Click to re-edit and regenerate.
+  const GENERATED_DOT = {
+    glyph: "✓",
+    color: "var(--color-text-success)",
+    title: "Notes generated — click to edit and regenerate",
   };
 
   const activeActivityOptions = activeTeacher
@@ -763,16 +891,18 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }
             overflowY: "auto",
           }}
         >
-          {sessions.map((sp) => {
+          {railSpecs.map((sp) => {
             const key = sessionKey(sp.teacherId, sp.timeSlot);
             const teacher = teachers.find((t) => t.id === sp.teacherId);
+            const locked = isLocked(key);
             const ready = readyByKey[key] ?? "empty";
-            const dot = STATUS_DOT[ready];
+            const dot = locked ? GENERATED_DOT : STATUS_DOT[ready];
             const isActive = key === activeKey;
             return (
               <button
                 key={key}
-                onClick={() => setActiveKey(key)}
+                onClick={() => (locked ? reactivate(sp) : setActiveKey(key))}
+                title={locked ? GENERATED_DOT.title : undefined}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -787,7 +917,7 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }
                   border: "none",
                   cursor: "pointer",
                   background: isActive ? "var(--color-background-pill)" : "transparent",
-                  color: "var(--color-text-primary)",
+                  color: locked ? "var(--color-text-tertiary)" : "var(--color-text-primary)",
                   borderLeft: `3px solid ${isActive ? teacherColor(teacher?.color).bg : "transparent"}`,
                 }}
               >
@@ -864,6 +994,24 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }
                   </button>
                 </div>
               </div>
+              {restoredAt.has(activeKey) && (
+                <div
+                  className="banner banner--info"
+                  style={{ marginBottom: "1rem" }}
+                >
+                  <Icon name="info-circle" size={16} />
+                  <span>
+                    Restored from the note generated{" "}
+                    {new Date(restoredAt.get(activeKey)!).toLocaleString([], {
+                      month: "short",
+                      day: "numeric",
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
+                    . Edit and regenerate to update it.
+                  </span>
+                </div>
+              )}
               {onReviewIep && iepOverdue.length > 0 && (
                 <div
                   className="banner banner--warning"
