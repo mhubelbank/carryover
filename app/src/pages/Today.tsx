@@ -24,6 +24,10 @@ interface Props {
     sessions: { teacherId: string; timeSlot: string; studentIds: string[] }[],
   ) => void;
   onStartNewTerm: () => void;
+  // When returning from the batch generator, open Today on the day she just
+  // generated (not today). One-shot: consumed via onDateConsumed.
+  initialDate?: string | null;
+  onDateConsumed?: () => void;
 }
 
 interface Session {
@@ -41,9 +45,17 @@ const emptyBoxStyle: CSSProperties = {
   fontSize: 14,
 };
 
-export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate, onGenerateDay, onStartNewTerm }: Props) {
+export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate, onGenerateDay, onStartNewTerm, initialDate, onDateConsumed }: Props) {
   const { state, client, teacherById, studentById, saveStudents, saveTerm, autoArchiveNotice, undoFinishTerm, dismissAutoArchiveNotice } = useTerm();
-  const [selected, setSelected] = useState<Date>(() => toWeekday(startOfDay(new Date())));
+  const [selected, setSelected] = useState<Date>(() => {
+    const d = initialDate ? parseDate(initialDate) : null;
+    return d ? startOfDay(d) : toWeekday(startOfDay(new Date()));
+  });
+  // Consume the one-shot return date so later normal visits open on today again.
+  useEffect(() => {
+    if (initialDate) onDateConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [busy, setBusy] = useState(false);
   const [undoingArchive, setUndoingArchive] = useState(false);
   // The deviation file for the selected date's week, if one exists; otherwise we
@@ -395,7 +407,7 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate, on
         <div style={emptyBoxStyle}>No sessions scheduled for {weekdayName(selected)}.</div>
       ) : (
         <>
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 10 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 10 }}>
             <button
               className="button button--small"
               onClick={() => setClosure(true)}

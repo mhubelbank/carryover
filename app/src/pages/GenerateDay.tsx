@@ -162,6 +162,9 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }
   const [drafts, setDrafts] = useState<Record<string, SessionDraft>>(initialDrafts);
   // Reseed if the day/sessions change (a fresh takeover always remounts, but be safe).
   useEffect(() => setDrafts(initialDrafts), [initialDrafts]);
+  // This is a full-screen takeover, so reset scroll to the top when it opens
+  // (otherwise it inherits Today's scroll position).
+  useEffect(() => window.scrollTo(0, 0), []);
 
   const [activeKey, setActiveKey] = useState<string>(() =>
     sessions.length ? sessionKey(sessions[0]!.teacherId, sessions[0]!.timeSlot) : "",
@@ -588,27 +591,25 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }
 
   if (phase === "results") {
     return (
-      <div style={{ minHeight: "100vh", background: "var(--color-background-primary)" }}>
-        <ResultsView
-          date={date}
-          timeSlot=""
-          results={results}
-          error={error}
-          onBack={() => setPhase("form")}
-          onNavigate={(p) => {
-            onClose();
-            onNavigate(p);
-          }}
-          onRegenerate={regenerate}
-          pipelineId={pipelineId}
-          onChangeModel={changeModel}
-          modelKeyMissing={!hasModelKey}
-          banner={creditBanner}
-          onToggleDrafts={(id) =>
-            updateResult(id, { showDrafts: !results.find((r) => r.studentId === id)?.showDrafts })
-          }
-        />
-      </div>
+      <ResultsView
+        date={date}
+        timeSlot=""
+        results={results}
+        error={error}
+        onBack={() => setPhase("form")}
+        onNavigate={(p) => {
+          onClose();
+          onNavigate(p);
+        }}
+        onRegenerate={regenerate}
+        pipelineId={pipelineId}
+        onChangeModel={changeModel}
+        modelKeyMissing={!hasModelKey}
+        banner={creditBanner}
+        onToggleDrafts={(id) =>
+          updateResult(id, { showDrafts: !results.find((r) => r.studentId === id)?.showDrafts })
+        }
+      />
     );
   }
 
@@ -640,14 +641,17 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }
       : [];
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        flexDirection: "column",
-        background: "var(--color-background-primary)",
-      }}
-    >
+    <div style={{ minHeight: "100vh", background: "var(--color-background-tertiary)" }}>
+      {/* Centered to the app's usual content width, on the usual page background. */}
+      <div
+        style={{
+          maxWidth: 880,
+          margin: "0 auto",
+          minHeight: "100vh",
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
       {/* Header */}
       <div
         style={{
@@ -855,6 +859,7 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }
               : `Generate all ready — ${readyCount} note${readyCount === 1 ? "" : "s"}`}
           </button>
         </div>
+      </div>
       </div>
     </div>
   );

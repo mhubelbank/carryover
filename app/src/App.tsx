@@ -68,6 +68,14 @@ function Pages() {
   const [dayTarget, setDayTarget] = useState<
     { date: string; sessions: { teacherId: string; timeSlot: string; studentIds: string[] }[] } | null
   >(null);
+  // After the batch generator closes, reopen Today on the day she generated.
+  const [todayReturnDate, setTodayReturnDate] = useState<string | null>(null);
+  const closeDay = useCallback(() => {
+    setDayTarget((cur) => {
+      if (cur) setTodayReturnDate(cur.date);
+      return null;
+    });
+  }, []);
   // When true, the new-term wizard is open over the normal app (launched from
   // Settings with existing data). The empty/first-run case renders it directly.
   const [newTerm, setNewTerm] = useState(false);
@@ -262,7 +270,7 @@ function Pages() {
         <GenerateDay
           date={dayTarget.date}
           sessions={dayTarget.sessions}
-          onClose={() => setDayTarget(null)}
+          onClose={closeDay}
           onNavigate={nav}
           onReviewIep={(id) => {
             setDayTarget(null);
@@ -315,6 +323,8 @@ function Pages() {
           onGenerate={openGenerate}
           onGenerateDay={openGenerateDay}
           onStartNewTerm={() => setNewTerm(true)}
+          initialDate={todayReturnDate}
+          onDateConsumed={() => setTodayReturnDate(null)}
         />
       );
   }
