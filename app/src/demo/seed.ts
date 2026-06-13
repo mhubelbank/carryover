@@ -19,7 +19,7 @@ import {
   writeTermHistory,
 } from "../domain/data";
 import { RESERVED_OTHER_ID } from "../domain/activity";
-import { addDays, startOfDay, toISODate } from "../domain/dates";
+import { addDays, startOfDay, toISODate, toWeekday } from "../domain/dates";
 import type { Student } from "../domain/student";
 import type { Teacher, Activity, Role, ColorKey, Mode } from "../domain/teacher";
 import type { Goal } from "../domain/goal";
@@ -118,6 +118,9 @@ interface BuiltStudents {
 // pushed a year out (so it doesn't nag as overdue) and a history entry is recorded.
 function buildStudents(): BuiltStudents {
   const today = startOfDay(new Date());
+  // The day the Today view actually snaps to — Mon–Fri, advancing past a weekend.
+  // The featured student's events anchor here so they're visible even on Sat/Sun.
+  const viewDay = toWeekday(today);
   const year = today.getFullYear();
   const iepHistory: { studentId: string; review: IepReview }[] = [];
 
@@ -130,9 +133,9 @@ function buildStudents(): BuiltStudents {
     let birthday: string;
     let nextIepReview: string | null;
     if (i === 0) {
-      // The featured student — IEP review and birthday both today.
-      birthday = `${year - 10}-${monthDay(today)}`;
-      nextIepReview = toISODate(today);
+      // The featured student — IEP review and birthday both on the viewed day.
+      birthday = `${year - 10}-${monthDay(viewDay)}`;
+      nextIepReview = toISODate(viewDay);
     } else {
       const age = randInt(7, 16);
       birthday = `${year - age}-${monthDay(addDays(today, randInt(-90, 90)))}`;
@@ -322,7 +325,7 @@ const isMinimal = () => storage.get(StorageKeys.demoMinimal) === "1";
 
 // Bump this whenever the seed data changes (new students, dates, schedule, …) so
 // existing sandboxes re-seed on the next load instead of keeping stale data.
-const SEED_VERSION = "3";
+const SEED_VERSION = "4";
 
 // Seed the sandbox. The full demo preserves a visitor's edits across reloads while
 // the seed version is unchanged, and re-seeds when it changes (or on first use).
