@@ -321,8 +321,16 @@ export function spliceTrials(note: string, replacements: Record<string, string>)
   // Any token without a mapping (shouldn't happen) — remove it cleanly.
   out = out.replace(TRIAL_TOKEN_RE, "");
   if (dropped.length > 0) {
-    console.warn(`spliceTrials: ${dropped.length} trial token(s) missing from the note; appending.`);
-    out = `${out.trim()} ${dropped.join(" ")}`;
+    console.warn(`spliceTrials: ${dropped.length} trial token(s) missing from the note; reinserting.`);
+    const trimmed = out.trim();
+    const insert = dropped.join(" ");
+    // Insert the missing trial sentence(s) BEFORE the note's closing sentence (the
+    // "This session developed…" domain summary is virtually always last) rather than
+    // after it — appending at the very end leaves the note ending on a raw trial
+    // stat. Greedy match → m[1] is everything up to the last sentence boundary,
+    // m[2] the final sentence. Fall back to appending if there's no clear boundary.
+    const m = trimmed.match(/^([\s\S]*[.!?])\s+([A-Z][\s\S]*)$/);
+    out = m ? `${m[1]} ${insert} ${m[2]}` : `${trimmed} ${insert}`;
   }
   // Tidy: drop a lone "prompting." sentence (orphan fragment the model left next
   // to a trial token), then collapse double spaces/periods and space-before-punct.

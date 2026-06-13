@@ -133,11 +133,26 @@ describe("spliceTrials", () => {
     expect(out).toBe("Sam read a passage. A correctly did x 3/5. It was good. B.");
   });
 
-  it("appends a dropped token's sentence rather than losing it", () => {
+  it("appends a dropped token's sentence rather than losing it (single-sentence fallback)", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const out = spliceTrials("Sam read a passage.", { [trialToken(0)]: "A correctly did x 3/5." });
     expect(out).toBe("Sam read a passage. A correctly did x 3/5.");
     expect(warn).toHaveBeenCalledOnce();
+    warn.mockRestore();
+  });
+
+  it("reinserts a dropped trial sentence BEFORE the closing, not after it", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const note =
+      "Jordan produced target sounds while sequencing picture cards. They were engaged throughout. This session developed expressive language.";
+    const trial = "They correctly sequenced 3/8 picture cards given significant visual prompting.";
+    const out = spliceTrials(note, { [trialToken(0)]: trial });
+    expect(out).toBe(
+      "Jordan produced target sounds while sequencing picture cards. They were engaged throughout. " +
+        trial +
+        " This session developed expressive language.",
+    );
+    expect(out.endsWith("This session developed expressive language.")).toBe(true);
     warn.mockRestore();
   });
 
