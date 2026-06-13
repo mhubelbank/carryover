@@ -9,17 +9,33 @@ export interface AnthropicMessage {
   content: string;
 }
 
+// A system block; the last one may carry cache_control to mark the cacheable
+// prefix (golden examples + instructions) for prompt caching.
+export interface AnthropicSystemBlock {
+  type: "text";
+  text: string;
+  cache_control?: { type: "ephemeral" };
+}
+
 export interface AnthropicRequest {
   model: string;
   max_tokens: number;
   messages: AnthropicMessage[];
-  system?: string;
+  // String for the simple case, or blocks when a cacheable prefix is marked.
+  system?: string | AnthropicSystemBlock[];
 }
 
 export interface AnthropicResponse {
   content: Array<{ type: "text"; text: string }>;
   stop_reason: string;
-  usage: { input_tokens: number; output_tokens: number };
+  // cache_* fields appear only when prompt caching is used: creation = tokens
+  // written to the cache (billed at 1.25×), read = served from it (0.1×).
+  usage: {
+    input_tokens: number;
+    output_tokens: number;
+    cache_creation_input_tokens?: number;
+    cache_read_input_tokens?: number;
+  };
 }
 
 export class AnthropicError extends Error {

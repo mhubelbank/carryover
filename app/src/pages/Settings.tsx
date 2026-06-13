@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Icon } from "../components/Icon";
 import { Nav, type NavPage } from "../components/Nav";
 import { AnthropicError } from "../clients/anthropic";
@@ -6,17 +6,19 @@ import { OpenAIError } from "../clients/openai";
 import { validateKey } from "../clients/llm";
 import { GitHubError, validateGitHubToken } from "../clients/github";
 import {
-  MODEL_CHOICES,
+  PIPELINES,
+  resolvePipeline,
+  type PipelineId,
   PROVIDER_META,
-  perNoteCostLabel,
-  annualCostLabel,
+  pipelinePerNoteCostLabel,
+  pipelineAnnualCostLabel,
   promptSetChars,
   MEASURED_ON,
   BASELINE_PROMPT_CHARS,
   PROMPT_DRIFT_THRESHOLD,
 } from "../clients/models";
 import { storage, StorageKeys } from "../clients/storage";
-import { getModelChoiceId, setModelChoiceId } from "../clients/modelPref";
+import { getPipelineId, setPipelineId } from "../clients/modelPref";
 import { consumeSettingsSection } from "../clients/settingsNav";
 import { isTokenRenewalDue } from "../domain/tokenRenewal";
 import { REPO_CONFIG, useAuth } from "../context/AuthContext";
@@ -457,13 +459,18 @@ function CatalogsSection({ onNavigate }: { onNavigate: (page: NavPage) => void }
 
 // The model picker: friendly names + a "why choose this" line, no raw model IDs.
 // Persisted via modelPref; the Generate page reads it when she generates.
+// Inline emphasized number for the schedule-derived cost summary (read-only prose).
+function Num({ children }: { children: ReactNode }) {
+  return <strong style={{ fontWeight: 600, color: "var(--color-text-primary)" }}>{children}</strong>;
+}
+
 function ModelSection() {
   const { keys, demoMode } = useAuth();
-  const { client } = useTerm();
-  const [choiceId, setChoiceId] = useState<string>(getModelChoiceId);
-  const choose = (id: string) => {
-    setChoiceId(id);
-    setModelChoiceId(id);
+  const { client, state } = useTerm();
+  const [pipelineId, setPipelineState] = useState<PipelineId>(getPipelineId);
+  const choose = (id: PipelineId) => {
+    setPipelineState(id);
+    setPipelineId(id);
   };
   // Compare the live prompt size to the size the cost estimates were measured
   // against; a large drift means they've gone stale (re-measure needed).
@@ -491,51 +498,116 @@ function ModelSection() {
     promptChars !== null &&
     Math.abs(promptChars - BASELINE_PROMPT_CHARS) / BASELINE_PROMPT_CHARS > PROMPT_DRIFT_THRESHOLD;
   const measuredOn = parseDate(MEASURED_ON);
-  // Weekly note volume drives the yearly estimate; persisted so it sticks.
-  const [notesPerWeek, setNotesPerWeek] = useState<number>(() => {
-    const v = Number(storage.get(StorageKeys.notesPerWeek));
-    return Number.isFinite(v) && v > 0 ? v : 40;
-  });
-  const setVolume = (v: number) => {
-    const clean = Number.isFinite(v) && v > 0 ? Math.round(v) : 0;
-    setNotesPerWeek(clean);
-    if (clean > 0) storage.set(StorageKeys.notesPerWeek, String(clean));
+  // Derive the cost-estimate inputs from her actual usual-week schedule instead of
+  // guessing. Each scheduled student in a slot is one note; a "session" she
+  // generates together is a distinct teacher/day/time slot (the cache window). Falls
+  // back to sensible defaults when there's no schedule yet.
+  const schedule = state.status === "ready" ? state.data.schedule : [];
+  const sched = useMemo(() => {
+    const entries = schedule.filter((e) => e.studentId.trim());
+    const sizes = new Map<string, number>(); // session key → student count
+    const students = new Set<string>();
+    const days = new Set<string>();
+    for (const e of entries) {
+      const key = `${e.teacherId}|${e.dayOfWeek}|${e.timeSlot}`;
+      sizes.set(key, (sizes.get(key) ?? 0) + 1);
+      students.add(e.studentId);
+      days.add(e.dayOfWeek);
+    }
+    const counts = [...sizes.values()];
+    const total = entries.length; // X = notes per week
+    return {
+      has: total > 0,
+      sessions: counts.length, // N
+      total,
+      students: students.size, // Y
+      min: counts.length ? Math.min(...counts) : 0,
+      max: counts.length ? Math.max(...counts) : 0,
+      perSession: counts.length ? total / counts.length : 0, // cache window if she does a session at a time
+      perDay: days.size ? total / days.size : 0, // cache window if she does a day at a time
+    };
+  }, [schedule]);
+  // The cache window assumed for the estimate depends on how many she generates at
+  // once: a session's worth, or a day's worth (cheaper — more notes share the cache).
+  const [cadence, setCadence] = useState<"session" | "day">(() =>
+    storage.get(StorageKeys.costCadence) === "day" ? "day" : "session",
+  );
+  const chooseCadence = (c: "session" | "day") => {
+    setCadence(c);
+    storage.set(StorageKeys.costCadence, c);
   };
-  const selected = MODEL_CHOICES.find((c) => c.id === choiceId);
-  // The selected model's provider key is missing (demo mode uses canned notes, so
-  // no key warning there). Applies to either provider.
+  const notesPerWeek = sched.has ? sched.total : 40;
+  const sessionWindow = sched.has ? sched.perSession : 3;
+  const dayWindow = sched.has ? sched.perDay : 8;
+  const cacheWindow = cadence === "day" ? dayWindow : sessionWindow;
+  const selected = resolvePipeline(pipelineId);
+  // The selected pipeline's provider key is missing (demo mode uses canned notes,
+  // so no key warning there). Applies to either provider.
   const missingKey =
-    !demoMode && selected
-      ? selected.provider === "openai"
-        ? !keys?.openaiApiKey
-        : !keys?.anthropicApiKey
-      : false;
+    !demoMode && (selected.provider === "openai" ? !keys?.openaiApiKey : !keys?.anthropicApiKey);
   return (
     <div data-tour="settings-model" className="card" style={{ marginBottom: "1rem" }}>
       <h3 className="card__title">Model</h3>
       <p style={{ fontSize: 13, color: "var(--color-text-secondary)", marginBottom: 10 }}>
-        Which AI writes the notes. You can switch anytime — try a few and keep what reads best. Each shows the
-        rough cost per note and the estimated cost per year.
+        Which AI writes the notes. You can switch anytime — try a few and keep what reads best.
       </p>
-      <label
-        style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--color-text-secondary)", marginBottom: 12 }}
+      <p style={{ fontSize: 13, color: "var(--color-text-secondary)", marginBottom: 12, lineHeight: 1.5 }}>
+        {sched.has ? (
+          <>
+            From your schedule: <Num>{sched.sessions}</Num> session{sched.sessions === 1 ? "" : "s"} per week,{" "}
+            <Num>{sched.min === sched.max ? `${sched.max}` : `${sched.min}–${sched.max}`}</Num>{" "}
+            student{sched.max === 1 ? "" : "s"} per session, for a total of <Num>{sched.total}</Num> notes per week
+            across <Num>{sched.students}</Num> student{sched.students === 1 ? "" : "s"}.
+          </>
+        ) : (
+          <>
+            No schedule set yet — estimate assumes <Num>40</Num> notes per week at <Num>3</Num> students per
+            session.
+          </>
+        )}
+      </p>
+      <div
+        style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 13, color: "var(--color-text-secondary)", marginBottom: 12 }}
       >
-        Yearly estimate assumes
-        <input
-          className="input"
-          type="number"
-          min={1}
-          value={notesPerWeek || ""}
-          onChange={(e) => setVolume(Number(e.target.value))}
-          style={{ width: 50, padding: "2px 6px", fontSize: 13, textAlign: "center" }}
-        />
-        notes per week.
-      </label>
+        <span>We estimate the rough cost, given that you're generating notes: </span>
+        <div
+          style={{
+            display: "inline-flex",
+            border: "0.5px solid var(--color-border-secondary)",
+            borderRadius: "var(--border-radius-md)",
+            overflow: "hidden",
+          }}
+        >
+          {(
+            [
+              ["session", "one session at a time"],
+              ["day", "one day at a time"],
+            ] as const
+          ).map(([val, label]) => (
+            <button
+              key={val}
+              type="button"
+              onClick={() => chooseCadence(val)}
+              style={{
+                padding: "3px 11px",
+                fontSize: 12.5,
+                border: "none",
+                cursor: "pointer",
+                background: cadence === val ? "var(--color-text-tertiary)" : "transparent",
+                color: cadence === val ? "#fff" : "var(--color-text-secondary)",
+                fontWeight: cadence === val ? 600 : 400,
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {MODEL_CHOICES.map((c) => {
-          const on = c.id === choiceId;
-          const perNote = perNoteCostLabel(c);
-          const annual = notesPerWeek > 0 ? annualCostLabel(c, notesPerWeek) : null;
+        {PIPELINES.map((c) => {
+          const on = c.id === pipelineId;
+          const perNote = pipelinePerNoteCostLabel(c, cacheWindow);
+          const annual = notesPerWeek > 0 ? pipelineAnnualCostLabel(c, notesPerWeek, cacheWindow) : null;
           const priceLabel = perNote
             ? annual
               ? `${perNote}/note ≈ ${annual}`
@@ -595,9 +667,9 @@ function ModelSection() {
           );
         })}
       </div>
-      {missingKey && selected && (
+      {missingKey && (
         <p className="field-hint" style={{ color: "var(--color-text-danger)", marginTop: 10 }}>
-          Add your {PROVIDER_META[selected.provider].label} key below to use this model.
+          Add your {PROVIDER_META[selected.provider].label} key below to use {selected.label}.
         </p>
       )}
       <p className="field-hint" style={{ marginTop: 10 }}>

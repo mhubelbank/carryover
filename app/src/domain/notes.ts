@@ -1,4 +1,4 @@
-import { callModel, llmErrorStatus, type LlmResponse } from "../clients/llm";
+import { callModel, labelCalls, llmErrorStatus, type LlmResponse, type SystemBlock } from "../clients/llm";
 import { DEFAULT_MODEL, type Provider } from "../clients/models";
 import type { DataClient } from "../clients/github";
 import type { Mode } from "./teacher";
@@ -217,9 +217,21 @@ export async function loadPromptSet(client: DataClient, mode: Mode): Promise<Pro
 // Pipeline
 // ---------------------------------------------------------------------------
 
+// A model assignment for a single pass (premium draft, cheaper cleanup). Both
+// passes of a pipeline share one provider/key, so `provider` is usually constant.
+export interface PassModel {
+  provider: Provider;
+  model: string;
+}
+
 export interface GenerateOptions {
+  // A single model for every pass — used by evals, conjugation, and as the
+  // fallback when `passes` omits a pass.
   provider?: Provider;
   model?: string;
+  // Per-pass model overrides: draft on a premium model, review/streamline on
+  // cheaper ones. Each entry wins over provider/model for that pass.
+  passes?: Partial<Record<Pass, PassModel>>;
   maxTokens?: number;
   // Contents of data/prompts/feedback-rules.md — appended to the DRAFT prompt only.
   feedbackRules?: string;
@@ -308,7 +320,7 @@ const BACKOFF_MS = [1000, 3000, 10000];
 // system instructions heavily, which measurably curbs invented detail and pronoun
 // drift; Claude honors them too. Kept short so it reinforces, not competes with,
 // the per-pass prompt.
-const NOTE_SYSTEM =
+export const NOTE_SYSTEM =
   "You write professional SLP clinical session notes. Use ONLY the information provided — never " +
   "invent behaviors, details, numbers, or specifics that are not in the data. Do not add evaluative " +
   'or framing language that is not in the data — no "meaningful," "authentic," "valuable," "rich," ' +
@@ -325,6 +337,7 @@ async function callWithRetry(
   model: string,
   maxTokens: number,
   prompt: string,
+  system: string | SystemBlock[],
 ): Promise<LlmResponse> {
   let lastError: unknown;
   for (let attempt = 0; attempt <= BACKOFF_MS.length; attempt++) {
@@ -332,7 +345,7 @@ async function callWithRetry(
       return await callModel(provider, apiKey, {
         model,
         max_tokens: maxTokens,
-        system: NOTE_SYSTEM,
+        system,
         messages: [{ role: "user", content: prompt }],
       });
     } catch (err) {
@@ -354,20 +367,32 @@ async function callPass(
   model: string,
   maxTokens: number,
   prompt: string,
+  system: string | SystemBlock[] = NOTE_SYSTEM,
 ): Promise<string> {
   try {
-    let res = await callWithRetry(apiKey, provider, model, maxTokens, prompt);
+    labelCalls(pass); // tag this pass's calls so measure:prices can split usage
+    let res = await callWithRetry(apiKey, provider, model, maxTokens, prompt, system);
     // Reasoning models (GPT-5 family) can spend the token budget on hidden
     // reasoning and return a cut-off note; give it one retry at double the
     // ceiling before accepting a truncated result.
     if (res.truncated) {
-      res = await callWithRetry(apiKey, provider, model, maxTokens * 2, prompt);
+      res = await callWithRetry(apiKey, provider, model, maxTokens * 2, prompt, system);
     }
     return cleanClaudeResponse(res.text);
   } catch (err) {
     const detail = err instanceof Error ? err.message : "unknown error";
     throw new Error(`${pass} pass failed: ${detail}`);
   }
+}
+
+// Split the draft template on the CACHE_SPLIT marker into [static instructions,
+// per-note data template]. The static half is identical across notes (cacheable);
+// templates without the marker keep everything in the data half (only golden caches).
+const CACHE_SPLIT = "===CACHE_SPLIT===";
+function splitDraftTemplate(template: string): [string, string] {
+  const i = template.indexOf(CACHE_SPLIT);
+  if (i < 0) return ["", template];
+  return [template.slice(0, i).trim(), template.slice(i + CACHE_SPLIT.length).trimStart()];
 }
 
 // Run the three sequential passes for one student. {{draftNote}} and
@@ -378,11 +403,18 @@ export async function generateNote(
   ctx: TemplateContext,
   opts: GenerateOptions = {},
 ): Promise<NoteResult> {
-  const provider = opts.provider ?? "anthropic";
-  const model = opts.model ?? DEFAULT_MODEL;
+  const fallback: PassModel = { provider: opts.provider ?? "anthropic", model: opts.model ?? DEFAULT_MODEL };
+  const passModel = (p: Pass): PassModel => opts.passes?.[p] ?? fallback;
   const maxTokens = opts.maxTokens ?? 1500;
 
-  let draftPrompt = renderTemplate(prompts.draft, ctx);
+  // The draft template is split into a STATIC instruction block and the per-note
+  // DATA block on the CACHE_SPLIT marker. The instructions + golden examples are
+  // identical across every note, so they ride in a CACHED system block (a stable
+  // prefix served at ~10% of the input price after the first note in a warm
+  // window); only the small data block + feedback + variety go in the per-note
+  // user prompt. Templates without the marker fall back to caching golden alone.
+  const [staticInstr, dataTemplate] = splitDraftTemplate(prompts.draft);
+  let draftPrompt = renderTemplate(dataTemplate, ctx);
   const appends: string[] = [];
   // Her feedback — one-off corrections from "regenerate with feedback" (including
   // the quick-fix chips) plus the accumulated feedback-rules.md — is applied to
@@ -393,27 +425,41 @@ export async function generateNote(
     ? `Apply these corrections from the clinician's feedback — they take priority where they conflict with the defaults:\n${opts.feedbackRules.trim()}`
     : "";
   if (feedbackAppend) appends.push(feedbackAppend);
-  if (opts.goldenExamples?.trim()) {
-    appends.push(
-      "Below are example notes whose style and structure to follow. Use the SAME structure and " +
-        "templated phrasing for every student in a session — vary only each student's specific details; " +
-        "do not reach for synonyms or reword for variety between students.\n\n" +
-        opts.goldenExamples.trim(),
-    );
-  }
   if (opts.varietyNote?.trim()) {
     appends.push(opts.varietyNote.trim());
   }
   if (appends.length > 0) draftPrompt += "\n\n" + appends.join("\n\n");
+  const golden = opts.goldenExamples?.trim();
+  const goldenBlock = golden
+    ? "Below are example notes whose style and structure to follow. Use the SAME structure and " +
+      "templated phrasing for every student in a session — vary only each student's specific details; " +
+      "do not reach for synonyms or reword for variety between students.\n\n" +
+      golden
+    : "";
+  const cached = [staticInstr, goldenBlock].filter(Boolean).join("\n\n");
+  const draftSystem: string | SystemBlock[] = cached
+    ? [
+        { type: "text", text: NOTE_SYSTEM },
+        { type: "text", text: cached, cache_control: { type: "ephemeral" } },
+      ]
+    : NOTE_SYSTEM;
   opts.onPhase?.("draft");
-  const draft = await callPass(apiKey, "draft", provider, model, maxTokens, draftPrompt);
+  const draft = await callPass(
+    apiKey,
+    "draft",
+    passModel("draft").provider,
+    passModel("draft").model,
+    maxTokens,
+    draftPrompt,
+    draftSystem,
+  );
 
   opts.onPhase?.("review");
   const reviewed = await callPass(
     apiKey,
     "review",
-    provider,
-    model,
+    passModel("review").provider,
+    passModel("review").model,
     maxTokens,
     renderTemplate(prompts.review, { ...ctx, draftNote: draft }) + (feedbackAppend ? `\n\n${feedbackAppend}` : ""),
   );
@@ -422,8 +468,8 @@ export async function generateNote(
   const streamlined = await callPass(
     apiKey,
     "streamline",
-    provider,
-    model,
+    passModel("streamline").provider,
+    passModel("streamline").model,
     maxTokens,
     renderTemplate(prompts.streamline, { ...ctx, draftNote: draft, reviewedNote: reviewed }),
   );

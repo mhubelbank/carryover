@@ -29,7 +29,9 @@ export const StorageKeys = {
   openaiApiKey: "openai_api_key",
   githubToken: "github_token",
   modelChoice: "model_choice",
-  notesPerWeek: "notes_per_week",
+  // Cost-estimate cadence: "session" or "day" — how many notes she generates
+  // together (the cache window assumed for the Settings price).
+  costCadence: "cost_cadence",
   theme: "theme",
   page: "page",
   errorLog: "error_log",
@@ -43,4 +45,7 @@ export const StorageKeys = {
   // changes so existing sandboxes re-seed instead of keeping stale data.
   demoSeedVersion: "demo_seed_version",
   githubTokenSavedOn: "github_token_saved_on",
+  // Provider whose credits ran out mid-generation ("anthropic"/"openai"); drives a
+  // sticky banner on Generate until a successful run on that provider clears it.
+  outOfCreditsProvider: "out_of_credits_provider",
 } as const;

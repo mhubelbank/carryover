@@ -1,10 +1,18 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Icon } from "../components/Icon";
 import { PROMPT_TYPE_ICON, LEVEL_ABBR } from "../components/promptSymbols";
 import { Nav, type NavPage } from "../components/Nav";
 import { useAuth } from "../context/AuthContext";
-import { resolveChoice, PROVIDER_META, MODEL_CHOICES, perNoteCostLabel } from "../clients/models";
-import { getModelChoiceId, setModelChoiceId } from "../clients/modelPref";
+import {
+  resolvePipeline,
+  PROVIDER_META,
+  PIPELINES,
+  pipelinePerNoteCostLabel,
+  type PipelineId,
+  type Provider,
+} from "../clients/models";
+import { isOutOfCredits } from "../clients/llm";
+import { getPipelineId, setPipelineId } from "../clients/modelPref";
 import { useTerm } from "../context/TermContext";
 import {
   appendFeedbackRule,
@@ -86,7 +94,7 @@ import type { SessionMetadata } from "../domain/session";
 import { displayName, fullName, isActiveOn, studentContext, type Student } from "../domain/student";
 import { teacherColor, type Activity, type Mode, type Role, type SessionCapture, type Teacher } from "../domain/teacher";
 import { getSessionNotes, saveNotes, type CachedNote } from "../clients/noteCache";
-import { storage } from "../clients/storage";
+import { storage, StorageKeys } from "../clients/storage";
 import {
   baseForm,
   blankTrialEntry,
@@ -285,14 +293,56 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
   // which key the run needs. Held in state (seeded from the saved pref) so that
   // switching it mid-session — e.g. from the regenerate modal — takes effect on
   // the next run immediately; `changeModel` also persists it as her preference.
-  const [modelChoiceId, setModelChoiceIdState] = useState(getModelChoiceId);
-  const changeModel = (id: string) => {
-    setModelChoiceIdState(id);
-    setModelChoiceId(id);
+  const [pipelineId, setPipelineIdState] = useState(getPipelineId);
+  const changeModel = (id: PipelineId) => {
+    setPipelineIdState(id);
+    setPipelineId(id);
   };
-  const modelChoice = resolveChoice(modelChoiceId);
-  const providerKey = modelChoice.provider === "openai" ? keys?.openaiApiKey : keys?.anthropicApiKey;
+  const pipeline = resolvePipeline(pipelineId);
+  // Per-pass model assignment for the pipeline (premium draft, cheaper cleanup).
+  const pipelinePassesOpt = {
+    draft: { provider: pipeline.provider, model: pipeline.draft.model },
+    review: { provider: pipeline.provider, model: pipeline.review.model },
+    streamline: { provider: pipeline.provider, model: pipeline.streamline.model },
+  };
+  const providerKey = pipeline.provider === "openai" ? keys?.openaiApiKey : keys?.anthropicApiKey;
   const hasModelKey = providerKey != null && providerKey.length > 0;
+
+  // Sticky "out of credits" state, tracked PER provider (both can be exhausted at
+  // once). Each flag is set when a generation fails on billing and cleared by the
+  // next successful run on that provider; persisted so it survives reloads. The
+  // banner shows while the SELECTED pipeline's provider is exhausted — switching to
+  // a pipeline whose provider still has credit hides it.
+  const [creditsOut, setCreditsOut] = useState<Set<Provider>>(() => {
+    const set = new Set<Provider>();
+    (storage.get(StorageKeys.outOfCreditsProvider) ?? "").split(",").forEach((p) => {
+      if (p === "anthropic" || p === "openai") set.add(p);
+    });
+    return set;
+  });
+  const persistCreditsOut = (set: Set<Provider>) => {
+    if (set.size) storage.set(StorageKeys.outOfCreditsProvider, [...set].join(","));
+    else storage.remove(StorageKeys.outOfCreditsProvider);
+  };
+  const flagOutOfCredits = (prov: Provider) =>
+    setCreditsOut((cur) => {
+      if (cur.has(prov)) return cur;
+      const next = new Set(cur).add(prov);
+      persistCreditsOut(next);
+      return next;
+    });
+  const clearOutOfCredits = (prov: Provider) =>
+    setCreditsOut((cur) => {
+      if (!cur.has(prov)) return cur;
+      const next = new Set(cur);
+      next.delete(prov);
+      persistCreditsOut(next);
+      return next;
+    });
+  const otherProvider: Provider = pipeline.provider === "anthropic" ? "openai" : "anthropic";
+  const creditBanner = creditsOut.has(pipeline.provider) ? (
+    <CreditBanner provider={pipeline.provider} otherOut={creditsOut.has(otherProvider)} />
+  ) : null;
 
   // Restore an auto-saved in-progress form on a plain mount (refresh), but never
   // over a deep-link target — that's a deliberately fresh session from Today.
@@ -837,8 +887,8 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
       : await conjugatePastForms(
           apiKey,
           collectTrialVerbs(pending.map((s) => studentState[s.id]!)),
-          modelChoice.provider,
-          modelChoice.modelId,
+          pipeline.provider,
+          pipeline.streamline.model,
         );
     await runPool(pending, GENERATE_CONCURRENCY, async (student) => {
       const st = studentState[student.id]!;
@@ -850,8 +900,7 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
         }
         const ctx = buildContext(mode, teacher, student, st, activities, goals, catalog, roleCatalog, pastForms);
         const result = await generateNote(apiKey, prompts!, ctx, {
-          provider: modelChoice.provider,
-          model: modelChoice.modelId,
+          passes: pipelinePassesOpt,
           maxTokens: MAX_TOKENS_BY_MODE[mode],
           postProcess: buildPostProcess(teacher, student),
           feedbackRules,
@@ -859,7 +908,9 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
           varietyNote,
         });
         updateResult(student.id, { result, warnings: noteWarnings(result.final, effectivePronouns(student.pronouns), st) });
+        clearOutOfCredits(pipeline.provider); // a successful run proves credits are back
       } catch (e) {
+        if (isOutOfCredits(e)) flagOutOfCredits(pipeline.provider);
         updateResult(student.id, { error: e instanceof Error ? e.message : "Failed" });
       } finally {
         done++;
@@ -959,8 +1010,8 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
       : await conjugatePastForms(
           apiKey,
           collectTrialVerbs(targets.map((t) => t.st!)),
-          modelChoice.provider,
-          modelChoice.modelId,
+          pipeline.provider,
+          pipeline.streamline.model,
         );
     await runPool(targets, GENERATE_CONCURRENCY, async ({ id, st, student }) => {
       updateResult(id, { regenerating: true, regenPhase: "draft", error: undefined });
@@ -972,8 +1023,7 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
         }
         const ctx = buildContext(mode, teacher, student!, st!, activities, goals, catalog, roleCatalog, pastForms);
         const result = await generateNote(apiKey, prompts!, ctx, {
-          provider: modelChoice.provider,
-          model: modelChoice.modelId,
+          passes: pipelinePassesOpt,
           maxTokens: MAX_TOKENS_BY_MODE[mode],
           postProcess: buildPostProcess(teacher, student!),
           feedbackRules,
@@ -987,7 +1037,9 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
           regenerating: false,
           regenPhase: undefined,
         });
+        clearOutOfCredits(pipeline.provider);
       } catch (e) {
+        if (isOutOfCredits(e)) flagOutOfCredits(pipeline.provider);
         updateResult(id, {
           regenerating: false,
           regenPhase: undefined,
@@ -1008,9 +1060,10 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
         onBack={() => setPhase("form")}
         onNavigate={onNavigate}
         onRegenerate={regenerate}
-        modelChoiceId={modelChoiceId}
+        pipelineId={pipelineId}
         onChangeModel={changeModel}
         modelKeyMissing={!hasModelKey}
+        banner={creditBanner}
         onToggleDrafts={(id) =>
           updateResult(id, { showDrafts: !results.find((r) => r.studentId === id)?.showDrafts })
         }
@@ -1021,6 +1074,7 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
   return (
     <div className="shell">
       <Nav current="generate" onNavigate={onNavigate} />
+      {creditBanner}
 
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: "1rem" }}>
         <div>
@@ -1422,7 +1476,7 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
             </span>
           ) : !hasModelKey ? (
             <span style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>
-              Add your {PROVIDER_META[modelChoice.provider].label} key in Settings to use {modelChoice.label}.
+              Add your {PROVIDER_META[pipeline.provider].label} key in Settings to use {pipeline.label}.
             </span>
           ) : null}
           <button
@@ -2759,6 +2813,46 @@ function CopyButton({ text, label, disabled }: { text: string; label: string; di
   );
 }
 
+// Sticky out-of-credits banner. The caller only renders it while the selected
+// pipeline's provider is the exhausted one, so switching pipelines hides it.
+// `otherOut` = the other provider is also exhausted, so don't suggest switching.
+function CreditBanner({ provider, otherOut }: { provider: Provider; otherOut: boolean }) {
+  const meta = PROVIDER_META[provider];
+  const other = otherOut ? undefined : PIPELINES.find((p) => p.provider !== provider);
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 12,
+        flexWrap: "wrap",
+        padding: "10px 14px",
+        marginBottom: 16,
+        borderRadius: "var(--border-radius-md)",
+        background: "var(--color-background-danger)",
+        color: "var(--color-text-danger)",
+        border: "0.5px solid var(--color-border-danger)",
+        fontSize: 13,
+      }}
+    >
+      <span>
+        <strong style={{ fontWeight: 600 }}>You're out of {meta.label} credits.</strong> Notes won't
+        generate until you top up{other ? ` — or switch to ${other.label} in Settings` : ""}.
+      </span>
+      <a
+        href={meta.creditsUrl}
+        target="_blank"
+        rel="noreferrer"
+        className="button button--small"
+        style={{ whiteSpace: "nowrap" }}
+      >
+        Top up {meta.label} <Icon name="external-link" size={12} />
+      </a>
+    </div>
+  );
+}
+
 function ResultsView({
   date,
   timeSlot,
@@ -2767,9 +2861,10 @@ function ResultsView({
   onBack,
   onNavigate,
   onRegenerate,
-  modelChoiceId,
+  pipelineId,
   onChangeModel,
   modelKeyMissing,
+  banner,
   onToggleDrafts,
 }: {
   date: string;
@@ -2779,9 +2874,10 @@ function ResultsView({
   onBack: () => void;
   onNavigate: (page: NavPage) => void;
   onRegenerate: (ids: string[], feedback?: string, saveAsRule?: boolean) => void;
-  modelChoiceId: string;
-  onChangeModel: (id: string) => void;
+  pipelineId: PipelineId;
+  onChangeModel: (id: PipelineId) => void;
   modelKeyMissing: boolean;
+  banner: ReactNode;
   onToggleDrafts: (id: string) => void;
 }) {
   const parsed = parseDate(date);
@@ -2812,6 +2908,7 @@ function ResultsView({
   return (
     <div className="shell">
       <Nav current="generate" onNavigate={onNavigate} />
+      {banner}
       <div style={{ marginBottom: "1rem" }}>
         <button
           className="button button--ghost button--small"
@@ -2984,7 +3081,7 @@ function ResultsView({
       {regenRows.length > 0 && (
         <RegenerateModal
           targets={regenRows.map((r) => ({ name: r.name, currentNote: r.result?.final ?? "" }))}
-          modelChoiceId={modelChoiceId}
+          pipelineId={pipelineId}
           onChangeModel={onChangeModel}
           modelKeyMissing={modelKeyMissing}
           locked={demoMode}
@@ -3018,7 +3115,7 @@ const QUICK_FIXES: { label: string; phrase: string }[] = [
 // an optional "save as a rule for future notes".
 function RegenerateModal({
   targets,
-  modelChoiceId,
+  pipelineId,
   onChangeModel,
   modelKeyMissing,
   locked = false,
@@ -3026,8 +3123,8 @@ function RegenerateModal({
   onClose,
 }: {
   targets: { name: string; currentNote: string }[];
-  modelChoiceId: string;
-  onChangeModel: (id: string) => void;
+  pipelineId: PipelineId;
+  onChangeModel: (id: PipelineId) => void;
   modelKeyMissing: boolean;
   // Demo mode: show the feedback UI but disable everything (no LLM behind it).
   locked?: boolean;
@@ -3242,13 +3339,13 @@ function RegenerateModal({
           <select
             id="regen-model"
             className="input"
-            value={modelChoiceId}
+            value={pipelineId}
             disabled={locked}
-            onChange={(e) => onChangeModel(e.target.value)}
+            onChange={(e) => onChangeModel(e.target.value as PipelineId)}
             style={{ width: "auto", fontSize: 13, padding: "4px 8px" }}
           >
-            {MODEL_CHOICES.map((c) => {
-              const cost = perNoteCostLabel(c);
+            {PIPELINES.map((c) => {
+              const cost = pipelinePerNoteCostLabel(c);
               return (
                 <option key={c.id} value={c.id}>
                   {c.label}

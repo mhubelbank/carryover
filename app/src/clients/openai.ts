@@ -12,7 +12,14 @@ export interface OpenAIResponse {
   // finish_reason "length" means the model hit the token ceiling (common on
   // reasoning models that spend the budget on hidden reasoning) — used to retry.
   choices: Array<{ message: { content: string | null }; finish_reason?: string }>;
-  usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+  // OpenAI caches long prompt prefixes automatically; cached_tokens reports how
+  // many input tokens were served from cache (billed at the discounted rate).
+  usage?: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+    prompt_tokens_details?: { cached_tokens?: number };
+  };
 }
 
 export class OpenAIError extends Error {
@@ -38,9 +45,15 @@ async function errorDetail(res: Response): Promise<string> {
 
 export async function callOpenAI(apiKey: string, request: LlmRequest): Promise<OpenAIResponse> {
   // OpenAI carries the system prompt as a leading "system" message rather than a
-  // top-level field; everything else maps one-to-one.
-  const messages = request.system
-    ? [{ role: "system" as const, content: request.system }, ...request.messages]
+  // top-level field; everything else maps one-to-one. System blocks (used to mark
+  // Anthropic's cache prefix) flatten to one string — OpenAI caches the prefix
+  // automatically, so the ordering does the work without explicit markers.
+  const systemText =
+    typeof request.system === "string"
+      ? request.system
+      : request.system?.map((b) => b.text).join("\n\n");
+  const messages = systemText
+    ? [{ role: "system" as const, content: systemText }, ...request.messages]
     : request.messages;
 
   const res = await fetch(API_URL, {

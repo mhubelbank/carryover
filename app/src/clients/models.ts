@@ -39,7 +39,7 @@ export const MODEL_CHOICES: ModelChoice[] = [
     blurb: "The recommended model, which scored the best on quality & value testing. Needs an Anthropic key.",
     provider: "anthropic",
     modelId: "claude-sonnet-4-6",
-    noteTokens: { input: 7369, output: 170 },
+    noteTokens: { input: 8089, output: 181 },
   },
   {
     id: "claude-opus",
@@ -47,7 +47,7 @@ export const MODEL_CHOICES: ModelChoice[] = [
     blurb: "Anthropic's most capable model — highest tier, pricier than Sonnet. Needs an Anthropic key.",
     provider: "anthropic",
     modelId: "claude-opus-4-8",
-    noteTokens: { input: 10368, output: 271 },
+    noteTokens: { input: 11364, output: 279 },
   },
   {
     id: "claude-haiku",
@@ -55,7 +55,7 @@ export const MODEL_CHOICES: ModelChoice[] = [
     blurb: "Faster and cheaper than Sonnet, with slightly less polish. Needs an Anthropic key.",
     provider: "anthropic",
     modelId: "claude-haiku-4-5-20251001",
-    noteTokens: { input: 7361, output: 150 },
+    noteTokens: { input: 8081, output: 174 },
   },
   {
     id: "chatgpt",
@@ -63,7 +63,7 @@ export const MODEL_CHOICES: ModelChoice[] = [
     blurb: "Primary OpenAI alternative for a different voice. Needs an OpenAI key.",
     provider: "openai",
     modelId: "gpt-5.4",
-    noteTokens: { input: 6839, output: 153 },
+    noteTokens: { input: 7513, output: 147 },
   },
   {
     id: "chatgpt-pro",
@@ -71,13 +71,72 @@ export const MODEL_CHOICES: ModelChoice[] = [
     blurb: "OpenAI's most capable model, the priciest option by far. Needs an OpenAI key.",
     provider: "openai",
     modelId: "gpt-5.5",
-    noteTokens: { input: 6839, output: 1467 },
+    noteTokens: { input: 7512, output: 1388 },
   },
 ];
 
 export const DEFAULT_MODEL_CHOICE = "claude-sonnet";
 export const DEFAULT_MODEL =
   MODEL_CHOICES.find((c) => c.id === DEFAULT_MODEL_CHOICE)?.modelId ?? MODEL_CHOICES[0]!.modelId;
+
+// --- Pipelines --------------------------------------------------------------
+// What the user actually picks: a provider pipeline, not a single model. Each
+// runs a premium DRAFT then progressively cheaper REVIEW + STREAMLINE passes, so
+// every note gets the best model on the hard part (the draft) while cleanup runs
+// cheap. The individual models above are internal — only these two are shown.
+export type PipelineId = "claude" | "chatgpt";
+
+export interface PipelinePass {
+  model: ModelId;
+  // Per-pass token usage measured by `npm run measure:prices` (a mixed pipeline
+  // can't be derived from the single-model numbers — the draft's output feeds the
+  // later passes' input, so it must be measured end-to-end). `cached` is the
+  // prompt-cache prefix size (of `input`), billed at the discounted rate. Seeded
+  // until measured; PIPELINES_MEASURED_ON stamps the last measurement.
+  tokens: { input: number; output: number; cached: number };
+}
+
+export interface Pipeline {
+  id: PipelineId;
+  label: string;
+  blurb: string;
+  provider: Provider;
+  draft: PipelinePass;
+  review: PipelinePass;
+  streamline: PipelinePass;
+}
+
+export const PIPELINES: Pipeline[] = [
+  {
+    id: "claude",
+    label: "Claude",
+    blurb:
+      "Drafts on Opus (most capable), then cleans up on Sonnet and Haiku to keep cost down. Needs an Anthropic key.",
+    provider: "anthropic",
+    draft: { model: "claude-opus-4-8", tokens: { input: 6112, output: 91, cached: 5780 } },
+    review: { model: "claude-sonnet-4-6", tokens: { input: 2840, output: 61, cached: 0 } },
+    streamline: { model: "claude-haiku-4-5-20251001", tokens: { input: 981, output: 61, cached: 0 } },
+  },
+  {
+    id: "chatgpt",
+    label: "ChatGPT",
+    blurb: "Drafts on GPT-5.5, then cleans up on GPT-5.4 and GPT-5.4-mini. Needs an OpenAI key.",
+    provider: "openai",
+    draft: { model: "gpt-5.5", tokens: { input: 4005, output: 545, cached: 1109 } },
+    review: { model: "gpt-5.4", tokens: { input: 2639, output: 51, cached: 0 } },
+    streamline: { model: "gpt-5.4-mini", tokens: { input: 913, output: 50, cached: 0 } },
+  },
+];
+
+export const DEFAULT_PIPELINE: PipelineId = "claude";
+
+// The three passes in order, for iterating a pipeline's models/tokens.
+export const pipelinePasses = (p: Pipeline): PipelinePass[] => [p.draft, p.review, p.streamline];
+
+// Resolve a saved pipeline id to its record, falling back to the default.
+export function resolvePipeline(id: string): Pipeline {
+  return PIPELINES.find((p) => p.id === id) ?? PIPELINES.find((p) => p.id === DEFAULT_PIPELINE) ?? PIPELINES[0]!;
+}
 
 export const PROVIDER_META: Record<Provider, { label: string; keyLabel: string; creditsUrl: string }> = {
   anthropic: {
@@ -138,13 +197,55 @@ export function annualCostLabel(choice: ModelChoice, notesPerWeek: number): stri
   return `$${Math.round(usd * notesPerWeek * 52)}/year`;
 }
 
+// Prompt-cache price multipliers on the INPUT rate. Anthropic 5-min cache: writes
+// cost 1.25× and reads 0.10× of base input; OpenAI caches automatically (no write
+// premium) and bills cached input at ~0.10×. Verify on the pricing pages — these
+// move. Used to project caching savings in measure:prices.
+export const CACHE_MULT: Record<Provider, { write: number; read: number }> = {
+  anthropic: { write: 1.25, read: 0.1 },
+  openai: { write: 1.0, read: 0.1 },
+};
+
+// Notes generated together share a warm cache; `session` is that window size (how
+// many she generates at a time). Larger = the one cache write amortizes further =
+// cheaper. Default 4. Cf. NOTES_PER_SESSION in measure:prices.
+export const DEFAULT_CACHE_SESSION = 4;
+
+// Per-note $ for a whole pipeline = each pass's model price × its tokens, with the
+// cached prefix discounted (one cache write amortized across the session window,
+// the rest read at the cheap rate). Matches the "default" scenario in docs/prices.md.
+export function pipelineNoteUsd(p: Pipeline, session = DEFAULT_CACHE_SESSION): number {
+  const cm = CACHE_MULT[p.provider];
+  const D = Math.max(1, session);
+  return pipelinePasses(p).reduce((sum, pass) => {
+    const price = PRICING[pass.model];
+    const cached = Math.min(pass.tokens.cached, pass.tokens.input);
+    const dyn = pass.tokens.input - cached;
+    const billedInput = (cached * (cm.write + (D - 1) * cm.read)) / D + dyn;
+    return sum + (billedInput * price.inputPerMTok + pass.tokens.output * price.outputPerMTok) / 1_000_000;
+  }, 0);
+}
+
+export function pipelinePerNoteCostLabel(p: Pipeline, session = DEFAULT_CACHE_SESSION): string {
+  const cents = pipelineNoteUsd(p, session) * 100;
+  return cents < 0.5 ? "<1¢" : `${Math.round(cents)}¢`;
+}
+
+export function pipelineAnnualCostLabel(p: Pipeline, notesPerWeek: number, session = DEFAULT_CACHE_SESSION): string {
+  return `$${Math.round(pipelineNoteUsd(p, session) * notesPerWeek * 52)}/year`;
+}
+
 // --- Estimate freshness -----------------------------------------------------
 // Stamped by `npm run measure:prices`: when the per-model token estimates were
 // last measured, and the total prompt size (chars) they were measured against.
 // Settings compares the live prompt size to this baseline and nudges to refresh
 // the estimates (re-run measure:prices) once they drift past the threshold.
-export const MEASURED_ON = "2026-06-12";
-export const BASELINE_PROMPT_CHARS = 31806;
+export const MEASURED_ON = "2026-06-13";
+export const BASELINE_PROMPT_CHARS = 34945;
+// When the PIPELINES per-pass token counts were last measured end-to-end by
+// `npm run measure:prices -- --pipelines`. "" until first measured (the seeded
+// tokens above are rough estimates, so the pipeline cost labels are approximate).
+export const PIPELINES_MEASURED_ON = "2026-06-13";
 export const PROMPT_DRIFT_THRESHOLD = 0.2;
 
 // Total characters of the generation prompt inputs that drive token cost — the
