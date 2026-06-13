@@ -238,6 +238,12 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }
     return n;
   }, [readyByKey, drafts, sessions]);
 
+  const readySessionCount = useMemo(
+    () =>
+      sessions.filter((sp) => readyByKey[sessionKey(sp.teacherId, sp.timeSlot)] === "ready").length,
+    [readyByKey, sessions],
+  );
+
   const updateActiveDraft = (patch: Partial<SessionDraft>) => {
     if (!activeSpec) return;
     setDirty(true);
@@ -695,25 +701,28 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }
         <h1 style={{ fontSize: 20, fontWeight: 500, margin: 0 }}>
           Write today's notes — {longDate}
         </h1>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {dirty && (
-            <button
-              className="button button--small"
-              onClick={saveAndClose}
-              title="Your inputs are saved — you can come back and keep adding through the day"
-            >
-              Save and close
-            </button>
-          )}
-          <button
-            className="button button--ghost button--small"
-            onClick={saveAndClose}
-            title="Close (your inputs are saved)"
-            style={{ padding: 6, color: "var(--color-text-secondary)", display: "flex" }}
-          >
-            <Icon name="x" size={18} />
-          </button>
-        </div>
+        {/* Close control. Once she's edited a session, the X grows a "Save and
+            close" label (same ghost styling — not a separate filled button) so
+            she knows her inputs persist and she can keep adding through the day. */}
+        <button
+          className="button button--ghost button--small"
+          onClick={saveAndClose}
+          title={
+            dirty
+              ? "Your inputs are saved — you can come back and keep adding through the day"
+              : "Close (your inputs are saved)"
+          }
+          style={{
+            padding: 6,
+            color: "var(--color-text-secondary)",
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+          }}
+        >
+          {dirty && <span>Save and close</span>}
+          <Icon name="x" size={18} />
+        </button>
       </div>
 
       {creditBanner && <div style={{ padding: "12px 24px 0" }}>{creditBanner}</div>}
@@ -896,7 +905,7 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }
               ? progress
                 ? `Generating… ${progress.current} of ${progress.total} done`
                 : "Generating…"
-              : `Generate all ready — ${readyCount} note${readyCount === 1 ? "" : "s"}`}
+              : `Generate all ready — ${readySessionCount} session${readySessionCount === 1 ? "" : "s"}`}
           </button>
         </div>
       </div>
