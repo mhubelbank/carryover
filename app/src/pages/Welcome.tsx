@@ -1,5 +1,5 @@
 import { useState, type CSSProperties, type ReactNode } from "react";
-import { Icon } from "../components/Icon";
+import { Icon, type IconName } from "../components/Icon";
 import { validateApiKey, AnthropicError } from "../clients/anthropic";
 import { validateOpenAIKey, OpenAIError } from "../clients/openai";
 import { validateGitHubToken, GitHubError } from "../clients/github";
@@ -78,11 +78,13 @@ export function Welcome() {
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <RoleButton
               primary
+              icon="school"
               title="I'm a speech-language pathologist"
               subtitle="Set up Carryover with your own keys"
               onClick={() => setView("setup")}
             />
             <RoleButton
+              icon="search"
               title="Someone else — just exploring"
               subtitle="Try the demo with sample data — no setup, nothing saved"
               onClick={() => {
@@ -231,11 +233,13 @@ export function Welcome() {
 // A large, full-width option on the role-chooser screen: a bold title over a
 // muted one-line description.
 function RoleButton({
+  icon,
   title,
   subtitle,
   primary,
   onClick,
 }: {
+  icon: IconName;
   title: string;
   subtitle: string;
   primary?: boolean;
@@ -246,7 +250,9 @@ function RoleButton({
       type="button"
       onClick={onClick}
       style={{
-        display: "block",
+        display: "flex",
+        alignItems: "center",
+        gap: 14,
         width: "100%",
         textAlign: "left",
         padding: "16px 18px",
@@ -258,11 +264,16 @@ function RoleButton({
         cursor: "pointer",
       }}
     >
-      <span style={{ display: "block", fontSize: 15, fontWeight: 500, color: "var(--color-text-primary)" }}>
-        {title}
+      <span style={{ color: "var(--color-text-secondary)", flexShrink: 0 }}>
+        <Icon name={icon} size={24} />
       </span>
-      <span style={{ display: "block", fontSize: 13, color: "var(--color-text-secondary)", marginTop: 2 }}>
-        {subtitle}
+      <span>
+        <span style={{ display: "block", fontSize: 15, fontWeight: 500, color: "var(--color-text-primary)" }}>
+          {title}
+        </span>
+        <span style={{ display: "block", fontSize: 13, color: "var(--color-text-secondary)", marginTop: 2 }}>
+          {subtitle}
+        </span>
       </span>
     </button>
   );
