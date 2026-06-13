@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { Icon } from "../components/Icon";
 import { PROMPT_TYPE_ICON, LEVEL_ABBR } from "../components/promptSymbols";
 import { Nav, type NavPage } from "../components/Nav";
@@ -368,15 +368,6 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
   const [studentState, setStudentState] = useState<Record<string, StudentState>>(
     () => initialDraft?.studentState ?? {},
   );
-  // UI-only, not persisted (unlike the auto-saved form state).
-  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
-  const toggleCollapsed = (id: string) =>
-    setCollapsed((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
   const [phase, setPhase] = useState<"form" | "running" | "results">("form");
   useEffect(() => {
     // Scroll to top when the results view appears or we return to the form — but
@@ -649,10 +640,6 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
   const activityOptions = teacher ? activityOptionsForGenerate(teacher, catalog) : [];
   const roleOptions = teacher ? resolveRoles(teacher, roleCatalog) : [];
 
-  function setStudent(id: string, patch: Partial<StudentState>) {
-    setStudentState((prev) => ({ ...prev, [id]: { ...prev[id]!, ...patch } }));
-  }
-
   // Reset the form for this session: one blank activity and fresh per-student
   // inputs (roster inclusion still from the schedule). Keeps date/teacher/slot/mode.
   function clearForm() {
@@ -673,100 +660,6 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
     setStudentState(fresh);
     seededSig.current = sessionSig; // already seeded — keep the effect from clobbering
     clearFormDraft();
-  }
-
-  function setRegularInput(id: string, idx: number, patch: Partial<ActivityInput>) {
-    setStudentState((prev) => {
-      const cur = prev[id]!;
-      const regular = cur.regular.slice();
-      regular[idx] = { ...regular[idx]!, ...patch };
-      return { ...prev, [id]: { ...cur, regular } };
-    });
-  }
-
-  function setActivityCapture(
-    id: string,
-    idx: number,
-    capName: string,
-    fieldName: string,
-    value: string | boolean | string[],
-  ) {
-    setStudentState((prev) => {
-      const cur = prev[id]!;
-      const regular = cur.regular.slice();
-      const input = regular[idx]!;
-      const caps = input.captures ?? {};
-      const cap = caps[capName] ?? {};
-      regular[idx] = {
-        ...input,
-        captures: { ...caps, [capName]: { ...cap, [fieldName]: value } },
-      };
-      return { ...prev, [id]: { ...cur, regular } };
-    });
-  }
-
-  function setNews(id: string, patch: Partial<NewsFieldValues>) {
-    setStudentState((prev) => {
-      const cur = prev[id]!;
-      return { ...prev, [id]: { ...cur, news: { ...cur.news, ...patch } } };
-    });
-  }
-
-  function setCaptureField(
-    id: string,
-    captureName: string,
-    fieldName: string,
-    value: string | boolean | string[],
-  ) {
-    setStudentState((prev) => {
-      const cur = prev[id]!;
-      const allCaps = cur.captures;
-      const cap = allCaps[captureName] ?? {};
-      return {
-        ...prev,
-        [id]: {
-          ...cur,
-          captures: { ...allCaps, [captureName]: { ...cap, [fieldName]: value } },
-        },
-      };
-    });
-  }
-
-  function setPragmatic(id: string, key: PragmaticSkillKey, patch: Partial<PragmaticSkillValue>) {
-    setStudentState((prev) => {
-      const cur = prev[id]!;
-      const prag = cur.news.pragmatic ?? {};
-      const skill = prag[key] ?? { enabled: false, qualityLevel: "", promptLevel: "" };
-      return {
-        ...prev,
-        [id]: {
-          ...cur,
-          news: {
-            ...cur.news,
-            pragmatic: { ...prag, [key]: { ...skill, ...patch } },
-          },
-        },
-      };
-    });
-  }
-
-  function addActivity() {
-    if (activities.length >= 4) return;
-    setActivities((a) => [...a, blankActivity()]);
-  }
-  function removeActivity(idx: number) {
-    setActivities((a) => a.filter((_, i) => i !== idx));
-    setStudentState((prev) => {
-      const next: Record<string, StudentState> = {};
-      for (const id of Object.keys(prev)) {
-        const cur = prev[id]!;
-        next[id] = { ...cur, regular: cur.regular.filter((_, i) => i !== idx) };
-      }
-      return next;
-    });
-  }
-  function patchActivity(idx: number, patch: Partial<ActivityDef>) {
-    setActivities((a) => a.map((x, i) => (i === idx ? { ...x, ...patch } : x)));
   }
 
   // Scheduled students first, in the schedule's saved order (so the all-notes
@@ -1269,7 +1162,210 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
             </div>
           );
         })()}
+      </fieldset>
 
+      <SessionInputs
+        mode={mode}
+        teacher={teacher}
+        hasSession={hasSession}
+        caseload={caseload}
+        goals={goals}
+        activityOptions={activityOptions}
+        roleOptions={roleOptions}
+        activities={activities}
+        studentState={studentState}
+        setActivities={setActivities}
+        setStudentState={setStudentState}
+        disabled={phase === "running"}
+      />
+
+      {error && (
+        <p role="alert" style={{ fontSize: 13, color: "var(--color-text-danger)" }}>
+          {error}
+        </p>
+      )}
+
+      {hasSession && (
+        <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 12, marginTop: 16 }}>
+          {useCanned ? (
+            <span style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>
+              Demo notes use templating logic only; no LLM calls.
+            </span>
+          ) : !hasModelKey ? (
+            <span style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>
+              Add your {PROVIDER_META[pipeline.provider].label} key in Settings to use {pipeline.label}.
+            </span>
+          ) : null}
+          <button
+            className="button button--primary"
+            onClick={handleGenerate}
+            disabled={!canGenerate || phase === "running"}
+          >
+            {phase === "running"
+              ? progress
+                ? `Generating… ${progress.current} of ${progress.total} done`
+                : "Generating…"
+              : `Generate ${includedStudents.length} note${includedStudents.length === 1 ? "" : "s"}`}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Session inputs
+// ---------------------------------------------------------------------------
+
+// The per-session input UI: the session-level Activities card, the per-student
+// cards, and the "add a student" select. Fully controlled via props so it can be
+// reused outside the Generate page (e.g. a batch "day" stepper).
+export function SessionInputs({
+  mode,
+  teacher,
+  hasSession,
+  caseload,
+  goals,
+  activityOptions,
+  roleOptions,
+  activities,
+  studentState,
+  setActivities,
+  setStudentState,
+  disabled,
+}: {
+  mode: Mode;
+  teacher: Teacher | undefined;
+  hasSession: boolean;
+  caseload: Student[];
+  goals: Goal[];
+  activityOptions: ReturnType<typeof activityOptionsForGenerate>;
+  roleOptions: ReturnType<typeof resolveRoles>;
+  activities: ActivityDef[];
+  studentState: Record<string, StudentState>;
+  setActivities: Dispatch<SetStateAction<ActivityDef[]>>;
+  setStudentState: Dispatch<SetStateAction<Record<string, StudentState>>>;
+  disabled: boolean;
+}) {
+  // UI-only, not persisted (unlike the auto-saved form state).
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
+  const toggleCollapsed = (id: string) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  function setStudent(id: string, patch: Partial<StudentState>) {
+    setStudentState((prev) => ({ ...prev, [id]: { ...prev[id]!, ...patch } }));
+  }
+
+  function setRegularInput(id: string, idx: number, patch: Partial<ActivityInput>) {
+    setStudentState((prev) => {
+      const cur = prev[id]!;
+      const regular = cur.regular.slice();
+      regular[idx] = { ...regular[idx]!, ...patch };
+      return { ...prev, [id]: { ...cur, regular } };
+    });
+  }
+
+  function setActivityCapture(
+    id: string,
+    idx: number,
+    capName: string,
+    fieldName: string,
+    value: string | boolean | string[],
+  ) {
+    setStudentState((prev) => {
+      const cur = prev[id]!;
+      const regular = cur.regular.slice();
+      const input = regular[idx]!;
+      const caps = input.captures ?? {};
+      const cap = caps[capName] ?? {};
+      regular[idx] = {
+        ...input,
+        captures: { ...caps, [capName]: { ...cap, [fieldName]: value } },
+      };
+      return { ...prev, [id]: { ...cur, regular } };
+    });
+  }
+
+  function setNews(id: string, patch: Partial<NewsFieldValues>) {
+    setStudentState((prev) => {
+      const cur = prev[id]!;
+      return { ...prev, [id]: { ...cur, news: { ...cur.news, ...patch } } };
+    });
+  }
+
+  function setCaptureField(
+    id: string,
+    captureName: string,
+    fieldName: string,
+    value: string | boolean | string[],
+  ) {
+    setStudentState((prev) => {
+      const cur = prev[id]!;
+      const allCaps = cur.captures;
+      const cap = allCaps[captureName] ?? {};
+      return {
+        ...prev,
+        [id]: {
+          ...cur,
+          captures: { ...allCaps, [captureName]: { ...cap, [fieldName]: value } },
+        },
+      };
+    });
+  }
+
+  function setPragmatic(id: string, key: PragmaticSkillKey, patch: Partial<PragmaticSkillValue>) {
+    setStudentState((prev) => {
+      const cur = prev[id]!;
+      const prag = cur.news.pragmatic ?? {};
+      const skill = prag[key] ?? { enabled: false, qualityLevel: "", promptLevel: "" };
+      return {
+        ...prev,
+        [id]: {
+          ...cur,
+          news: {
+            ...cur.news,
+            pragmatic: { ...prag, [key]: { ...skill, ...patch } },
+          },
+        },
+      };
+    });
+  }
+
+  function addActivity() {
+    if (activities.length >= 4) return;
+    setActivities((a) => [...a, blankActivity()]);
+  }
+  function removeActivity(idx: number) {
+    setActivities((a) => a.filter((_, i) => i !== idx));
+    setStudentState((prev) => {
+      const next: Record<string, StudentState> = {};
+      for (const id of Object.keys(prev)) {
+        const cur = prev[id]!;
+        next[id] = { ...cur, regular: cur.regular.filter((_, i) => i !== idx) };
+      }
+      return next;
+    });
+  }
+  function patchActivity(idx: number, patch: Partial<ActivityDef>) {
+    setActivities((a) => a.map((x, i) => (i === idx ? { ...x, ...patch } : x)));
+  }
+
+  return (
+    <fieldset
+      disabled={disabled}
+      style={{
+        border: 0,
+        margin: 0,
+        padding: 0,
+        minInlineSize: 0,
+        ...(disabled ? { pointerEvents: "none", opacity: 0.6 } : {}),
+      }}
+    >
       {/* Regular activities (session-level) */}
       {mode === "regular" && teacher && hasSession && (
         <div className="card" style={{ marginBottom: "1rem" }}>
@@ -1460,39 +1556,7 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
             </div>
           );
         })()}
-      </fieldset>
-
-      {error && (
-        <p role="alert" style={{ fontSize: 13, color: "var(--color-text-danger)" }}>
-          {error}
-        </p>
-      )}
-
-      {hasSession && (
-        <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 12, marginTop: 16 }}>
-          {useCanned ? (
-            <span style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>
-              Demo notes use templating logic only; no LLM calls.
-            </span>
-          ) : !hasModelKey ? (
-            <span style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>
-              Add your {PROVIDER_META[pipeline.provider].label} key in Settings to use {pipeline.label}.
-            </span>
-          ) : null}
-          <button
-            className="button button--primary"
-            onClick={handleGenerate}
-            disabled={!canGenerate || phase === "running"}
-          >
-            {phase === "running"
-              ? progress
-                ? `Generating… ${progress.current} of ${progress.total} done`
-                : "Generating…"
-              : `Generate ${includedStudents.length} note${includedStudents.length === 1 ? "" : "s"}`}
-          </button>
-        </div>
-      )}
-    </div>
+    </fieldset>
   );
 }
 
