@@ -569,7 +569,7 @@ function ModelSection() {
       <div
         style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 13, color: "var(--color-text-secondary)", marginBottom: 12 }}
       >
-        <span>We estimate the rough cost, given that you're generating notes: </span>
+        <span>We estimate the rough cost below, assuming that you're generating notes: </span>
         <div
           style={{
             display: "inline-flex",
@@ -593,8 +593,8 @@ function ModelSection() {
                 fontSize: 12.5,
                 border: "none",
                 cursor: "pointer",
-                background: cadence === val ? "var(--color-text-tertiary)" : "transparent",
-                color: cadence === val ? "#fff" : "var(--color-text-secondary)",
+                background: cadence === val ? "var(--color-background-secondary)" : "transparent",
+                color: cadence === val ? "var(--color-text-secondary)" : "var(--color-text-tertiary)",
                 fontWeight: cadence === val ? 600 : 400,
               }}
             >
@@ -990,10 +990,9 @@ function ExportSection() {
 // nav bar) so the user sees the first step in context.
 function HelpSection({ onNavigate }: { onNavigate: (page: NavPage) => void }) {
   const { start } = useTutorial();
-  const { demoMode, enterDemoMode } = useAuth();
   return (
     <div className="card" style={{ marginBottom: "1rem" }}>
-      <h3 className="card__title">Tutorial &amp; demo</h3>
+      <h3 className="card__title">Tutorial</h3>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, marginBottom: 12 }}>
         <p style={{ flex: 1, fontSize: 13, color: "var(--color-text-secondary)", margin: 0 }}>
           Take the guided tour of the app again.
@@ -1008,22 +1007,6 @@ function HelpSection({ onNavigate }: { onNavigate: (page: NavPage) => void }) {
           Replay tutorial
         </button>
       </div>
-      {!demoMode && (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14 }}>
-          <p style={{ flex: 1, fontSize: 13, color: "var(--color-text-secondary)", margin: 0 }}>
-            Explore a sandbox with sample data — your real data stays untouched.
-          </p>
-          <button
-            className="button button--small"
-            onClick={() => {
-              enterDemoMode();
-              onNavigate("today");
-            }}
-          >
-            Try demo mode
-          </button>
-        </div>
-      )}
     </div>
   );
 }

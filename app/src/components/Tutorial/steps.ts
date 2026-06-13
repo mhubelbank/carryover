@@ -75,7 +75,7 @@ export const TOUR_STEPS: TourStep[] = [
     target: "today-batch",
     title: "Write a whole day at once",
     pageLabel: "Today",
-    body: "The first of two ways to write notes: batch a day. Add the day's sessions to a batch, then generate them all together in one pass — the fastest way to clear a day, and it keeps costs down. You log each session's trials and activities as you go, and your inputs auto-save so you can come back through the day.",
+    body: "The first of two ways to write clinical notes: batch the day's sessions, then generate them together in one pass. This is the fastest and cheapest way to clear a day's sessions. Your inputs auto-save, so you can edit the form throughout the day.",
   },
   {
     key: "deep-generate",
@@ -83,7 +83,7 @@ export const TOUR_STEPS: TourStep[] = [
     target: "generate-picker",
     title: "Write one session",
     pageLabel: "Generate",
-    body: "The second way: one session at a time. Pick the date, teacher, and time slot to load a session — handy for a make-up or a single catch-up note. Capture what happened — activities, trials, prompting — and generate a clean clinical note you can refine.",
+    body: "The second way: one session at a time, handy for a single catch-up note. Pick the date, teacher, and time slot to load a session. Capture what happened in the form, then generate a clean clinical note you can refine.",
   },
   {
     key: "deep-schedule",

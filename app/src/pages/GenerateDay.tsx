@@ -1007,7 +1007,7 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }
                       hour: "numeric",
                       minute: "2-digit",
                     })}
-                    . Edit and regenerate to update it.
+                    . Edit the form to add it to the batch.
                   </span>
                 </div>
               )}
