@@ -175,9 +175,6 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }
   const [results, setResults] = useState<ResultRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
-  // Becomes true once she edits any session — surfaces a "Save and close" so it's
-  // clear the inputs persist and she can keep adding through the day.
-  const [dirty, setDirty] = useState(false);
 
   // Debounced snapshot save per session whenever its draft changes (mirrors
   // Generate's autosave, but straight to the per-session snapshot store).
@@ -246,7 +243,6 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }
 
   const updateActiveDraft = (patch: Partial<SessionDraft>) => {
     if (!activeSpec) return;
-    setDirty(true);
     setDrafts((prev) => {
       const cur = prev[activeKey]!;
       const next = { ...cur, ...patch };
@@ -255,9 +251,9 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }
     });
   };
 
-  // Flush every session's draft to its snapshot immediately (cancelling pending
-  // debounced saves) so nothing in-flight is lost, then close.
-  const saveAndClose = () => {
+  // The form auto-saves as she types (scheduleSave). On close, flush every
+  // session's pending debounced save immediately so nothing in-flight is lost.
+  const flushAndClose = () => {
     for (const sp of sessions) {
       const key = sessionKey(sp.teacherId, sp.timeSlot);
       const d = drafts[key];
@@ -275,6 +271,43 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }
       });
     }
     onClose();
+  };
+
+  // Clear just the active session's form (mirrors the one-off generator's "Clear
+  // form"): one blank activity + fresh per-student inputs, roster inclusion kept
+  // from the schedule. The cleared state is persisted immediately so it survives
+  // a leave-and-return.
+  const clearActiveForm = () => {
+    if (!activeSpec) return;
+    const inSession = new Set(activeSpec.studentIds);
+    const studentState: Record<string, StudentState> = {};
+    for (const s of caseloadFor(activeSpec.teacherId)) {
+      studentState[s.id] = {
+        included: inSession.has(s.id),
+        absent: false,
+        regular: [blankRegularInput()],
+        roleId: "",
+        news: blankNews(),
+        newsGoalIds: [],
+        captures: {},
+      };
+    }
+    const next: SessionDraft = {
+      mode: activeDraft?.mode ?? activeTeacher?.modes[0] ?? "regular",
+      activities: [blankActivity()],
+      studentState,
+    };
+    setDrafts((prev) => ({ ...prev, [activeKey]: next }));
+    if (saveTimer.current[activeKey]) clearTimeout(saveTimer.current[activeKey]);
+    saveFormSnapshot({
+      date,
+      teacherId: activeSpec.teacherId,
+      timeSlot: activeSpec.timeSlot,
+      mode: next.mode,
+      activities: next.activities,
+      studentState,
+      sessionSig: `${activeSpec.teacherId}|${date}|${activeSpec.timeSlot}|${activeSpec.studentIds.join(",")}`,
+    });
   };
 
   const setActivities = (
@@ -701,26 +734,14 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }
         <h1 style={{ fontSize: 20, fontWeight: 500, margin: 0 }}>
           Write today's notes — {longDate}
         </h1>
-        {/* Close control. Once she's edited a session, the X grows a "Save and
-            close" label (same ghost styling — not a separate filled button) so
-            she knows her inputs persist and she can keep adding through the day. */}
+        {/* The form auto-saves, so the X just closes — her inputs are already
+            persisted and she can reopen the day to keep adding. */}
         <button
           className="button button--ghost button--small"
-          onClick={saveAndClose}
-          title={
-            dirty
-              ? "Your inputs are saved — you can come back and keep adding through the day"
-              : "Close (your inputs are saved)"
-          }
-          style={{
-            padding: 6,
-            color: "var(--color-text-secondary)",
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-          }}
+          onClick={flushAndClose}
+          title="Close — your inputs auto-save, so you can come back and keep adding through the day"
+          style={{ padding: 6, color: "var(--color-text-secondary)", display: "flex" }}
         >
-          {dirty && <span>Save and close</span>}
           <Icon name="x" size={18} />
         </button>
       </div>
@@ -795,20 +816,30 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }
                 <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>
                   {activeSpec.timeSlot} · {activeTeacher.name}
                 </h2>
-                {activeTeacher.modes.length > 1 && (
-                  <select
-                    className="select"
-                    value={activeDraft.mode}
-                    onChange={(e) => updateActiveDraft({ mode: e.target.value as Mode })}
-                    style={{ width: "auto", marginLeft: "auto", height: 30, fontSize: 13 }}
+                <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+                  {activeTeacher.modes.length > 1 && (
+                    <select
+                      className="select"
+                      value={activeDraft.mode}
+                      onChange={(e) => updateActiveDraft({ mode: e.target.value as Mode })}
+                      style={{ width: "auto", height: 30, fontSize: 13 }}
+                    >
+                      {activeTeacher.modes.map((m) => (
+                        <option key={m} value={m}>
+                          {m === "regular" ? "Regular" : "News day"}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  <button
+                    className="button button--small"
+                    onClick={clearActiveForm}
+                    disabled={phase === "running"}
+                    title="Reset activities and every student's inputs for this session"
                   >
-                    {activeTeacher.modes.map((m) => (
-                      <option key={m} value={m}>
-                        {m === "regular" ? "Regular" : "News day"}
-                      </option>
-                    ))}
-                  </select>
-                )}
+                    Clear form
+                  </button>
+                </div>
               </div>
               {onReviewIep && iepOverdue.length > 0 && (
                 <div
