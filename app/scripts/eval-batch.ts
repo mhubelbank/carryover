@@ -58,6 +58,9 @@ const nums = argv.filter((a) => /^\d+$/.test(a)).map(Number);
 const PASSES = nums[0] ?? (process.env.PASSES ? Number(process.env.PASSES) : 3);
 const STUDENTS = nums[1] ?? (process.env.STUDENTS ? Number(process.env.STUDENTS) : 5);
 const SEED = process.env.SEED ? Number(process.env.SEED) : 1;
+// Emily's real caseload is ~80 notes/week; used only to extrapolate the run's
+// per-note cost into a weekly figure.
+const NOTES_PER_WEEK = process.env.NOTES_PER_WEEK ? Number(process.env.NOTES_PER_WEEK) : 80;
 // Lower than the app's cap to stay under the Anthropic input-tokens/min rate
 // limit (golden examples make every prompt large). Override with CONCURRENCY.
 const CONCURRENCY = process.env.CONCURRENCY ? Number(process.env.CONCURRENCY) : 2;
@@ -573,7 +576,7 @@ function usageSummary(): string {
   } else {
     lines.push(
       `- estimated cost: $${cost.toFixed(2)} total · $${(cost / generated).toFixed(4)}/note · ` +
-        `~$${((cost / generated) * 40).toFixed(2)} for 40 notes/week`,
+        `~$${((cost / generated) * NOTES_PER_WEEK).toFixed(2)} for ${NOTES_PER_WEEK} notes/week`,
     );
   }
   return lines.join("\n") + "\n\n---\n\n";
