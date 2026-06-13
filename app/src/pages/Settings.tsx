@@ -624,6 +624,8 @@ function KeysSection() {
           value={keys?.anthropicApiKey ?? ""}
           placeholder="sk-ant-…"
           creditsUrl={PROVIDER_META.anthropic.creditsUrl}
+          createUrl="https://console.anthropic.com/settings/keys"
+          createLabel="Get a key"
           validate={(v) => validateKey("anthropic", v)}
           onSave={(v) => updateKeys({ anthropicApiKey: v })}
         />
@@ -632,6 +634,8 @@ function KeysSection() {
           value={keys?.openaiApiKey ?? ""}
           placeholder="sk-…"
           creditsUrl={PROVIDER_META.openai.creditsUrl}
+          createUrl="https://platform.openai.com/api-keys"
+          createLabel="Get a key"
           validate={(v) => validateKey("openai", v)}
           onSave={(v) => updateKeys({ openaiApiKey: v })}
         />
@@ -640,6 +644,8 @@ function KeysSection() {
           value={keys?.githubToken ?? ""}
           placeholder="github_pat_… or ghp_…"
           status={githubStatus}
+          createUrl="https://github.com/settings/tokens/new?scopes=repo&description=Carryover"
+          createLabel="Create a token"
           validate={(v) => validateGitHubToken(v, REPO_CONFIG.owner, REPO_CONFIG.repo)}
           onSave={(v) => updateKeys({ githubToken: v })}
         />
@@ -673,6 +679,8 @@ function KeyRow({
   value,
   placeholder,
   creditsUrl,
+  createUrl,
+  createLabel,
   status,
   validate,
   onSave,
@@ -681,6 +689,8 @@ function KeyRow({
   value: string;
   placeholder: string;
   creditsUrl?: string;
+  createUrl?: string;
+  createLabel?: string;
   status?: { label: string; tone: "warning" | "danger" };
   validate: (value: string) => Promise<unknown>;
   onSave: (value: string) => void;
@@ -738,16 +748,28 @@ function KeyRow({
             </span>
           )}
         </span>
-        {creditsUrl && (
-          <a
-            href={creditsUrl}
-            target="_blank"
-            rel="noreferrer"
-            style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 3 }}
-          >
-            Check your credits <Icon name="external-link" size={11} />
-          </a>
-        )}
+        <span style={{ display: "inline-flex", alignItems: "baseline", gap: 12 }}>
+          {createUrl && (
+            <a
+              href={createUrl}
+              target="_blank"
+              rel="noreferrer"
+              style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 3 }}
+            >
+              {createLabel ?? "Get one"} <Icon name="external-link" size={11} />
+            </a>
+          )}
+          {creditsUrl && (
+            <a
+              href={creditsUrl}
+              target="_blank"
+              rel="noreferrer"
+              style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 3 }}
+            >
+              Check your credits <Icon name="external-link" size={11} />
+            </a>
+          )}
+        </span>
       </div>
       <div style={{ display: "flex", gap: 8 }}>
         {editing ? (
