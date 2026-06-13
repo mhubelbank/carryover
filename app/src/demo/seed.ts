@@ -5,6 +5,7 @@
 // "today" at seed time so the demo always looks current.
 import type { DataClient } from "../clients/github";
 import { clearDemoFs } from "../clients/localFsClient";
+import { storage, StorageKeys } from "../clients/storage";
 import {
   writeActivities,
   writeGoals,
@@ -281,16 +282,32 @@ function buildProgressSessions(students: Student[], goals: Goal[]): SessionMetad
   return out;
 }
 
-async function writeSeed(client: DataClient): Promise<void> {
-  const { students, iepHistory } = buildStudents();
+// Minimal first-run-tour schedule: the one sample student, seen every weekday.
+function buildMinimalSchedule(student: Student): ScheduleEntry[] {
+  return WEEKDAYS.map((dayOfWeek: Weekday, d) => ({
+    teacherId: student.teacherId,
+    dayOfWeek,
+    timeSlot: slotsForDay(d)[0]!,
+    studentId: student.id,
+  }));
+}
+
+async function writeSeed(client: DataClient, minimal: boolean): Promise<void> {
+  const built = buildStudents();
+  // Minimal = just the featured student (IEP + birthday today, full progress).
+  const students = minimal ? built.students.slice(0, 1) : built.students;
+  const teachers = minimal ? TEACHERS.slice(0, 1) : TEACHERS;
+  const iepHistory = built.iepHistory.filter((h) => students.some((s) => s.id === h.studentId));
   const goals = buildGoals(students);
+  const schedule = minimal ? buildMinimalSchedule(students[0]!) : buildSchedule(students);
+
   await writeStudentFields(client, STUDENT_FIELDS, undefined);
   await writeActivities(client, ACTIVITIES, undefined);
   await writeNewsRoles(client, NEWS_ROLES, undefined);
-  await writeTeachers(client, TEACHERS, undefined);
+  await writeTeachers(client, teachers, undefined);
   await writeStudents(client, students, STUDENT_FIELDS, undefined);
   await writeGoals(client, goals, undefined);
-  await writeSchedule(client, buildSchedule(students), undefined);
+  await writeSchedule(client, schedule, undefined);
   await writeTerm(client, TERM, undefined);
   await writeTermHistory(client, [], undefined);
   for (const session of buildProgressSessions(students, goals)) {
@@ -301,15 +318,24 @@ async function writeSeed(client: DataClient): Promise<void> {
   }
 }
 
-// Seed the sandbox only if it's empty (idempotent — preserves a visitor's edits
-// across reloads).
+const isMinimal = () => storage.get(StorageKeys.demoMinimal) === "1";
+
+// Seed the sandbox. The full demo is idempotent (preserves a visitor's edits
+// across reloads); the minimal first-run-tour demo is always re-seeded fresh
+// (it's transient — entered for the tour, exited when it ends).
 export async function seedDemoFs(client: DataClient): Promise<void> {
+  const minimal = isMinimal();
+  if (minimal) {
+    clearDemoFs();
+    await writeSeed(client, true);
+    return;
+  }
   if (await client.readFile("data/term.json")) return;
-  await writeSeed(client);
+  await writeSeed(client, false);
 }
 
 // Wipe the sandbox and re-seed it (the "Reset demo" action).
 export async function resetDemoFs(client: DataClient): Promise<void> {
   clearDemoFs();
-  await writeSeed(client);
+  await writeSeed(client, isMinimal());
 }

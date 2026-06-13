@@ -35,7 +35,9 @@ interface AuthContextValue {
   // localStorage (never GitHub), generation is canned, and it persists across
   // refreshes until exited. Distinct from testMode (a signed-in dev's empty repo).
   demoMode: boolean;
-  enterDemoMode: () => void;
+  // `minimal` seeds a single sample student (the first-run tour); default seeds the
+  // full sample caseload (the portfolio "Explore the demo").
+  enterDemoMode: (minimal?: boolean) => void;
   exitDemoMode: () => void;
   // ISO date the GitHub token was last saved, for the annual renewal reminder.
   // Null if unknown (set before this was tracked) or signed out.
@@ -104,13 +106,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       testMode,
       enterTestMode: () => setTestMode(true),
       demoMode,
-      enterDemoMode: () => {
+      enterDemoMode: (minimal = false) => {
         storage.set(StorageKeys.demoMode, "1");
+        if (minimal) storage.set(StorageKeys.demoMinimal, "1");
+        else storage.remove(StorageKeys.demoMinimal);
         setDemoMode(true);
       },
       exitDemoMode: () => {
         storage.remove(StorageKeys.demoMode);
         storage.remove(StorageKeys.demoFs);
+        storage.remove(StorageKeys.demoMinimal);
         void clearNotes().catch(() => {});
         setDemoMode(false);
       },

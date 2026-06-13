@@ -81,7 +81,7 @@ function Pages() {
       tourAutoStarted.current = true;
       if (!demoMode) {
         tourEnteredDemo.current = true;
-        enterDemoMode();
+        enterDemoMode(true); // minimal: one sample student with progress
       }
       startTour();
     }

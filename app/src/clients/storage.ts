@@ -36,5 +36,8 @@ export const StorageKeys = {
   tutorialDone: "tutorial_done",
   demoMode: "demo_mode",
   demoFs: "demo_fs",
+  // "1" when the demo was entered in minimal mode (one sample student) — used by
+  // the first-run tour so it shows a single populated student, not the full set.
+  demoMinimal: "demo_minimal",
   githubTokenSavedOn: "github_token_saved_on",
 } as const;
