@@ -2789,6 +2789,10 @@ function ResultsView({
     () => buildAllNotes(parsed ? formatLong(parsed) : date, timeSlot, results),
     [parsed, date, timeSlot, results],
   );
+  // Demo mode uses canned, template-only notes — regenerate is locked and the
+  // draft/review passes show an explanatory note instead of real pass text.
+  const { demoMode } = useAuth();
+  const DEMO_PASS_NOTE = "This response was generated with template logic only, no LLM calls.";
   // The student ids being regenerated-with-feedback (modal open when non-null);
   // a single id for a per-note Regenerate, many for a bulk selection.
   const [regenTargets, setRegenTargets] = useState<string[] | null>(null);
@@ -2961,13 +2965,13 @@ function ResultsView({
                   <details>
                     <summary>Draft pass</summary>
                     <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit" }}>
-                      {r.result.draft}
+                      {demoMode ? DEMO_PASS_NOTE : r.result.draft}
                     </pre>
                   </details>
                   <details>
                     <summary>Review pass</summary>
                     <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit" }}>
-                      {r.result.reviewed}
+                      {demoMode ? DEMO_PASS_NOTE : r.result.reviewed}
                     </pre>
                   </details>
                 </div>
@@ -2983,6 +2987,7 @@ function ResultsView({
           modelChoiceId={modelChoiceId}
           onChangeModel={onChangeModel}
           modelKeyMissing={modelKeyMissing}
+          locked={demoMode}
           onClose={() => setRegenTargets(null)}
           onSubmit={(feedback, saveAsRule) => {
             onRegenerate(
@@ -3016,6 +3021,7 @@ function RegenerateModal({
   modelChoiceId,
   onChangeModel,
   modelKeyMissing,
+  locked = false,
   onSubmit,
   onClose,
 }: {
@@ -3023,6 +3029,8 @@ function RegenerateModal({
   modelChoiceId: string;
   onChangeModel: (id: string) => void;
   modelKeyMissing: boolean;
+  // Demo mode: show the feedback UI but disable everything (no LLM behind it).
+  locked?: boolean;
   onSubmit: (feedback: string, saveAsRule: boolean) => void;
   onClose: () => void;
 }) {
@@ -3081,6 +3089,31 @@ function RegenerateModal({
             : "Apply one correction to all selected notes — e.g. a phrase the AI mistranslated."}
         </p>
 
+        {locked && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 8,
+              background: "var(--color-background-warning)",
+              border: "0.5px solid var(--color-border-warning)",
+              color: "var(--color-text-warning)",
+              borderRadius: "var(--border-radius-md)",
+              padding: "10px 12px",
+              marginBottom: 16,
+              fontSize: 12.5,
+            }}
+          >
+            <span style={{ marginTop: 1, lineHeight: 0 }}>
+              <Icon name="alert-circle" size={15} />
+            </span>
+            <span>
+              This is a preview of the feedback flow. Regeneration is disabled in the demo — notes
+              are generated with template logic only, no LLM calls.
+            </span>
+          </div>
+        )}
+
         <div
           style={{
             background: "var(--color-background-secondary)",
@@ -3137,7 +3170,8 @@ function RegenerateModal({
           </label>
           <textarea
             className="input"
-            autoFocus
+            autoFocus={!locked}
+            disabled={locked}
             rows={3}
             value={feedback}
             onChange={(e) => setFeedback(e.target.value)}
@@ -3156,6 +3190,7 @@ function RegenerateModal({
                 key={q.label}
                 className="button button--small"
                 style={{ fontSize: 12, padding: "5px 10px" }}
+                disabled={locked}
                 onClick={() => addQuickFix(q.phrase)}
               >
                 {q.label}
@@ -3191,6 +3226,7 @@ function RegenerateModal({
                 <input
                   type="checkbox"
                   checked={saveAsRule}
+                  disabled={locked}
                   onChange={(e) => setSaveAsRule(e.target.checked)}
                 />
                 Apply this guidance to all future notes
@@ -3207,6 +3243,7 @@ function RegenerateModal({
             id="regen-model"
             className="input"
             value={modelChoiceId}
+            disabled={locked}
             onChange={(e) => onChangeModel(e.target.value)}
             style={{ width: "auto", fontSize: 13, padding: "4px 8px" }}
           >
@@ -3234,8 +3271,8 @@ function RegenerateModal({
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <button
             onClick={() => onSubmit("", false)}
-            disabled={modelKeyMissing}
-            style={{ background: "none", border: "none", cursor: modelKeyMissing ? "not-allowed" : "pointer", fontSize: 13, padding: "6px 12px", color: "var(--color-text-secondary)", whiteSpace: "nowrap", opacity: modelKeyMissing ? 0.5 : 1 }}
+            disabled={modelKeyMissing || locked}
+            style={{ background: "none", border: "none", cursor: modelKeyMissing || locked ? "not-allowed" : "pointer", fontSize: 13, padding: "6px 12px", color: "var(--color-text-secondary)", whiteSpace: "nowrap", opacity: modelKeyMissing || locked ? 0.5 : 1 }}
           >
             Just regenerate without feedback
           </button>
@@ -3245,7 +3282,7 @@ function RegenerateModal({
             </button>
             <button
               className="button button--small"
-              disabled={!hasFeedback || modelKeyMissing}
+              disabled={!hasFeedback || modelKeyMissing || locked}
               onClick={() => onSubmit(feedback, saveAsRule && hasFeedback)}
               style={{
                 fontSize: 14,
