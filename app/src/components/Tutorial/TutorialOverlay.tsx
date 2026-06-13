@@ -149,6 +149,14 @@ export function TutorialOverlay({
         if (t - scrolledAt < 1200 || !didScroll) raf = requestAnimationFrame(frame);
         return;
       }
+      // Target not in the DOM this frame. If we've ALREADY placed it, it just
+      // briefly detached during a reflow/scroll — keep the spotlight where it is
+      // (don't snap the card to center) and keep watching within the settle window.
+      // Only the initial acquisition (before we ever find it) centers as a fallback.
+      if (didScroll) {
+        if (t - scrolledAt < 1200) raf = requestAnimationFrame(frame);
+        return;
+      }
       if (!startT) startT = t;
       if (t - startT < 1500) raf = requestAnimationFrame(frame);
       else {
@@ -157,7 +165,11 @@ export function TutorialOverlay({
       }
     };
     raf = requestAnimationFrame(frame);
-    const onMove = () => place(false);
+    // Re-anchor on scroll/resize, but only while the target is actually present —
+    // a scroll fired while it's momentarily detached must not center the card.
+    const onMove = () => {
+      if (document.querySelector(`[data-tour="${step.target}"]`)) place(false);
+    };
     window.addEventListener("scroll", onMove, true);
     window.addEventListener("resize", onMove);
     return () => {
