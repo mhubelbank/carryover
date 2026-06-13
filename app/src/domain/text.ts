@@ -57,6 +57,73 @@ export function streamlineLostClinicalDetail(reviewed: string, streamlined: stri
 // (e.g. "Wait, I need to re-read the original…" then re-emitting the note).
 const SELF_CORRECTION = /\b(wait,|let me\b|i need to\b|i'll\b|i should\b|on second thought|re-read the (original|note))/i;
 
+// Meta-commentary a clinical note never contains: the model leaked its own
+// reasoning/self-critique instead of emitting only the note. Broader than
+// SELF_CORRECTION (which targets first-person "wait, I need to…") — this also
+// catches an "issues to fix" preamble, a bare "Wait —" (em/en dash, the form
+// SELF_CORRECTION's "wait," misses), an "I must/should not …" meta-instruction,
+// an "as an AI/assistant" disclaimer, and a "here is the revised note" preamble.
+const LEAK_MARKERS: RegExp[] = [
+  /\bissues?\b[^.\n]{0,40}\bneed(?:s|ed)?\b[^.\n]{0,40}\bfix/i,
+  /\bI (?:must|should) not\b/i,
+  /\bWait\b\s*[—–]/,
+  /\bas an? (?:AI|assistant|language model)\b/i,
+  /\bhere(?:'s| is) (?:the |a |my )?(?:revised|corrected|rewritten|updated|final) (?:note|version)\b/i,
+];
+
+// True when the text contains leaked model reasoning/meta-commentary (see
+// LEAK_MARKERS). Used both to drive recovery and to flag a note for review when
+// recovery can't fully clean it.
+export function hasLeakedReasoning(text: string): boolean {
+  return LEAK_MARKERS.some((re) => re.test(text));
+}
+
+// Recover the clean note from a response where the model leaked its reasoning.
+// Leaking models typically emit the note, critique it, then re-emit one or more
+// revised versions separated by horizontal rules ("---"). Strategy: split on those
+// rules and keep the LAST leak-free, note-like segment (the model's final intended
+// version). If there's no separator, fall back to the longest run of consecutive
+// leak-free sentences. No-op when no leak marker is present; never returns empty
+// (returns the original text if nothing recovers, so the note is never lost — a
+// residual leak is then surfaced by hasLeakedReasoning in the warnings).
+export function stripLeakedReasoning(text: string): string {
+  if (!hasLeakedReasoning(text)) return text;
+  const noteLike = (s: string) =>
+    s.length > 0 && !hasLeakedReasoning(s) && /[.!?]/.test(s) && s.split(/\s+/).length >= 8;
+  const segments = text
+    .split(/\s*-{3,}\s*/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const cleanSegments = segments.filter(noteLike);
+  if (cleanSegments.length) return cleanSegments[cleanSegments.length - 1]!;
+  // No clean "---"-delimited segment — keep the longest run of consecutive
+  // leak-free sentences (the note, with interspersed meta sentences dropped).
+  const sentences = text
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  let best: string[] = [];
+  let run: string[] = [];
+  for (const s of sentences) {
+    if (hasLeakedReasoning(s)) {
+      if (run.length > best.length) best = run;
+      run = [];
+    } else {
+      run.push(s);
+    }
+  }
+  if (run.length > best.length) best = run;
+  const recovered = best.join(" ").trim();
+  return recovered.split(/\s+/).length >= 8 ? recovered : text;
+}
+
+// A note whose first sentence is "<Name> <He|She|They> <verb>…" — the activity
+// opener was dropped and the subject doubled (e.g. "Tess She correctly identified
+// …"). A flag, not a fix: the missing opener can't be reconstructed.
+export function hasDroppedOpener(text: string): boolean {
+  return /^\s*[A-Z][a-z]+\s+(?:He|She|They)\b/.test(text.trim());
+}
+
 // The student's response/affect must be its own sentence, not fused onto the
 // action with a concessive ("…redirection to task, though she was dysregulated"),
 // which wrongly implies success despite the state. Split any ", though/although

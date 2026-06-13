@@ -7,6 +7,9 @@ import {
   splitConcessive,
   streamlineLostClinicalDetail,
   missingSupportTerms,
+  stripLeakedReasoning,
+  hasLeakedReasoning,
+  hasDroppedOpener,
 } from "../domain/text";
 
 describe("normalizeAcronyms", () => {
@@ -123,5 +126,47 @@ describe("missingSupportTerms", () => {
   it("returns nothing when all terms are present, and ignores 'no'", () => {
     const note = "He answered given significant visual prompting and occasional redirection to task.";
     expect(missingSupportTerms(note, ["significant", "visual", "occasional", "no"])).toEqual([]);
+  });
+});
+
+describe("stripLeakedReasoning", () => {
+  // The exact reasoning leak observed in the Claude pipeline eval (regular note
+  // 1.10): a clean note, then a numbered self-critique, then two redrafts, with
+  // "Wait —" and "I must not write Wait in output" meta — all separated by "---".
+  const LEAK_1_10 =
+    'Jordan produced target sounds in structured word and phrase drills given significant modeled prompting and continuous redirection to task, with a paraprofessional providing hand-over-hand support during the writing portion. She was engaged throughout. She then sorted picture cards into categories and explained the grouping. She correctly produced 7/8 target sounds given moderate visual prompting. She was alert but more fatigued than usual following a morning assessment. This work built expressive and receptive skills as she produced target sounds and sequenced picture cards to retell an event. --- Several issues need to be fixed: 1. "with a paraprofessional providing hand-over-hand support" — prompting/support must be introduced with "given," not "with." 2. The closing re-states activity verbs from the body — replace with a brief back-reference. 3. Closing is a re-statement of activity details already in the note body. 7. The closing names verbs which is banned. Replace with "This session" or "This work." --- Jordan produced target sounds in structured word and phrase drills given significant modeled prompting, continuous redirection to task, and hand-over-hand support from a paraprofessional during the writing portion. She was engaged throughout. She then sorted picture cards into categories and explained the grouping. She correctly produced 7/8 target sounds given moderate visual prompting. She was alert but more fatigued than usual following a morning assessment. This session developed expressive and receptive language as she practiced producing target sounds and retelling an event through picture sequencing. --- Wait — the closing still re-states activity verbs. Also I must not write "Wait" in output. Jordan produced target sounds in structured word and phrase drills. She correctly produced 7/8 target sounds given moderate visual prompting. This session developed expressive and receptive language, supporting her goals of producing target sounds and retelling events.';
+
+  it("recovers a clean note from the observed 1.10 multi-redraft leak", () => {
+    const out = stripLeakedReasoning(LEAK_1_10);
+    expect(hasLeakedReasoning(out)).toBe(false);
+    expect(out).not.toMatch(/Several issues|Wait|I must not|---/);
+    expect(out.startsWith("Jordan produced target sounds")).toBe(true);
+    expect(out).toContain("She correctly produced 7/8 target sounds given moderate visual prompting.");
+    expect(out.length).toBeLessThan(LEAK_1_10.length);
+  });
+
+  it("recovers when meta sentences are interspersed without a --- separator", () => {
+    const leak =
+      'Here is the revised note. Sam read a short passage and answered comprehension questions about it. He answered 3/5 WH questions given minimal verbal prompting. This session built receptive language.';
+    const out = stripLeakedReasoning(leak);
+    expect(out).not.toMatch(/Here is the revised/);
+    expect(out).toContain("Sam read a short passage");
+  });
+
+  it("is a no-op on a clean note", () => {
+    const clean =
+      "Quinn read a short passage and answered comprehension questions about it. He correctly identified 3/5 main ideas given significant visual prompting. He was tired. This session built receptive language.";
+    expect(stripLeakedReasoning(clean)).toBe(clean);
+    expect(hasLeakedReasoning(clean)).toBe(false);
+  });
+});
+
+describe("hasDroppedOpener", () => {
+  it("flags a note whose opener was dropped and subject doubled", () => {
+    expect(hasDroppedOpener("Tess She correctly identified 5/8 main ideas given significant verbal prompting.")).toBe(true);
+  });
+  it("does not flag a normal opening", () => {
+    expect(hasDroppedOpener("Tess read a short passage and answered comprehension questions about it.")).toBe(false);
+    expect(hasDroppedOpener("She read a short passage about it.")).toBe(false);
   });
 });

@@ -2,7 +2,7 @@ import { callModel, labelCalls, llmErrorStatus, type LlmResponse, type SystemBlo
 import { DEFAULT_MODEL, type Provider } from "../clients/models";
 import type { DataClient } from "../clients/github";
 import type { Mode } from "./teacher";
-import { dropSelfCorrection, splitConcessive, normalizeAcronyms, fixClinicalSpelling, streamlineLostClinicalDetail } from "./text";
+import { dropSelfCorrection, splitConcessive, normalizeAcronyms, fixClinicalSpelling, streamlineLostClinicalDetail, stripLeakedReasoning } from "./text";
 import { limitMissSemicolons, spliceTrials } from "./trial";
 
 // Token ceilings ported from her existing TSX files (bump if she sees truncation).
@@ -47,10 +47,12 @@ export function cleanClaudeResponse(text: string): string {
     .replace(/#{1,6}\s+/g, "")
     .replace(/<[^>]*>/g, "")
     .trim();
-  // Salvage a note where the model leaked its thinking ("Wait, I need to…") and
-  // re-emitted the note, then split any concessive-fused affect ("…task, though
-  // she was distracted"). Both are no-ops on a clean note.
-  return splitConcessive(dropSelfCorrection(cleaned));
+  // Salvage a note where the model leaked its reasoning: stripLeakedReasoning
+  // recovers the clean note from an "…note --- critique --- redraft" leak;
+  // dropSelfCorrection catches first-person "Wait, I need to…" re-emits. Then
+  // split any concessive-fused affect ("…task, though she was distracted"). All
+  // three are no-ops on a clean note.
+  return splitConcessive(dropSelfCorrection(stripLeakedReasoning(cleaned)));
 }
 
 // ---------------------------------------------------------------------------

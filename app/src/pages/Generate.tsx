@@ -82,7 +82,7 @@ import {
   buildPostProcess,
   evalCondition,
 } from "../domain/captures";
-import { pronounMismatches, missingSupportTerms } from "../domain/text";
+import { pronounMismatches, missingSupportTerms, hasLeakedReasoning, hasDroppedOpener } from "../domain/text";
 import {
   activityOptionsForGenerate,
   catalogById,
@@ -3575,6 +3575,18 @@ export function noteWarnings(final: string, pronouns: string, st: StudentState):
   if (missing.length > 0) {
     out.push(
       `Note may be missing prompting/redirection the session set: ${missing.map((w) => `"${w}"`).join(", ")} — check it didn't get dropped.`,
+    );
+  }
+  // Last-ditch flags for the two rare, note-destroying failures the sanitizer
+  // couldn't fully clean — surfaced so she never pastes a broken note unnoticed.
+  if (hasLeakedReasoning(final)) {
+    out.push(
+      "The model may have leaked its own commentary into this note — read it carefully and regenerate if it looks off.",
+    );
+  }
+  if (hasDroppedOpener(final)) {
+    out.push(
+      "This note may be missing its opening sentence — verify it reads correctly and regenerate if needed.",
     );
   }
   return out;
