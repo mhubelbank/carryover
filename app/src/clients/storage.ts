@@ -48,4 +48,7 @@ export const StorageKeys = {
   // Provider whose credits ran out mid-generation ("anthropic"/"openai"); drives a
   // sticky banner on Generate until a successful run on that provider clears it.
   outOfCreditsProvider: "out_of_credits_provider",
+  // Per-day "batch" queue: sessions she's lined up to generate together (keeps the
+  // prompt cache warm). One JSON blob `{ [date]: ["teacherId|timeSlot", …] }`.
+  sessionBatch: "session_batch",
 } as const;

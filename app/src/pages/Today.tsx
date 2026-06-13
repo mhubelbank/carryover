@@ -6,6 +6,7 @@ import { useTerm } from "../context/TermContext";
 import { useAuth } from "../context/AuthContext";
 import { isTokenRenewalDue } from "../domain/tokenRenewal";
 import { requestSettingsSection } from "../clients/settingsNav";
+import { addToBatch, getBatch, isInBatch, removeFromBatch } from "../clients/batch";
 import { daysBetween, formatLong, formatShort, mondayOf, parseDate, startOfDay, stepWeekday, toISODate, toWeekday, weekdayName } from "../domain/dates";
 import { loadSessions, loadWeekSchedule } from "../domain/data";
 import { slotStartMinutes, type ScheduleEntry } from "../domain/schedule";
@@ -58,6 +59,18 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate, on
   }, []);
   const [busy, setBusy] = useState(false);
   const [undoingArchive, setUndoingArchive] = useState(false);
+  // The per-day batch queue (refs "teacherId|timeSlot"), re-read whenever the
+  // previewed day changes and after any add/remove below.
+  const [batch, setBatch] = useState<string[]>(() => getBatch(toISODate(selected)));
+  useEffect(() => {
+    setBatch(getBatch(toISODate(selected)));
+  }, [selected]);
+  function toggleBatch(teacherId: string, timeSlot: string) {
+    const iso = toISODate(selected);
+    if (isInBatch(iso, teacherId, timeSlot)) removeFromBatch(iso, teacherId, timeSlot);
+    else addToBatch(iso, teacherId, timeSlot);
+    setBatch(getBatch(iso));
+  }
   // The deviation file for the selected date's week, if one exists; otherwise we
   // fall back to the usual template. Keyed by the week's Monday so it only
   // reloads when the date crosses into a different week.
@@ -406,6 +419,10 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate, on
       ) : sessions.length === 0 ? (
         <div style={emptyBoxStyle}>No sessions scheduled for {weekdayName(selected)}.</div>
       ) : (
+        (() => {
+        const allInBatch = sessions.every((s) => isInBatch(selectedIso, s.teacherId, s.timeSlot));
+        const batched = sessions.filter((s) => isInBatch(selectedIso, s.teacherId, s.timeSlot));
+        return (
         <>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 10 }}>
             <button
@@ -418,12 +435,35 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate, on
             </button>
             <button
               className="button button--small button--primary"
-              onClick={() => onGenerateDay(selectedIso, sessions)}
+              disabled={allInBatch}
+              onClick={() => {
+                sessions.forEach((s) => addToBatch(selectedIso, s.teacherId, s.timeSlot));
+                setBatch(getBatch(selectedIso));
+              }}
             >
               <Icon name="notebook" size={13} />
-              Write today's notes
+              {allInBatch ? "All in batch" : "Add all to batch"}
             </button>
           </div>
+          {batch.length > 0 && (
+            <div style={{ marginBottom: 10 }}>
+              <Banner
+                variant="info"
+                icon="notebook"
+                action={
+                  <button
+                    className="button button--small button--primary"
+                    onClick={() => onGenerateDay(selectedIso, batched)}
+                  >
+                    Review &amp; generate →
+                  </button>
+                }
+              >
+                {batch.length} session{batch.length === 1 ? "" : "s"} queued for today's batch —
+                generate them together to keep costs low.
+              </Banner>
+            </div>
+          )}
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {sessions.map((session) => {
             const teacher = teacherById.get(session.teacherId);
@@ -491,16 +531,28 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate, on
                       </span>
                     )}
                   </div>
-                  <button
-                    className="button button--small button--primary"
-                    onClick={() =>
-                      onGenerate(selectedIso, session.teacherId, session.studentIds, session.timeSlot)
-                    }
-                  >
-                    {allGenerated ? "Regenerate " : "Generate "}
-                    {session.studentIds.length} note
-                    {session.studentIds.length === 1 ? "" : "s"}
-                  </button>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    {!allGenerated && (
+                      <button
+                        className="button button--small"
+                        onClick={() => toggleBatch(session.teacherId, session.timeSlot)}
+                      >
+                        {isInBatch(selectedIso, session.teacherId, session.timeSlot)
+                          ? "✓ In batch"
+                          : "+ Batch"}
+                      </button>
+                    )}
+                    <button
+                      className="button button--small button--primary"
+                      onClick={() =>
+                        onGenerate(selectedIso, session.teacherId, session.studentIds, session.timeSlot)
+                      }
+                    >
+                      {allGenerated ? "Regenerate " : "Generate "}
+                      {session.studentIds.length} note
+                      {session.studentIds.length === 1 ? "" : "s"}
+                    </button>
+                  </div>
                 </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                   {session.studentIds.map((id, i) => {
@@ -575,6 +627,8 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate, on
           })}
           </div>
         </>
+        );
+        })()
       )}
     </div>
   );

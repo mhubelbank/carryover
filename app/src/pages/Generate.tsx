@@ -13,6 +13,7 @@ import {
 } from "../clients/models";
 import { isOutOfCredits } from "../clients/llm";
 import { getPipelineId, setPipelineId } from "../clients/modelPref";
+import { addToBatch, removeFromBatch } from "../clients/batch";
 import { useTerm } from "../context/TermContext";
 import {
   appendFeedbackRule,
@@ -862,6 +863,8 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
     // clear the auto-save draft so a plain refresh starts fresh.
     saveFormSnapshot({ date, teacherId, timeSlot, mode, activities, studentState, sessionSig });
     clearFormDraft();
+    // Generating a session clears it from the day's batch queue.
+    removeFromBatch(date, teacherId, timeSlot);
     setPhase("results");
   }
 
@@ -1196,6 +1199,20 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
               Add your {PROVIDER_META[pipeline.provider].label} key in Settings to use {pipeline.label}.
             </span>
           ) : null}
+          {canGenerate && (
+            <button
+              className="button button--small"
+              disabled={phase === "running"}
+              title="Queue this session for today's batch instead of generating now"
+              onClick={() => {
+                saveFormSnapshot({ date, teacherId, timeSlot, mode, activities, studentState, sessionSig });
+                addToBatch(date, teacherId, timeSlot);
+                onNavigate("today");
+              }}
+            >
+              Add to batch
+            </button>
+          )}
           <button
             className="button button--primary"
             onClick={handleGenerate}

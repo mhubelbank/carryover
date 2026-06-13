@@ -6,6 +6,7 @@ import { useTerm } from "../context/TermContext";
 import { resolvePipeline, PROVIDER_META, type PipelineId, type Provider } from "../clients/models";
 import { isOutOfCredits } from "../clients/llm";
 import { getPipelineId, setPipelineId } from "../clients/modelPref";
+import { removeFromBatch } from "../clients/batch";
 import { appendFeedbackRule, loadFeedbackRules, loadGoldenExamples, loadSession, writeSessionMetadata } from "../domain/data";
 import { formatLong, parseDate } from "../domain/dates";
 import { activityOptionsForGenerate } from "../domain/activity";
@@ -485,6 +486,8 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }
         studentState: draft.studentState,
         sessionSig,
       });
+      // Generating the batch empties it.
+      removeFromBatch(date, sp.teacherId, sp.timeSlot);
     }
 
     setPhase("results");
