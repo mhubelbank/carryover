@@ -139,8 +139,8 @@ export function Welcome() {
           hint={
             <>
               Stored only in this browser. Set a{" "}
-              <a href="https://console.anthropic.com/settings/limits" target="_blank" rel="noreferrer">
-                monthly spend cap
+              <a href="https://platform.claude.com/settings/billing" target="_blank" rel="noreferrer">
+                spend limit
               </a>{" "}
               for safety (recommended: $15).
             </>
@@ -171,7 +171,7 @@ export function Welcome() {
                 target="_blank"
                 rel="noreferrer"
               >
-                monthly spend cap
+                budget
               </a>{" "}
               for safety (recommended: $15).
             </>
@@ -203,7 +203,10 @@ export function Welcome() {
                   gap: 4,
                 }}
               >
-                <li>Expiration: <span style={monoStyle}>06/01/2027</span> (renew each summer)</li>
+                <li>
+                  Expiration: <span style={monoStyle}>{`06/01/${new Date().getFullYear() + 1}`}</span>{" "}
+                  (renew each summer)
+                </li>
                 <li>Scope: <span style={monoStyle}>repo</span> should already be checked</li>
               </ul>
             </>
