@@ -175,6 +175,9 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }
   const [results, setResults] = useState<ResultRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
+  // Becomes true once she edits any session — surfaces a "Save and close" so it's
+  // clear the inputs persist and she can keep adding through the day.
+  const [dirty, setDirty] = useState(false);
 
   // Debounced snapshot save per session whenever its draft changes (mirrors
   // Generate's autosave, but straight to the per-session snapshot store).
@@ -237,12 +240,35 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }
 
   const updateActiveDraft = (patch: Partial<SessionDraft>) => {
     if (!activeSpec) return;
+    setDirty(true);
     setDrafts((prev) => {
       const cur = prev[activeKey]!;
       const next = { ...cur, ...patch };
       scheduleSave(activeSpec, next);
       return { ...prev, [activeKey]: next };
     });
+  };
+
+  // Flush every session's draft to its snapshot immediately (cancelling pending
+  // debounced saves) so nothing in-flight is lost, then close.
+  const saveAndClose = () => {
+    for (const sp of sessions) {
+      const key = sessionKey(sp.teacherId, sp.timeSlot);
+      const d = drafts[key];
+      if (!d) continue;
+      if (saveTimer.current[key]) clearTimeout(saveTimer.current[key]);
+      const sessionSig = `${sp.teacherId}|${date}|${sp.timeSlot}|${sp.studentIds.join(",")}`;
+      saveFormSnapshot({
+        date,
+        teacherId: sp.teacherId,
+        timeSlot: sp.timeSlot,
+        mode: d.mode,
+        activities: d.activities,
+        studentState: d.studentState,
+        sessionSig,
+      });
+    }
+    onClose();
   };
 
   const setActivities = (
@@ -669,14 +695,25 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }
         <h1 style={{ fontSize: 20, fontWeight: 500, margin: 0 }}>
           Write today's notes — {longDate}
         </h1>
-        <button
-          className="button button--ghost button--small"
-          onClick={onClose}
-          title="Close"
-          style={{ padding: 6, color: "var(--color-text-secondary)", display: "flex" }}
-        >
-          <Icon name="x" size={18} />
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {dirty && (
+            <button
+              className="button button--small"
+              onClick={saveAndClose}
+              title="Your inputs are saved — you can come back and keep adding through the day"
+            >
+              Save and close
+            </button>
+          )}
+          <button
+            className="button button--ghost button--small"
+            onClick={saveAndClose}
+            title="Close (your inputs are saved)"
+            style={{ padding: 6, color: "var(--color-text-secondary)", display: "flex" }}
+          >
+            <Icon name="x" size={18} />
+          </button>
+        </div>
       </div>
 
       {creditBanner && <div style={{ padding: "12px 24px 0" }}>{creditBanner}</div>}
