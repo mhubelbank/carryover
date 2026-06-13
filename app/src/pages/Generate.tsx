@@ -171,6 +171,9 @@ interface Props {
   // Today's per-session "Generate N notes" button). Consumed once on arrival.
   target?: { date: string; teacherId: string; studentIds: string[]; timeSlot?: string } | null;
   onTargetConsumed?: () => void;
+  // Return to Today on the specific day she came from (set when arriving via a
+  // Today deep-link). Drives the "← Back to Today" link.
+  onBackToToday?: (date: string) => void;
   // Open a student's IEP review (soft-block nudge for overdue students).
   onReviewIep?: (studentId: string) => void;
 }
@@ -286,7 +289,7 @@ export function blankNews(): NewsFieldValues {
   };
 }
 
-export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: Props) {
+export function Generate({ onNavigate, target, onTargetConsumed, onBackToToday, onReviewIep }: Props) {
   const { state, client, saveGoals } = useTerm();
   const { keys, demoMode } = useAuth();
 
@@ -294,10 +297,10 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
   // which key the run needs. Held in state (seeded from the saved pref) so that
   // switching it mid-session — e.g. from the regenerate modal — takes effect on
   // the next run immediately; `changeModel` also persists it as her preference.
-  // True when she arrived by clicking Generate on a Today session (a deep-link
-  // target), so we offer a "← Back to Today". Captured at mount — `target` is then
-  // consumed. Direct visits via the nav tab don't get the back link.
-  const [cameFromToday] = useState(() => !!target);
+  // The day she arrived from when she clicked Generate on a Today session (a
+  // deep-link target), so "← Back to Today" can return to that same day. Captured
+  // at mount — `target` is then consumed. Direct visits via the nav tab get null.
+  const [fromTodayDate] = useState(() => target?.date ?? null);
   const [pipelineId, setPipelineIdState] = useState(getPipelineId);
   const changeModel = (id: PipelineId) => {
     setPipelineIdState(id);
@@ -974,11 +977,13 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
   return (
     <div className="shell">
       <Nav current="generate" onNavigate={onNavigate} />
-      {cameFromToday && (
+      {fromTodayDate && (
         <div style={{ marginBottom: "0.75rem" }}>
           <button
             className="button button--ghost button--small"
-            onClick={() => onNavigate("today")}
+            onClick={() =>
+              onBackToToday ? onBackToToday(fromTodayDate) : onNavigate("today")
+            }
             style={{ padding: 0, color: "var(--color-text-secondary)" }}
           >
             ← Back to Today
@@ -989,7 +994,7 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
 
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: "1rem" }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 500, margin: 0 }}>Generate notes</h1>
+          <h1 style={{ fontSize: 22, fontWeight: 500, margin: 0 }}>Generate notes (one-off)</h1>
           <p style={{ margin: "4px 0 0 0", color: "var(--color-text-secondary)", fontSize: 14, display: "flex", alignItems: "center", gap: 7 }}>
             {teacher && (
               <span

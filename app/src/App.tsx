@@ -199,6 +199,17 @@ function Pages() {
     },
     [],
   );
+  // Back link from a one-off Generate that was opened from Today — return to Today
+  // on the SAME day she came from (not the current day), reusing the same
+  // initialDate one-shot the batch stepper uses.
+  const backToToday = useCallback(
+    (date: string) => {
+      if (!confirmNavAway()) return;
+      setTodayReturnDate(date);
+      pushPage("today");
+    },
+    [pushPage],
+  );
 
   // Persistent demo strip, shown above every page while in the sandbox.
   const demoBanner = demoMode ? <DemoBanner /> : null;
@@ -310,6 +321,7 @@ function Pages() {
           onNavigate={nav}
           target={generateTarget}
           onTargetConsumed={clearGenerateTarget}
+          onBackToToday={backToToday}
           onReviewIep={(id) => openStudent(id, "iep-review")}
         />
       );
