@@ -749,8 +749,14 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
   // still animates. `variant` differs per regeneration so the note visibly changes.
   async function cannedResultFor(student: Student, variant = 0) {
     await new Promise((r) => setTimeout(r, 350 + Math.random() * 450));
-    const goal = goals.find((g) => g.studentId === student.id && !g.archived);
-    return { draft: "", reviewed: "", final: cannedNote({ student, goal, variant }) };
+    const studentGoals = goals.filter((g) => g.studentId === student.id && !g.archived);
+    // Position in the session so closing variants are picked without replacement.
+    const index = Math.max(0, includedStudents.indexOf(student));
+    return {
+      draft: "",
+      reviewed: "",
+      final: cannedNote({ student, goals: studentGoals, index, variant }),
+    };
   }
 
   async function handleGenerate() {
