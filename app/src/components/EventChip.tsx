@@ -54,10 +54,11 @@ export function EventChip({
   height?: number;
 }) {
   const style = EVENT_STYLE[event.kind];
+  const suffix = event.weekend ? ` (${event.weekend})` : "";
   return (
     <button
       onClick={onClick}
-      title={`${event.firstName} · ${style.label}`}
+      title={`${event.firstName} · ${style.label}${suffix}`}
       style={{
         display: "inline-flex",
         alignItems: "center",
@@ -79,6 +80,7 @@ export function EventChip({
     >
       <Icon name={style.icon} size={11} />
       {event.firstName} · {style.label}
+      {suffix}
     </button>
   );
 }

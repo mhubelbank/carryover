@@ -332,7 +332,9 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate, on
           const style = EVENT_STYLE[event.kind];
           const text =
             event.kind === "birthday"
-              ? `${name}'s birthday!`
+              ? event.weekend
+                ? `${name}'s birthday on ${event.weekend === "Sat" ? "Saturday" : "Sunday"}!`
+                : `${name}'s birthday!`
               : event.kind === "first-day"
                 ? `${name}'s first day`
                 : event.kind === "last-day"
