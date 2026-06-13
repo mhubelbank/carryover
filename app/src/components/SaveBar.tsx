@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { useUnsavedGuard } from "../hooks/useUnsavedGuard";
+import { Icon } from "./Icon";
 
 // Floating "unsaved changes" bar, fixed to the bottom of the viewport (so it
 // stays visible on long pages, not just when scrolled to the end) with a muted
@@ -8,6 +9,7 @@ import { useUnsavedGuard } from "../hooks/useUnsavedGuard";
 // slots a control before the buttons (e.g. the Schedule "Apply from" date).
 export function SaveBar({
   message,
+  problem,
   saving,
   onDiscard,
   onSave,
@@ -17,6 +19,10 @@ export function SaveBar({
   extra,
 }: {
   message: string;
+  // When set, shown in place of `message` in a danger tone (with an alert icon)
+  // — for validation/save errors that would otherwise be easy to miss in small
+  // inline text. The caller still controls `saveDisabled` for blocking saves.
+  problem?: string | null;
   saving: boolean;
   onDiscard: () => void;
   onSave: () => void;
@@ -49,7 +55,24 @@ export function SaveBar({
         gap: 12,
       }}
     >
-      <p style={{ margin: 0, fontSize: 13, color: "var(--color-text-secondary)" }}>{message}</p>
+      {problem ? (
+        <p
+          role="alert"
+          style={{
+            margin: 0,
+            fontSize: 13,
+            color: "var(--color-text-danger)",
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+          }}
+        >
+          <Icon name="alert-circle" size={14} />
+          {problem}
+        </p>
+      ) : (
+        <p style={{ margin: 0, fontSize: 13, color: "var(--color-text-secondary)" }}>{message}</p>
+      )}
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
         {extra}
         <button className="button button--small" onClick={onDiscard} disabled={saving}>

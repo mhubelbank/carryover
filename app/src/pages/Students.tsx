@@ -471,6 +471,9 @@ function StudentDetail({
 
   const teacher = teacherById.get(draft.teacherId);
   const dirty = isNew || JSON.stringify(draft) !== JSON.stringify(baseline);
+  // Live validation surfaced in the SaveBar (not just on Save click) so it's easy
+  // to see what's wrong; also blocks the Save button while invalid.
+  const validation = dirty ? validateStudent(data.students, draft) : null;
   const liveAge = computedAge(draft);
   const flag = ageFlag(liveAge);
   const ageColor = ageColorOf(liveAge, flag);
@@ -973,7 +976,9 @@ function StudentDetail({
         </p>
       ) : null}
 
-      {error && (
+      {/* Errors while editing show in the SaveBar; this covers the not-dirty case
+          (e.g. an archive failure) where the bar isn't mounted. */}
+      {error && !(dirty || isNew) && (
         <p role="alert" style={{ marginTop: 14, fontSize: 13, color: "var(--color-text-danger)" }}>
           {error}
         </p>
@@ -982,6 +987,8 @@ function StudentDetail({
       {(dirty || isNew) && (
         <SaveBar
           message={isNew ? "New student — not saved yet" : "Unsaved changes"}
+          problem={validation ?? error}
+          saveDisabled={!!validation}
           discardLabel={isNew ? "Cancel" : "Discard"}
           saveLabel={isNew ? "Create student" : "Save"}
           saving={saving}

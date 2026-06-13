@@ -620,14 +620,22 @@ export function Activities({ onNavigate, onOpenStudent }: Props) {
       <Nav current="activities" onNavigate={onNavigate} />
       {body}
 
-      {error && (
+      {/* Validation/save errors show in the SaveBar while editing; this covers the
+          rare not-dirty case where the bar isn't mounted. */}
+      {error && !dirty && (
         <p role="alert" style={{ fontSize: 13, color: "var(--color-text-danger)", marginTop: 12 }}>
           {error}
         </p>
       )}
 
       {dirty && (
-        <SaveBar message="Unsaved changes" saving={saving} onDiscard={discard} onSave={handleSave} />
+        <SaveBar
+          message="Unsaved changes"
+          problem={error}
+          saving={saving}
+          onDiscard={discard}
+          onSave={handleSave}
+        />
       )}
     </div>
   );
