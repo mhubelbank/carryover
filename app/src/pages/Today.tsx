@@ -435,6 +435,7 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate, on
               No school today
             </button>
             <button
+              data-tour="today-batch"
               className="button button--small button--primary"
               disabled={allInBatch}
               onClick={() => {
