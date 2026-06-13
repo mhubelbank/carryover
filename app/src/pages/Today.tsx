@@ -344,7 +344,8 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate, on
         {tomorrowStudents.map((student) => (
           <Banner
             key={student.id}
-            variant="info"
+            variant="accent"
+            icon="clipboard-check"
             action={
               <IepDateChanger
                 current={student.nextIepReview}

@@ -13,9 +13,9 @@ interface EventStyle {
 // chips and the Today banners so a given event kind looks identical in both.
 export const EVENT_STYLE: Record<CalendarEvent["kind"], EventStyle> = {
   iep: {
-    bg: "var(--color-background-info)",
-    color: "var(--color-text-info)",
-    border: "var(--color-border-info)",
+    bg: "var(--color-background-accent)",
+    color: "var(--color-text-accent)",
+    border: "var(--color-border-accent)",
     icon: "clipboard-check",
     label: "IEP review",
   },

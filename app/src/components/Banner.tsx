@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Icon, type IconName } from "./Icon";
 
-type BannerVariant = "info" | "warning" | "danger";
+type BannerVariant = "info" | "warning" | "danger" | "accent";
 
 interface BannerProps {
   variant: BannerVariant;
@@ -14,6 +14,7 @@ const DEFAULT_ICONS: Record<BannerVariant, IconName> = {
   info: "info-circle",
   warning: "alert-circle",
   danger: "alert-circle",
+  accent: "clipboard-check",
 };
 
 export function Banner({ variant, icon, children, action }: BannerProps) {

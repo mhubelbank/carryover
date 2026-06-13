@@ -7,6 +7,9 @@
   --color-background-success: #eaf3de;
   --color-background-warning: #faeeda;
   --color-background-danger: #fcebeb;
+  /* Teal accent — IEP review, kept distinct from info (generation), success,
+     warning, danger, and the birthday purple. */
+  --color-background-accent: #ddf0ec;
 
   --color-text-primary: #1a1a19;
   --color-text-secondary: #5f5e5a;
@@ -15,6 +18,7 @@
   --color-text-success: #27500a;
   --color-text-warning: #633806;
   --color-text-danger: #791f1f;
+  --color-text-accent: #0a5249;
 
   --color-border-tertiary: rgba(0, 0, 0, 0.1);
   --color-border-secondary: rgba(0, 0, 0, 0.2);
@@ -23,6 +27,7 @@
   --color-border-success: #c0dd97;
   --color-border-warning: #fac775;
   --color-border-danger: #f7c1c1;
+  --color-border-accent: #aedcd4;
 
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
@@ -44,6 +49,7 @@
   --color-background-success: #1c2b14;
   --color-background-warning: #2e2510;
   --color-background-danger: #331717;
+  --color-background-accent: #133029;
 
   --color-text-primary: #eceae6;
   --color-text-secondary: #b0ada5;
@@ -52,6 +58,7 @@
   --color-text-success: #9fcf78;
   --color-text-warning: #e0b066;
   --color-text-danger: #e88a8a;
+  --color-text-accent: #6fc6bb;
 
   --color-border-tertiary: rgba(255, 255, 255, 0.1);
   --color-border-secondary: rgba(255, 255, 255, 0.18);
@@ -60,6 +67,7 @@
   --color-border-success: #3a5e22;
   --color-border-warning: #6b5320;
   --color-border-danger: #7a3636;
+  --color-border-accent: #2f5d55;
 
   color-scheme: dark;
 }

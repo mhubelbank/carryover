@@ -139,6 +139,11 @@ input[type="radio"] {
   color: var(--color-text-danger);
   border-color: var(--color-border-danger);
 }
+.banner--accent {
+  background: var(--color-background-accent);
+  color: var(--color-text-accent);
+  border-color: var(--color-border-accent);
+}
 
 /* Layout shell */
 
