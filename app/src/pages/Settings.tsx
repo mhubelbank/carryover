@@ -625,7 +625,7 @@ function KeysSection() {
           placeholder="sk-ant-…"
           creditsUrl={PROVIDER_META.anthropic.creditsUrl}
           createUrl="https://console.anthropic.com/settings/keys"
-          createLabel="Get a key"
+          createLabel="Get a new key"
           validate={(v) => validateKey("anthropic", v)}
           onSave={(v) => updateKeys({ anthropicApiKey: v })}
         />
@@ -635,7 +635,7 @@ function KeysSection() {
           placeholder="sk-…"
           creditsUrl={PROVIDER_META.openai.creditsUrl}
           createUrl="https://platform.openai.com/api-keys"
-          createLabel="Get a key"
+          createLabel="Get a new key"
           validate={(v) => validateKey("openai", v)}
           onSave={(v) => updateKeys({ openaiApiKey: v })}
         />
@@ -645,7 +645,7 @@ function KeysSection() {
           placeholder="github_pat_… or ghp_…"
           status={githubStatus}
           createUrl="https://github.com/settings/tokens/new?scopes=repo&description=Carryover"
-          createLabel="Create a token"
+          createLabel="Get a new token"
           validate={(v) => validateGitHubToken(v, REPO_CONFIG.owner, REPO_CONFIG.repo)}
           onSave={(v) => updateKeys({ githubToken: v })}
         />
