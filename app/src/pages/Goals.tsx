@@ -241,7 +241,7 @@ function GoalsView({
           marginBottom: "1.25rem",
         }}
       >
-        <div>
+        <div data-tour="student-goals">
           <h1 style={{ fontSize: 22, fontWeight: 500, margin: 0 }}>{fullName(student)}'s goals & progress</h1>
           <p style={{ margin: "4px 0 0 0", color: "var(--color-text-secondary)", fontSize: 14 }}>
             {activeCount} short-term goal{activeCount === 1 ? "" : "s"} across {activeGroups.length}{" "}

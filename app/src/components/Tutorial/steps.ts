@@ -7,6 +7,8 @@ import type { NavPage } from "../Nav";
 export interface TourStep {
   key: string;
   page?: NavPage;
+  // Open the first student's detail/goals sub-view (instead of just a top tab).
+  open?: "detail" | "goals";
   target?: string;
   title: string;
   body: string;
@@ -85,31 +87,47 @@ export const TOUR_STEPS: TourStep[] = [
     body: "Toggle between the tables of Students and Teachers. Search, add, and archive from the controls beside each table.",
   },
   {
+    key: "deep-student",
+    page: "students",
+    open: "detail",
+    target: "student-profile",
+    title: "Student details",
+    body: "Open any student for their profile, mandate, and IEP dates — plus a Progress view that charts their trial data over time.",
+  },
+  {
+    key: "deep-goals",
+    page: "students",
+    open: "goals",
+    target: "student-goals",
+    title: "Goals tracking",
+    body: "Each student's long- and short-term goals live here. The trials you log while generating notes roll up into their progress automatically.",
+  },
+  {
     key: "deep-settings-term",
     page: "settings",
     target: "settings-term",
-    title: "Term (Settings)",
+    title: "Term",
     body: "Manage your terms here. '+ Start a new term' opens a setup wizard that carries over your caseload and schedule, so you're never starting from scratch.",
   },
   {
     key: "deep-settings-catalogs",
     page: "settings",
     target: "settings-catalogs",
-    title: "Catalogs (Settings)",
+    title: "Catalogs",
     body: "Your activities, news-day roles, and student fields — the reusable building blocks the note generator draws on.",
   },
   {
     key: "deep-settings-model",
     page: "settings",
     target: "settings-model",
-    title: "Model (Settings)",
+    title: "Model",
     body: "Choose which model writes your notes (Claude or ChatGPT), with rough cost estimates.",
   },
   {
     key: "deep-settings-export",
     page: "settings",
     target: "settings-export",
-    title: "Export (Settings)",
+    title: "Export",
     body: "Download your data anytime via an Excel workbook, recent notes text file, or full backup.",
   },
   {

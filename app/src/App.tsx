@@ -180,10 +180,15 @@ function Pages() {
 
   // Rendered alongside the active page so the guided tour can spotlight elements on
   // any page (including Settings, which is a special early return below).
+  const firstStudentId =
+    state.status === "ready" ? state.data.students.find((s) => !s.archived)?.id : undefined;
   const overlay = tourActive && (
     <TutorialOverlay
       currentPage={page}
       nav={tourNavigate}
+      onOpenStudent={(view) => {
+        if (firstStudentId) openStudent(firstStudentId, view);
+      }}
       onFinish={() => {
         stopTour();
         markTutorialDone();

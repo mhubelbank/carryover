@@ -720,7 +720,7 @@ function StudentDetail({
         </div>
       )}
 
-      <div className="card" style={{ marginBottom: "1rem" }}>
+      <div data-tour="student-profile" className="card" style={{ marginBottom: "1rem" }}>
         <h3 className="card__title">Profile</h3>
         <div
           style={{ display: "grid", gridTemplateColumns: "2fr 1fr 2fr", gap: "14px 20px" }}

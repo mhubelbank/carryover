@@ -12,10 +12,13 @@ const GAP = 12;
 export function TutorialOverlay({
   currentPage,
   nav,
+  onOpenStudent,
   onFinish,
 }: {
   currentPage: NavPage;
   nav: (p: NavPage) => void;
+  // Opens the first student's detail/goals sub-view (for the deep-dive steps).
+  onOpenStudent: (view: "detail" | "goals") => void;
   onFinish: () => void;
 }) {
   const [i, setI] = useState(0);
@@ -103,9 +106,11 @@ export function TutorialOverlay({
     [step?.target],
   );
 
-  // Navigate to the step's page first, if it lives on another tab.
+  // Navigate to the step's page first (or open a student sub-view for the
+  // detail/goals deep-dive steps).
   useEffect(() => {
-    if (step?.page && step.page !== currentPage) nav(step.page);
+    if (step?.open) onOpenStudent(step.open);
+    else if (step?.page && step.page !== currentPage) nav(step.page);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [i]);
 
