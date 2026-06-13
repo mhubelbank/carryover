@@ -122,11 +122,39 @@ export function Welcome() {
           <h1 style={{ fontSize: 22 }}>Set up Carryover</h1>
         </div>
         <p style={{ color: "var(--color-text-secondary)", fontSize: 14, marginBottom: "1.75rem" }}>
-          Add your keys, then you'll start adding students.
+          Add your keys, then we'll give you a tour of the app.
         </p>
 
         <KeyField
           number={1}
+          title="GitHub personal access token"
+          help={
+            <>
+              Save your roster to a private repository.{" "}
+              <a
+                href="https://github.com/settings/tokens/new?scopes=repo&description=Carryover"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Create one <Icon name="external-link" size={12} />
+              </a> and set the
+                <strong> Expiration </strong> to <span style={monoStyle}>{`06/01/${new Date().getFullYear() + 1}`}</span>{" "}
+                (you'll be reminded to refresh it).
+              {/* <li>Scope: <span style={monoStyle}>repo</span> should already be checked</li> */}
+            </>
+          }
+          hint={
+            <>
+              Stored only in this browser; no billing account needed.
+            </>
+          }
+          placeholder="ghp_..."
+          value={githubKey}
+          onChange={setGithubKey}
+        />
+
+        <KeyField
+          number={2}
           title="Anthropic API key"
           help={
             <>
@@ -151,13 +179,12 @@ export function Welcome() {
         />
 
         <KeyField
-          number={2}
+          number={3}
           optional
           title="OpenAI API key"
           help={
             <>
-              Optional — only needed if you switch to a ChatGPT model in Settings. You can add it
-              now or later.{" "}
+              Optional for ChatGPT model alternative; add now or later. {" "}
               <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer">
                 Get one <Icon name="external-link" size={12} />
               </a>
@@ -181,50 +208,6 @@ export function Welcome() {
           onChange={setOpenaiKey}
         />
 
-        <KeyField
-          number={3}
-          title="GitHub personal access token"
-          help={
-            <>
-              Save your roster to a private repository.{" "}
-              <a
-                href="https://github.com/settings/tokens/new?scopes=repo&description=Carryover"
-                target="_blank"
-                rel="noreferrer"
-              >
-                Create one <Icon name="external-link" size={12} />
-              </a> with properties:{" "}
-              <ul
-                style={{
-                  margin: "8px 0 0 0",
-                  paddingLeft: 18,
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 4,
-                }}
-              >
-                <li>
-                  Expiration: <span style={monoStyle}>{`06/01/${new Date().getFullYear() + 1}`}</span>{" "}
-                  (renew each summer)
-                </li>
-                <li>Scope: <span style={monoStyle}>repo</span> should already be checked</li>
-              </ul>
-            </>
-          }
-          hint={
-            <>
-              Saves to{" "}
-              <span style={monoStyle}>
-                {REPO_CONFIG.owner}/{REPO_CONFIG.repo}
-              </span>{" "}
-              · stored only in this browser.
-            </>
-          }
-          placeholder="ghp_..."
-          value={githubKey}
-          onChange={setGithubKey}
-        />
-
         {error && (
           <p
             role="alert"
@@ -238,7 +221,7 @@ export function Welcome() {
           </p>
         )}
 
-        <div style={{ marginTop: "1.75rem", display: "flex", justifyContent: "flex-end" }}>
+        <div style={{ marginTop: "2.5rem", display: "flex", justifyContent: "flex-end" }}>
           <button
             className="button button--primary"
             onClick={handleSubmit}

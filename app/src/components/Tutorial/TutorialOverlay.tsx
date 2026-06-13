@@ -221,7 +221,29 @@ export function TutorialOverlay({
           ...cardPos,
         }}
       >
-        <h3 style={{ margin: "0 0 6px", fontSize: 16, fontWeight: 600 }}>{step.title}</h3>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "baseline",
+            justifyContent: "space-between",
+            gap: 12,
+            margin: "0 0 6px",
+          }}
+        >
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>{step.title}</h3>
+          {step.pageLabel && (
+            <span
+              style={{
+                fontSize: 12,
+                fontWeight: 500,
+                color: "var(--color-text-tertiary)",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {step.pageLabel}
+            </span>
+          )}
+        </div>
         <p style={{ margin: 0, fontSize: 13.5, color: "var(--color-text-secondary)", lineHeight: 1.5 }}>
           {step.body}
         </p>

@@ -11,6 +11,9 @@ export interface TourStep {
   open?: "detail" | "goals";
   target?: string;
   title: string;
+  // Right-aligned gray label showing which page the step lives on (deep-dive steps
+  // only — overview steps already use the page name as their title).
+  pageLabel?: string;
   body: string;
 }
 
@@ -63,13 +66,15 @@ export const TOUR_STEPS: TourStep[] = [
     page: "today",
     target: "today-date",
     title: "Today, in depth",
+    pageLabel: "Today",
     body: "Use the arrows on the right to move between days. You can view the students you've planned to see, and click a button to generate notes for that session. You'll also see notifications here for events, like IEP reviews and birthdays.",
   },
   {
     key: "deep-generate",
     page: "generate",
     target: "generate-picker",
-    title: "Generating a note",
+    title: "Write a note",
+    pageLabel: "Generate",
     body: "Pick the date, teacher, and time slot to load a session. Then capture what happened — activities, trials, prompting — and generate a clean clinical note you can refine.",
   },
   {
@@ -77,6 +82,7 @@ export const TOUR_STEPS: TourStep[] = [
     page: "schedule",
     target: "schedule-mode",
     title: "Your schedule",
+    pageLabel: "Schedule",
     body: "Keep a 'usual' weekly template, or switch to a specific week to customize just that one. This view syncs to Today and Generate, so if you mark a student as absent in one view, it'll show up in all three places.",
   },
   {
@@ -84,6 +90,7 @@ export const TOUR_STEPS: TourStep[] = [
     page: "students",
     target: "people-toggle",
     title: "Students & teachers",
+    pageLabel: "People",
     body: "Toggle between the tables of Students and Teachers. Search, add, and archive from the controls beside each table.",
   },
   {
@@ -92,6 +99,7 @@ export const TOUR_STEPS: TourStep[] = [
     open: "detail",
     target: "student-profile",
     title: "Student details",
+    pageLabel: "People",
     body: "Open any student for their profile, mandate, and IEP dates — plus a Progress view that charts their trial data over time.",
   },
   {
@@ -100,6 +108,7 @@ export const TOUR_STEPS: TourStep[] = [
     open: "goals",
     target: "student-goals",
     title: "Goals tracking",
+    pageLabel: "People",
     body: "Each student's long- and short-term goals live here. The trials you log while generating notes roll up into their progress automatically.",
   },
   {
@@ -107,6 +116,7 @@ export const TOUR_STEPS: TourStep[] = [
     page: "settings",
     target: "settings-term",
     title: "Term",
+    pageLabel: "Settings",
     body: "From the Settings page, you can manage your school terms. '+ Start a new term' opens a setup wizard that carries over your caseload, so you're never starting from scratch.",
   },
   {
@@ -114,6 +124,7 @@ export const TOUR_STEPS: TourStep[] = [
     page: "settings",
     target: "settings-catalogs",
     title: "Catalogs",
+    pageLabel: "Settings",
     body: "Your activities, news-day roles, and student fields — the reusable building blocks the note generator draws on.",
   },
   {
@@ -121,6 +132,7 @@ export const TOUR_STEPS: TourStep[] = [
     page: "settings",
     target: "settings-model",
     title: "Model",
+    pageLabel: "Settings",
     body: "Choose which model writes your notes (Claude or ChatGPT), with rough cost estimates.",
   },
   {
@@ -128,6 +140,7 @@ export const TOUR_STEPS: TourStep[] = [
     page: "settings",
     target: "settings-export",
     title: "Export",
+    pageLabel: "Settings",
     body: "Download your data anytime via an Excel workbook, recent notes text file, or full backup.",
   },
   {
