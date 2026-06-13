@@ -82,7 +82,7 @@ const TEACHERS: Teacher[] = [
 
 // 20 students, 4 per teacher (t_001 gets s_001–004, etc.).
 const STUDENT_NAMES: [string, string, string][] = [
-  ["Maya", "Thompson", "she/her"],
+  ["Marlando", "Thompson", "he/him"],
   ["Diego", "Ramos", "he/him"],
   ["Aisha", "Khan", "she/her"],
   ["Liam", "O'Brien", "they/them"],
