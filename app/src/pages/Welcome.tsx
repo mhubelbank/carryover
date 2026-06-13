@@ -24,6 +24,9 @@ export function Welcome() {
   const [githubKey, setGithubKey] = useState("");
   const [state, setState] = useState<ValidationState>("idle");
   const [error, setError] = useState<string | null>(null);
+  // First screen is a role fork: the SLP (real user) goes to key setup; everyone
+  // else drops straight into the demo. Keeps the demo from hiding under the form.
+  const [view, setView] = useState<"choose" | "setup">("choose");
 
   // OpenAI is optional — the default model is Claude, so don't gate sign-in on it.
   const canSubmit =
@@ -60,12 +63,61 @@ export function Welcome() {
     }
   }
 
+  if (view === "choose") {
+    return (
+      <div className="shell" style={{ maxWidth: 560 }}>
+        <div className="card" style={{ padding: "2rem 2.5rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+            <Icon name="notebook" size={22} />
+            <h1 style={{ fontSize: 22 }}>Welcome to Carryover</h1>
+          </div>
+          <p style={{ color: "var(--color-text-secondary)", fontSize: 14, marginBottom: "1.75rem" }}>
+            An assistant for speech-language session notes. Are you setting it up, or just taking a
+            look?
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <RoleButton
+              primary
+              title="I'm a speech-language pathologist"
+              subtitle="Set up Carryover with your own keys"
+              onClick={() => setView("setup")}
+            />
+            <RoleButton
+              title="Someone else — just exploring"
+              subtitle="Try the demo with sample data — no setup, nothing saved"
+              onClick={() => {
+                startTutorial();
+                enterDemoMode();
+              }}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="shell" style={{ maxWidth: 640 }}>
       <div className="card" style={{ padding: "2rem 2.5rem" }}>
+        <button
+          type="button"
+          onClick={() => setView("choose")}
+          style={{
+            border: "none",
+            background: "none",
+            padding: 0,
+            marginBottom: 14,
+            font: "inherit",
+            fontSize: 13,
+            color: "var(--color-text-secondary)",
+            cursor: "pointer",
+          }}
+        >
+          ← Back
+        </button>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
           <Icon name="notebook" size={22} />
-          <h1 style={{ fontSize: 22 }}>Welcome to Carryover</h1>
+          <h1 style={{ fontSize: 22 }}>Set up Carryover</h1>
         </div>
         <p style={{ color: "var(--color-text-secondary)", fontSize: 14, marginBottom: "1.75rem" }}>
           Add your keys, then you'll start adding students.
@@ -171,39 +223,48 @@ export function Welcome() {
             {state === "validating" ? "Validating…" : "Save and continue →"}
           </button>
         </div>
-
-        <div
-          style={{
-            marginTop: "1.75rem",
-            paddingTop: "1.25rem",
-            borderTop: "0.5px solid var(--color-border-tertiary)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 12,
-            flexWrap: "wrap",
-          }}
-        >
-          <span style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>
-            Just looking? Explore a sandbox with sample data — no keys needed.
-          </span>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button className="button button--small" onClick={() => enterDemoMode()}>
-              Explore the demo
-            </button>
-            <button
-              className="button button--small button--primary"
-              onClick={() => {
-                startTutorial();
-                enterDemoMode();
-              }}
-            >
-              Take the tour
-            </button>
-          </div>
-        </div>
       </div>
     </div>
+  );
+}
+
+// A large, full-width option on the role-chooser screen: a bold title over a
+// muted one-line description.
+function RoleButton({
+  title,
+  subtitle,
+  primary,
+  onClick,
+}: {
+  title: string;
+  subtitle: string;
+  primary?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        display: "block",
+        width: "100%",
+        textAlign: "left",
+        padding: "16px 18px",
+        borderRadius: "var(--border-radius-md)",
+        border: primary
+          ? "1px solid var(--color-text-info)"
+          : "0.5px solid var(--color-border-secondary)",
+        background: primary ? "var(--color-background-info)" : "transparent",
+        cursor: "pointer",
+      }}
+    >
+      <span style={{ display: "block", fontSize: 15, fontWeight: 500, color: "var(--color-text-primary)" }}>
+        {title}
+      </span>
+      <span style={{ display: "block", fontSize: 13, color: "var(--color-text-secondary)", marginTop: 2 }}>
+        {subtitle}
+      </span>
+    </button>
   );
 }
 
