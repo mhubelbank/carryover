@@ -136,7 +136,15 @@ export function Welcome() {
               </a>
             </>
           }
-          hint="Stored only in this browser. Set a monthly spend cap in your Anthropic dashboard for safety."
+          hint={
+            <>
+              Stored only in this browser. Set a{" "}
+              <a href="https://console.anthropic.com/settings/limits" target="_blank" rel="noreferrer">
+                monthly spend cap
+              </a>{" "}
+              for safety (recommended: $15).
+            </>
+          }
           placeholder="sk-ant-..."
           value={anthropicKey}
           onChange={setAnthropicKey}
@@ -155,7 +163,19 @@ export function Welcome() {
               </a>
             </>
           }
-          hint="Stored only in this browser. Leave blank to use Claude (the default)."
+          hint={
+            <>
+              Stored only in this browser. Set a{" "}
+              <a
+                href="https://platform.openai.com/settings/organization/limits"
+                target="_blank"
+                rel="noreferrer"
+              >
+                monthly spend cap
+              </a>{" "}
+              for safety (recommended: $15).
+            </>
+          }
           placeholder="sk-..."
           value={openaiKey}
           onChange={setOpenaiKey}
@@ -166,15 +186,14 @@ export function Welcome() {
           title="GitHub personal access token"
           help={
             <>
-              So your roster and notes save between sessions.{" "}
+              Save your roster to a private repository.{" "}
               <a
                 href="https://github.com/settings/tokens/new?scopes=repo&description=Carryover"
                 target="_blank"
                 rel="noreferrer"
               >
                 Create one <Icon name="external-link" size={12} />
-              </a>{" "}
-              — this opens the classic-token form with the scope pre-selected. Just confirm:
+              </a> with properties:{" "}
               <ul
                 style={{
                   margin: "8px 0 0 0",
@@ -184,8 +203,8 @@ export function Welcome() {
                   gap: 4,
                 }}
               >
-                <li>Expiration: 1 year (renew each summer at term setup)</li>
-                <li>Scope: <span style={monoStyle}>repo</span> is checked</li>
+                <li>Expiration: <span style={monoStyle}>06/01/2027</span> (renew each summer)</li>
+                <li>Scope: <span style={monoStyle}>repo</span> should already be checked</li>
               </ul>
             </>
           }
