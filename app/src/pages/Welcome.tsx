@@ -86,7 +86,7 @@ export function Welcome() {
             <RoleButton
               icon="search"
               title="Someone else — just exploring"
-              subtitle="Try the demo with sample data — no setup, nothing saved"
+              subtitle="Try the demo with sample data"
               onClick={() => {
                 startTutorial();
                 enterDemoMode();

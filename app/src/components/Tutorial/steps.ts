@@ -107,7 +107,7 @@ export const TOUR_STEPS: TourStep[] = [
     page: "settings",
     target: "settings-term",
     title: "Term",
-    body: "Manage your terms here. '+ Start a new term' opens a setup wizard that carries over your caseload and schedule, so you're never starting from scratch.",
+    body: "From the Settings page, you can manage your school terms. '+ Start a new term' opens a setup wizard that carries over your caseload, so you're never starting from scratch.",
   },
   {
     key: "deep-settings-catalogs",

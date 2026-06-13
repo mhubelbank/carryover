@@ -113,7 +113,7 @@ interface BuiltStudents {
 }
 
 // Build the 20 students with dates anchored to today: s_001 has an IEP review and
-// a birthday TODAY; the rest get a random birthday and IEP within ±30 days. An IEP
+// a birthday TODAY; the rest get a random birthday and IEP within ±90 days. An IEP
 // that landed in the past is treated as already completed — its next review is
 // pushed a year out (so it doesn't nag as overdue) and a history entry is recorded.
 function buildStudents(): BuiltStudents {
@@ -135,8 +135,8 @@ function buildStudents(): BuiltStudents {
       nextIepReview = toISODate(today);
     } else {
       const age = randInt(7, 16);
-      birthday = `${year - age}-${monthDay(addDays(today, randInt(-30, 30)))}`;
-      const iepDate = addDays(today, randInt(-30, 30));
+      birthday = `${year - age}-${monthDay(addDays(today, randInt(-90, 90)))}`;
+      const iepDate = addDays(today, randInt(-90, 90));
       if (iepDate.getTime() >= today.getTime()) {
         nextIepReview = toISODate(iepDate);
       } else {

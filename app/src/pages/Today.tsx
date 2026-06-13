@@ -339,7 +339,7 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate, on
                 ? `${name}'s first day`
                 : event.kind === "last-day"
                   ? `${name}'s last day`
-                  : `${name}'s IEP review`;
+                  : `${name}'s IEP review is today`;
           return (
             <div
               key={`${event.kind}-${event.studentId}-${i}`}
