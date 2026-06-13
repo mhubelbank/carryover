@@ -38,8 +38,7 @@ export function DemoBanner() {
       }}
     >
       <span>
-        <strong style={{ fontWeight: 600 }}>Demo mode</strong> — exploring sample data. Nothing is
-        saved to a real account.
+        <strong style={{ fontWeight: 600 }}>Demo mode:</strong> You're exploring sample data. Nothing is saved to a real account.
       </span>
       <span style={{ display: "inline-flex", gap: 8 }}>
         <button className="button button--small" onClick={() => void reset()} disabled={resetting}>
