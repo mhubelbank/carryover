@@ -239,8 +239,13 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate, on
             {formatLong(selected)}
           </h1>
           <p style={{ margin: "4px 0 0 0", color: "var(--color-text-secondary)", fontSize: 14 }}>
-            {sessions.length} session{sessions.length === 1 ? "" : "s"} · {studentCount} student
-            {studentCount === 1 ? "" : "s"}
+            {!inTerm
+              ? "Outside the active term"
+              : isClosed
+                ? "No school"
+                : `${sessions.length} session${sessions.length === 1 ? "" : "s"} · ${studentCount} student${
+                    studentCount === 1 ? "" : "s"
+                  }`}
           </p>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
