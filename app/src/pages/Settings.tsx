@@ -458,7 +458,7 @@ function CatalogsSection({ onNavigate }: { onNavigate: (page: NavPage) => void }
 // The model picker: friendly names + a "why choose this" line, no raw model IDs.
 // Persisted via modelPref; the Generate page reads it when she generates.
 function ModelSection() {
-  const { keys } = useAuth();
+  const { keys, demoMode } = useAuth();
   const { client } = useTerm();
   const [choiceId, setChoiceId] = useState<string>(getModelChoiceId);
   const choose = (id: string) => {
@@ -502,7 +502,14 @@ function ModelSection() {
     if (clean > 0) storage.set(StorageKeys.notesPerWeek, String(clean));
   };
   const selected = MODEL_CHOICES.find((c) => c.id === choiceId);
-  const needsOpenAIKey = selected?.provider === "openai" && !keys?.openaiApiKey;
+  // The selected model's provider key is missing (demo mode uses canned notes, so
+  // no key warning there). Applies to either provider.
+  const missingKey =
+    !demoMode && selected
+      ? selected.provider === "openai"
+        ? !keys?.openaiApiKey
+        : !keys?.anthropicApiKey
+      : false;
   return (
     <div data-tour="settings-model" className="card" style={{ marginBottom: "1rem" }}>
       <h3 className="card__title">Model</h3>
@@ -588,9 +595,9 @@ function ModelSection() {
           );
         })}
       </div>
-      {needsOpenAIKey && (
+      {missingKey && selected && (
         <p className="field-hint" style={{ color: "var(--color-text-danger)", marginTop: 10 }}>
-          Add your OpenAI key below to use this model.
+          Add your {PROVIDER_META[selected.provider].label} key below to use this model.
         </p>
       )}
       <p className="field-hint" style={{ marginTop: 10 }}>
@@ -885,7 +892,7 @@ function ExportSection() {
       ) : (
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button className="button button--small" onClick={downloadExcel}>
-            Excel (your sheet format)
+            Excel
           </button>
           <button className="button button--small" onClick={downloadBundle}>
             CSV bundle (.zip)

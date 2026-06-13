@@ -1,8 +1,8 @@
 // Anonymized seed dataset for Demo mode — entirely fictional students, teachers,
-// and goals (no real PII). Written into the localStorage sandbox (LocalFsClient)
-// via the same write helpers the app uses, so the demo data is in the exact file
-// formats loadTermData expects. The term window is intentionally wide so the demo
-// always reads as "active" whenever it's viewed.
+// and goals (no real PII), modeled on the real carryover-data term (5 teachers,
+// multi-student classroom sessions, a morning schedule) with the names changed.
+// Dates (birthdays, IEP reviews, the progress sessions) are computed relative to
+// "today" at seed time so the demo always looks current.
 import type { DataClient } from "../clients/github";
 import { clearDemoFs } from "../clients/localFsClient";
 import {
@@ -10,22 +10,27 @@ import {
   writeGoals,
   writeNewsRoles,
   writeSchedule,
+  writeSessionMetadata,
   writeStudents,
   writeStudentFields,
   writeTeachers,
   writeTerm,
   writeTermHistory,
 } from "../domain/data";
-import { writeSessionMetadata } from "../domain/data";
 import { RESERVED_OTHER_ID } from "../domain/activity";
-import { addDays, parseDate, toISODate } from "../domain/dates";
+import { addDays, startOfDay, toISODate } from "../domain/dates";
 import type { Student } from "../domain/student";
-import type { Teacher, Activity, Role } from "../domain/teacher";
+import type { Teacher, Activity, Role, ColorKey, Mode } from "../domain/teacher";
 import type { Goal } from "../domain/goal";
 import type { ScheduleEntry, Weekday } from "../domain/schedule";
+import { WEEKDAYS } from "../domain/schedule";
 import type { StudentField } from "../domain/studentField";
 import type { Term } from "../domain/term";
 import type { SessionMetadata } from "../domain/session";
+import type { IepReview } from "../domain/iep";
+
+const randInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
+const monthDay = (d: Date) => toISODate(d).slice(5); // "MM-DD"
 
 const TERM: Term = {
   termType: "school-year",
@@ -53,202 +58,237 @@ const NEWS_ROLES: Role[] = [
   { id: "r_weather", name: "Weather", phrase: "presented the weather", fields: [] },
 ];
 
+function teacher(id: string, name: string, color: ColorKey, modes: Mode[], activityIds: string[]): Teacher {
+  return {
+    id,
+    name,
+    color,
+    modes,
+    activityIds,
+    newsRoleIds: modes.includes("news-day") ? ["r_anchor", "r_reporter", "r_weather"] : [],
+    sessionCaptures: [],
+    archived: false,
+  };
+}
+
 const TEACHERS: Teacher[] = [
-  {
-    id: "t_001",
-    name: "Ms. Rivera",
-    color: "teal",
-    modes: ["regular"],
-    activityIds: ["a_reading", "a_artic", "a_social"],
-    newsRoleIds: [],
-    sessionCaptures: [],
-    archived: false,
-  },
-  {
-    id: "t_002",
-    name: "Mr. Chen",
-    color: "amber",
-    modes: ["regular", "news-day"],
-    activityIds: ["a_reading", "a_social", "a_news"],
-    newsRoleIds: ["r_anchor", "r_reporter", "r_weather"],
-    sessionCaptures: [],
-    archived: false,
-  },
-  {
-    id: "t_003",
-    name: "Ms. Okafor",
-    color: "coral",
-    modes: ["regular"],
-    activityIds: ["a_artic", "a_social"],
-    newsRoleIds: [],
-    sessionCaptures: [],
-    archived: false,
-  },
+  teacher("t_001", "Ms. Rivera", "teal", ["regular"], ["a_reading", "a_artic", "a_social"]),
+  teacher("t_002", "Mr. Chen", "amber", ["regular", "news-day"], ["a_reading", "a_social", "a_news"]),
+  teacher("t_003", "Ms. Okafor", "coral", ["regular"], ["a_artic", "a_social"]),
+  teacher("t_004", "Mr. Alvarez", "blue", ["regular"], ["a_reading", "a_artic", "a_social"]),
+  teacher("t_005", "Ms. Bauer", "green", ["regular"], ["a_reading", "a_social"]),
 ];
 
-function student(
-  id: string,
-  firstName: string,
-  lastName: string,
-  pronouns: string,
-  teacherId: string,
-  birthday: string,
-  mandate: string,
-  fields: Student["fields"] = {},
-): Student {
-  return {
-    id,
-    firstName,
-    middle: "",
-    lastName,
-    pronouns,
-    emoji: "",
-    teacherId,
-    birthday,
-    age: null,
-    nextIepReview: null,
-    nextTriennial: null,
-    mandate,
-    firstDay: null,
-    lastDay: null,
-    archived: false,
-    fields,
-    defaultPromptingLevel: [],
-    defaultPromptingType: [],
-    defaultRedirection: [],
-    defaultResponse: [],
-  };
-}
-
-const STUDENTS: Student[] = [
-  student("s_001", "Maya", "Thompson", "she/her", "t_001", "2013-04-18", "2:30:2", { homeLanguage: ["English"] }),
-  student("s_002", "Diego", "Ramos", "he/him", "t_001", "2012-11-02", "2:30:3", { homeLanguage: ["Spanish"] }),
-  student("s_003", "Aisha", "Khan", "she/her", "t_002", "2011-07-25", "1:45:2", { homeLanguage: ["Bengali"], usesAac: true }),
-  student("s_004", "Liam", "O'Brien", "they/them", "t_002", "2014-01-09", "2:30:2", { homeLanguage: ["English"] }),
-  student("s_005", "Sofia", "Russo", "she/her", "t_003", "2013-09-30", "1:45:3", { homeLanguage: ["English"] }),
-  student("s_006", "Noah", "Bennett", "he/him", "t_003", "2012-03-14", "2:30:2", { homeLanguage: ["English"], usesAac: true }),
+// 20 students, 4 per teacher (t_001 gets s_001–004, etc.).
+const STUDENT_NAMES: [string, string, string][] = [
+  ["Maya", "Thompson", "she/her"],
+  ["Diego", "Ramos", "he/him"],
+  ["Aisha", "Khan", "she/her"],
+  ["Liam", "O'Brien", "they/them"],
+  ["Sofia", "Russo", "she/her"],
+  ["Noah", "Bennett", "he/him"],
+  ["Priya", "Nair", "she/her"],
+  ["Marcus", "Webb", "he/him"],
+  ["Elena", "Petrova", "she/her"],
+  ["Andre", "Joseph", "he/him"],
+  ["Hana", "Sato", "she/her"],
+  ["Caleb", "Foster", "he/him"],
+  ["Zara", "Ahmed", "she/her"],
+  ["Owen", "Murphy", "they/them"],
+  ["Lucia", "Mendez", "she/her"],
+  ["Isaiah", "Brooks", "he/him"],
+  ["Nina", "Kowalski", "she/her"],
+  ["Theo", "Bauer", "he/him"],
+  ["Amara", "Diallo", "she/her"],
+  ["Felix", "Wong", "he/him"],
 ];
 
-function goal(
-  id: string,
-  studentId: string,
-  longTermGoal: string,
-  shortTermGoal: string,
-  shortName: string,
-  measuredVerb: string,
-  measuredNoun: string,
-): Goal {
-  return {
-    id,
-    studentId,
-    longTermGoal,
-    shortTermGoal,
-    shortName,
-    measuredVerb,
-    measuredNoun,
-    targetPercent: 80,
-    targetLevel: "minimal",
-    archived: false,
-  };
+const LANGS = ["English", "English", "English", "Spanish", "Bengali", "Mandarin"];
+const MANDATES = ["2:30:2", "2:30:3", "1:45:2", "1:45:3", "3:30:2"];
+
+interface BuiltStudents {
+  students: Student[];
+  iepHistory: { studentId: string; review: IepReview }[];
 }
 
-const GOALS: Goal[] = [
-  goal("g_001", "s_001", "comprehending grade-level texts", "answer WH questions about a short passage", "WH questions", "answer", "wh questions"),
-  goal("g_002", "s_001", "comprehending grade-level texts", "identify the main idea of a passage", "main idea", "identify", "the main idea"),
-  goal("g_003", "s_002", "producing target speech sounds", "produce /r/ in the initial position of words", "/r/ initial", "produce", "initial /r/"),
-  goal("g_004", "s_003", "communicating across settings", "request preferred items on a speech-generating device", "requesting", "request", "preferred items"),
-  goal("g_005", "s_004", "participating in structured conversations", "make on-topic comments during a group activity", "on-topic comments", "make", "on-topic comments"),
-  goal("g_006", "s_005", "producing target speech sounds", "produce /s/ blends in sentences", "/s/ blends", "produce", "/s/ blends"),
-  goal("g_007", "s_006", "communicating across settings", "initiate and terminate interactions with peers", "initiating", "initiate", "interactions"),
-];
+// Build the 20 students with dates anchored to today: s_001 has an IEP review and
+// a birthday TODAY; the rest get a random birthday and IEP within ±30 days. An IEP
+// that landed in the past is treated as already completed — its next review is
+// pushed a year out (so it doesn't nag as overdue) and a history entry is recorded.
+function buildStudents(): BuiltStudents {
+  const today = startOfDay(new Date());
+  const year = today.getFullYear();
+  const iepHistory: { studentId: string; review: IepReview }[] = [];
 
-// A weekly template: who each teacher sees on which day/slot.
-const SLOT_A = "9:00-9:30";
-const SLOT_B = "10:15-10:45";
-const SLOT_C = "1:10-1:40";
-function sched(teacherId: string, dayOfWeek: Weekday, timeSlot: string, studentId: string): ScheduleEntry {
-  return { teacherId, dayOfWeek, timeSlot, studentId };
-}
-const SCHEDULE: ScheduleEntry[] = [
-  // Monday
-  sched("t_001", "Monday", SLOT_A, "s_001"),
-  sched("t_001", "Monday", SLOT_A, "s_002"),
-  sched("t_003", "Monday", SLOT_C, "s_005"),
-  // Tuesday
-  sched("t_002", "Tuesday", SLOT_B, "s_003"),
-  sched("t_002", "Tuesday", SLOT_B, "s_004"),
-  sched("t_003", "Tuesday", SLOT_C, "s_006"),
-  // Wednesday
-  sched("t_001", "Wednesday", SLOT_A, "s_001"),
-  sched("t_003", "Wednesday", SLOT_C, "s_005"),
-  sched("t_003", "Wednesday", SLOT_C, "s_006"),
-  // Thursday
-  sched("t_002", "Thursday", SLOT_B, "s_003"),
-  sched("t_002", "Thursday", SLOT_B, "s_004"),
-  sched("t_001", "Thursday", SLOT_A, "s_002"),
-  // Friday (news day for Mr. Chen)
-  sched("t_002", "Friday", SLOT_A, "s_003"),
-  sched("t_002", "Friday", SLOT_A, "s_004"),
-  sched("t_001", "Friday", SLOT_B, "s_001"),
-];
+  const students = STUDENT_NAMES.map(([firstName, lastName, pronouns], i) => {
+    const id = `s_${String(i + 1).padStart(3, "0")}`;
+    const teacherId = `t_${String(Math.floor(i / 4) + 1).padStart(3, "0")}`;
+    const fields: Student["fields"] = { homeLanguage: [LANGS[i % LANGS.length]!] };
+    if (i % 5 === 0) fields.usesAac = true;
 
-// Weekly sessions with a rising accuracy/independence trend, so the Progress view
-// has data to chart. Dates are a fixed series of Mondays (plotted chronologically,
-// regardless of when the demo is viewed).
-const WEEK0 = parseDate("2026-03-02")!;
-function weekDate(i: number): string {
-  return toISODate(addDays(WEEK0, i * 7));
-}
-function progressSessions(studentId: string, teacherId: string, goal: Goal): SessionMetadata[] {
-  return Array.from({ length: 8 }, (_, i) => {
-    const total = 10;
-    const noSupport = Math.min(2 + i, 9); // independence climbs over the weeks
-    const successful = Math.min(6 + i, total); // accuracy climbs too
-    const minimal = Math.max(0, successful - noSupport);
+    let birthday: string;
+    let nextIepReview: string | null;
+    if (i === 0) {
+      // The featured student — IEP review and birthday both today.
+      birthday = `${year - 10}-${monthDay(today)}`;
+      nextIepReview = toISODate(today);
+    } else {
+      const age = randInt(7, 16);
+      birthday = `${year - age}-${monthDay(addDays(today, randInt(-30, 30)))}`;
+      const iepDate = addDays(today, randInt(-30, 30));
+      if (iepDate.getTime() >= today.getTime()) {
+        nextIepReview = toISODate(iepDate);
+      } else {
+        // Already reviewed — record it and schedule the next one a year out.
+        iepHistory.push({
+          studentId: id,
+          review: { date: toISODate(iepDate), nothingChanged: true, note: "Annual review completed; goals continued." },
+        });
+        nextIepReview = toISODate(addDays(iepDate, 365));
+      }
+    }
+
     return {
-      date: weekDate(i),
+      id,
+      firstName,
+      middle: "",
+      lastName,
+      pronouns,
+      emoji: "",
       teacherId,
-      students: [
-        {
-          studentId,
-          goalIds: [goal.id],
-          mode: "regular",
-          trials: [
-            {
-              goalId: goal.id,
-              verb: goal.measuredVerb,
-              noun: goal.measuredNoun,
-              total: String(total),
-              rows: [
-                { level: "no support", types: [], count: String(noSupport) },
-                { level: "minimal", types: ["verbal"], count: String(minimal) },
-              ],
-              failed: "",
-            },
-          ],
-        },
-      ],
-    };
+      birthday,
+      age: null,
+      nextIepReview,
+      nextTriennial: null,
+      mandate: MANDATES[i % MANDATES.length]!,
+      firstDay: null,
+      lastDay: null,
+      archived: false,
+      fields,
+      defaultPromptingLevel: [],
+      defaultPromptingType: [],
+      defaultRedirection: [],
+      defaultResponse: [],
+    } satisfies Student;
   });
+
+  return { students, iepHistory };
 }
 
-const SESSIONS: SessionMetadata[] = [
-  ...progressSessions("s_001", "t_001", GOALS[0]!), // Maya — WH questions
-  ...progressSessions("s_005", "t_003", GOALS[5]!), // Sofia — /s/ blends
-  ...progressSessions("s_003", "t_002", GOALS[3]!), // Aisha — requesting
+// A pool of realistic short-term goals; each student gets two.
+const GOAL_POOL: Omit<Goal, "id" | "studentId" | "archived">[] = [
+  { longTermGoal: "comprehending grade-level texts", shortTermGoal: "answer WH questions about a short passage", shortName: "WH questions", measuredVerb: "answer", measuredNoun: "wh questions", targetPercent: 80, targetLevel: "minimal" },
+  { longTermGoal: "comprehending grade-level texts", shortTermGoal: "identify the main idea of a passage", shortName: "main idea", measuredVerb: "identify", measuredNoun: "the main idea", targetPercent: 80, targetLevel: "minimal" },
+  { longTermGoal: "producing target speech sounds", shortTermGoal: "produce /r/ in the initial position of words", shortName: "/r/ initial", measuredVerb: "produce", measuredNoun: "initial /r/", targetPercent: 80, targetLevel: "minimal" },
+  { longTermGoal: "producing target speech sounds", shortTermGoal: "produce /s/ blends in sentences", shortName: "/s/ blends", measuredVerb: "produce", measuredNoun: "/s/ blends", targetPercent: 80, targetLevel: "minimal" },
+  { longTermGoal: "communicating across settings", shortTermGoal: "request preferred items on a communication device", shortName: "requesting", measuredVerb: "request", measuredNoun: "preferred items", targetPercent: 80, targetLevel: "minimal" },
+  { longTermGoal: "participating in structured conversations", shortTermGoal: "make on-topic comments during a group activity", shortName: "on-topic comments", measuredVerb: "make", measuredNoun: "on-topic comments", targetPercent: 80, targetLevel: "minimal" },
+  { longTermGoal: "participating in structured conversations", shortTermGoal: "take turns appropriately in a conversation", shortName: "turn-taking", measuredVerb: "take", measuredNoun: "conversational turns", targetPercent: 80, targetLevel: "minimal" },
+  { longTermGoal: "building expressive vocabulary", shortTermGoal: "name items within a category", shortName: "categories", measuredVerb: "name", measuredNoun: "category items", targetPercent: 80, targetLevel: "minimal" },
 ];
+
+function buildGoals(students: Student[]): Goal[] {
+  const goals: Goal[] = [];
+  students.forEach((s, i) => {
+    for (const n of [0, 1]) {
+      const tpl = GOAL_POOL[(i + n * 3) % GOAL_POOL.length]!;
+      goals.push({ id: `g_${s.id}_${n + 1}`, studentId: s.id, archived: false, ...tpl });
+    }
+  });
+  return goals;
+}
+
+// Five morning slots, all between 8:30 and 12.
+const SLOTS = ["8:30 – 9:00", "9:05 – 9:35", "9:50 – 10:20", "10:35 – 11:05", "11:20 – 11:50"];
+
+// A weekly template: each day has 5 sessions (one per slot). The teacher in each
+// slot rotates by weekday (a Latin square), so it's never the same teacher in the
+// same slot two days running; each session sees a rotating subset of that teacher's
+// students.
+function buildSchedule(students: Student[]): ScheduleEntry[] {
+  const byTeacher = new Map<string, string[]>();
+  for (const s of students) {
+    const list = byTeacher.get(s.teacherId) ?? [];
+    list.push(s.id);
+    byTeacher.set(s.teacherId, list);
+  }
+  const entries: ScheduleEntry[] = [];
+  WEEKDAYS.forEach((dayOfWeek: Weekday, d) => {
+    SLOTS.forEach((timeSlot, s) => {
+      const teacherId = TEACHERS[(s + d) % TEACHERS.length]!.id;
+      const roster = byTeacher.get(teacherId) ?? [];
+      // 3 of the teacher's students, rotating which by weekday.
+      for (const off of [0, 1, 2]) {
+        const studentId = roster[(d + off) % roster.length];
+        if (studentId) entries.push({ teacherId, dayOfWeek, timeSlot, studentId });
+      }
+    });
+  });
+  return entries;
+}
+
+// Recent weekly sessions with a rising accuracy/independence trend (last 8 weeks),
+// so the Progress view has data to chart for a few students.
+function buildProgressSessions(students: Student[], goals: Goal[]): SessionMetadata[] {
+  const today = startOfDay(new Date());
+  const featured = ["s_001", "s_006", "s_011"];
+  const out: SessionMetadata[] = [];
+  for (const studentId of featured) {
+    const student = students.find((s) => s.id === studentId);
+    const goal = goals.find((g) => g.studentId === studentId);
+    if (!student || !goal) continue;
+    for (let i = 0; i < 8; i++) {
+      const total = 10;
+      const noSupport = Math.min(2 + i, 9);
+      const successful = Math.min(6 + i, total);
+      const minimal = Math.max(0, successful - noSupport);
+      out.push({
+        date: toISODate(addDays(today, -7 * (8 - i))),
+        teacherId: student.teacherId,
+        students: [
+          {
+            studentId,
+            goalIds: [goal.id],
+            mode: "regular",
+            trials: [
+              {
+                goalId: goal.id,
+                verb: goal.measuredVerb,
+                noun: goal.measuredNoun,
+                total: String(total),
+                rows: [
+                  { level: "no support", types: [], count: String(noSupport) },
+                  { level: "minimal", types: ["verbal"], count: String(minimal) },
+                ],
+                failed: "",
+              },
+            ],
+          },
+        ],
+      });
+    }
+  }
+  return out;
+}
 
 async function writeSeed(client: DataClient): Promise<void> {
+  const { students, iepHistory } = buildStudents();
+  const goals = buildGoals(students);
   await writeStudentFields(client, STUDENT_FIELDS, undefined);
   await writeActivities(client, ACTIVITIES, undefined);
   await writeNewsRoles(client, NEWS_ROLES, undefined);
   await writeTeachers(client, TEACHERS, undefined);
-  await writeStudents(client, STUDENTS, STUDENT_FIELDS, undefined);
-  await writeGoals(client, GOALS, undefined);
-  await writeSchedule(client, SCHEDULE, undefined);
+  await writeStudents(client, students, STUDENT_FIELDS, undefined);
+  await writeGoals(client, goals, undefined);
+  await writeSchedule(client, buildSchedule(students), undefined);
   await writeTerm(client, TERM, undefined);
   await writeTermHistory(client, [], undefined);
-  for (const session of SESSIONS) await writeSessionMetadata(client, session, undefined);
+  for (const session of buildProgressSessions(students, goals)) {
+    await writeSessionMetadata(client, session, undefined);
+  }
+  for (const { studentId, review } of iepHistory) {
+    await client.writeFile(`data/iep-history/${studentId}.jsonl`, `${JSON.stringify(review)}\n`, "data: iep history", undefined);
+  }
 }
 
 // Seed the sandbox only if it's empty (idempotent — preserves a visitor's edits
