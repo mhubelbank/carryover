@@ -76,37 +76,62 @@ const CLOSINGS: ((c: ClosingCtx) => string)[] = [
   (c) => `The session strengthened ${c.domain} as ${c.subj} worked toward ${c.ltg1}.`,
   (c) => `This developed ${c.domain} and supported ${c.poss} goal of ${c.ltg1}.`,
   (c) => `Across the activity, ${c.name} made meaningful progress on ${c.short1}.`,
+  (c) => `This activity built ${c.domain}, carrying over ${c.poss} skills toward ${c.ltg1}.`,
+  (c) => `The work addressed ${c.domain}, continuing ${c.poss} goals of ${joinList(c.ltgs)}.`,
+  (c) => `This session advanced ${c.domain} and ${c.poss} steady progress on ${c.short1}.`,
+  (c) => `Together this strengthened ${c.domain}, supporting ${c.name}'s work toward ${c.ltg1}.`,
+  (c) => `This reinforced ${c.domain} as part of ${c.poss} broader goal of ${c.ltg1}.`,
 ];
+
+// A "level type prompting" phrase from the form's selections (e.g. ["minimal",
+// "moderate"] + ["verbal","visual"] → "minimal to moderate verbal and visual
+// prompting"), or "" when the form had none.
+function promptingPhrase(levels: string[], types: string[]): string {
+  const lvl = levels.filter(Boolean).join(" to ");
+  const typ = joinList(types.filter(Boolean));
+  const parts = [lvl, typ].filter(Boolean).join(" ");
+  return parts ? `${parts} prompting` : "";
+}
 
 export function cannedNote(opts: {
   student: Student;
   goals?: Goal[];
   index?: number; // position in the session batch (for without-replacement closings)
   variant?: number; // regeneration nonce
+  promptLevels?: string[]; // prompting captured in the form, used as-is when present
+  promptTypes?: string[];
 }): string {
   const { student } = opts;
   const goals = (opts.goals ?? []).filter((g) => !g.archived);
   const goal = goals[0];
+  const idx = (opts.index ?? 0) + (opts.variant ?? 0);
   const seed = `${student.id}:${opts.variant ?? 0}`;
   const name = (student.firstName || fullName(student) || "The student").trim();
   const Subj = subjectPronoun(student.pronouns);
   const poss = possessive(student.pronouns);
-  const level = pick(["minimal", "moderate", "significant"], seed + "lvl");
-  const type = pick(["verbal", "visual", "tactile"], seed + "typ");
-  const response = pick(
-    [
-      `${Subj} stayed engaged and required occasional redirection to task`,
-      `${Subj} participated actively and responded well to cueing`,
-      `${Subj} showed steady effort across the activity`,
-    ],
-    seed + "rsp",
-  );
+  const { domain, context } = goal
+    ? framing(goal.longTermGoal)
+    : { domain: "communication", context: "during a structured language activity" };
+  // Use the prompting the clinician entered in the form; fall back to a pick when
+  // nothing was captured so the sentence still reads.
+  const prompting =
+    promptingPhrase(opts.promptLevels ?? [], opts.promptTypes ?? []) ||
+    `${pick(["minimal", "moderate", "significant"], seed + "lvl")} ${pick(["verbal", "visual", "tactile"], seed + "typ")} prompting`;
+  // Response varies without replacement across the session (like the closings).
+  const responses = [
+    `${Subj} stayed engaged and required occasional redirection to task`,
+    `${Subj} participated actively and responded well to cueing`,
+    `${Subj} showed steady effort across the activity`,
+    `${Subj} attended well and benefited from repeated models`,
+    `${Subj} remained on task with periodic encouragement`,
+    `${Subj} engaged readily and self-corrected when given feedback`,
+  ];
+  const response = responses[idx % responses.length]!;
 
   if (!goal) {
-    return `${name} participated in a structured language activity, given ${level} ${type} prompting. ${response}. This work supported ${poss} communication goals.`;
+    return `${name} participated ${context}, given ${prompting}. ${response}. This work supported ${poss} communication goals.`;
   }
 
-  const { domain, context } = framing(goal.longTermGoal);
   const action = `${past(goal.measuredVerb)} ${normalizeAcronyms(goal.measuredNoun)}`.trim();
   const closing = CLOSINGS[((opts.index ?? 0) + (opts.variant ?? 0)) % CLOSINGS.length]!({
     name,
@@ -117,5 +142,5 @@ export function cannedNote(opts: {
     short1: goal.shortName || goal.longTermGoal,
     ltgs: [...new Set(goals.map((g) => g.longTermGoal))],
   });
-  return `${name} ${action} ${context}, given ${level} ${type} prompting. ${response}. ${closing}`;
+  return `${name} ${action} ${context}, given ${prompting}. ${response}. ${closing}`;
 }

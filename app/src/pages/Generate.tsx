@@ -752,10 +752,22 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
     const studentGoals = goals.filter((g) => g.studentId === student.id && !g.archived);
     // Position in the session so closing variants are picked without replacement.
     const index = Math.max(0, includedStudents.indexOf(student));
+    // Prompting the clinician actually entered (first activity that has any).
+    const st = studentState[student.id];
+    const input =
+      st?.regular.find((a) => a.promptingLevel.length > 0 || a.promptingType.length > 0) ??
+      st?.regular[0];
     return {
       draft: "",
       reviewed: "",
-      final: cannedNote({ student, goals: studentGoals, index, variant }),
+      final: cannedNote({
+        student,
+        goals: studentGoals,
+        index,
+        variant,
+        promptLevels: input?.promptingLevel,
+        promptTypes: input?.promptingType,
+      }),
     };
   }
 
@@ -1406,7 +1418,7 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
         <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 12, marginTop: 16 }}>
           {useCanned ? (
             <span style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>
-              Demo notes are pre-written samples.
+              Demo notes use templating logic only; no LLM calls.
             </span>
           ) : !hasModelKey ? (
             <span style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>
