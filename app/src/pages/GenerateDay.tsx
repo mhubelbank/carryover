@@ -336,13 +336,12 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }
     });
   };
 
-  // Click a locked (generated) session to re-edit it: re-queue it in the batch,
-  // restore its inputs (already in the draft via the preserved snapshot), and show
-  // the "restored from generation at …" note.
-  const reactivate = (sp: SessionSpec) => {
+  // Click a locked (generated) session to VIEW its restored inputs (from the
+  // preserved snapshot) and show the "restored from generation at …" note. It
+  // stays locked/greyed and out of the batch until she actually edits — at which
+  // point updateActiveDraft re-enables it.
+  const openGenerated = (sp: SessionSpec) => {
     const key = sessionKey(sp.teacherId, sp.timeSlot);
-    setReactivated((s) => new Set(s).add(key));
-    addToBatch(date, sp.teacherId, sp.timeSlot);
     const ts = genAt.get(key);
     if (ts != null) setRestoredAt((m) => new Map(m).set(key, ts));
     setActiveKey(key);
@@ -901,7 +900,7 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }
             return (
               <button
                 key={key}
-                onClick={() => (locked ? reactivate(sp) : setActiveKey(key))}
+                onClick={() => (locked ? openGenerated(sp) : setActiveKey(key))}
                 title={locked ? GENERATED_DOT.title : undefined}
                 style={{
                   display: "flex",
