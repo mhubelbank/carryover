@@ -175,6 +175,8 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }
   const [results, setResults] = useState<ResultRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
+  // Drives the "Saved" indicator so she can trust the form auto-saves.
+  const [savedAt, setSavedAt] = useState<number | null>(null);
 
   // Debounced snapshot save per session whenever its draft changes (mirrors
   // Generate's autosave, but straight to the per-session snapshot store).
@@ -193,6 +195,7 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }
         studentState: draft.studentState,
         sessionSig,
       });
+      setSavedAt(Date.now());
     }, 800);
   };
 
@@ -308,6 +311,7 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }
       studentState,
       sessionSig: `${activeSpec.teacherId}|${date}|${activeSpec.timeSlot}|${activeSpec.studentIds.join(",")}`,
     });
+    setSavedAt(Date.now());
   };
 
   const setActivities = (
@@ -817,6 +821,25 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }
                   {activeSpec.timeSlot} · {activeTeacher.name}
                 </h2>
                 <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+                  {savedAt && (
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 5,
+                        fontSize: 12,
+                        color: "var(--color-text-tertiary)",
+                      }}
+                      title="This form auto-saves — you can leave and come back to keep logging through the day."
+                    >
+                      <Icon name="check" size={13} />
+                      Saved{" "}
+                      {new Date(savedAt).toLocaleTimeString([], {
+                        hour: "numeric",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                  )}
                   {activeTeacher.modes.length > 1 && (
                     <select
                       className="select"
