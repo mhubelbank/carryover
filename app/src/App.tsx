@@ -66,22 +66,26 @@ function Pages() {
   // Settings with existing data). The empty/first-run case renders it directly.
   const [newTerm, setNewTerm] = useState(false);
   const { state } = useTerm();
-  const { demoMode } = useAuth();
+  const { demoMode, enterDemoMode, exitDemoMode } = useAuth();
   const { active: tourActive, start: startTour, stop: stopTour } = useTutorial();
 
-  // Auto-start the guided tour once, the first time real data is loaded — so a
-  // brand-new user sees it after the new-term wizard (not over an empty app), and
-  // a demo/seeded user sees it immediately.
+  // Auto-start the guided tour once, the first time data is ready. The first-run
+  // tour runs on DEMO data (so it can show a full caseload, student details, and
+  // goals even before the user has set anything up); we drop back to the user's
+  // real data when the tour ends. Replaying from Settings uses current data.
   const tourAutoStarted = useRef(false);
+  const tourEnteredDemo = useRef(false);
   useEffect(() => {
     if (tourAutoStarted.current) return;
-    // Demo mode starts the tour explicitly from the welcome screen (opt-in), so
-    // don't auto-pop it there.
-    if (!demoMode && state.status === "ready" && !isTutorialDone()) {
+    if (state.status === "ready" && !isTutorialDone()) {
       tourAutoStarted.current = true;
+      if (!demoMode) {
+        tourEnteredDemo.current = true;
+        enterDemoMode();
+      }
       startTour();
     }
-  }, [state.status, startTour, demoMode]);
+  }, [state.status, startTour, demoMode, enterDemoMode]);
 
   // Reset scroll to top when the page changes — it's a single document, so the
   // window scroll otherwise carries over between screens.
@@ -192,6 +196,10 @@ function Pages() {
       onFinish={() => {
         stopTour();
         markTutorialDone();
+        if (tourEnteredDemo.current) {
+          tourEnteredDemo.current = false;
+          exitDemoMode();
+        }
       }}
     />
   );

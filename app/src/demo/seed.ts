@@ -198,8 +198,11 @@ function buildGoals(students: Student[]): Goal[] {
   return goals;
 }
 
-// Five morning slots, all between 8:30 and 12.
-const SLOTS = ["8:30 – 9:00", "9:05 – 9:35", "9:50 – 10:20", "10:35 – 11:05", "11:20 – 11:50"];
+// Five morning slots between 8:30 and 12. Tue/Thu run 15 minutes later than
+// Mon/Wed/Fri, so the week isn't an identical grid every day.
+const SLOTS = ["8:30 – 9:00", "9:00 – 9:30", "9:45 – 10:15", "10:30 – 11:00", "11:15 – 11:45"];
+const SLOTS_LATE = ["8:45 – 9:15", "9:15 – 9:45", "10:00 – 10:30", "10:45 – 11:15", "11:30 – 12:00"];
+const slotsForDay = (d: number) => (d === 1 || d === 3 ? SLOTS_LATE : SLOTS);
 
 // A weekly template: each day has 5 sessions (one per slot). The teacher in each
 // slot rotates by weekday (a Latin square), so it's never the same teacher in the
@@ -214,7 +217,7 @@ function buildSchedule(students: Student[]): ScheduleEntry[] {
   }
   const entries: ScheduleEntry[] = [];
   WEEKDAYS.forEach((dayOfWeek: Weekday, d) => {
-    SLOTS.forEach((timeSlot, s) => {
+    slotsForDay(d).forEach((timeSlot, s) => {
       const teacherId = TEACHERS[(s + d) % TEACHERS.length]!.id;
       const roster = byTeacher.get(teacherId) ?? [];
       // 3 of the teacher's students, rotating which by weekday.
@@ -227,45 +230,52 @@ function buildSchedule(students: Student[]): ScheduleEntry[] {
   return entries;
 }
 
-// Recent weekly sessions with a rising accuracy/independence trend (last 8 weeks),
-// so the Progress view has data to chart for a few students.
+// Recent weekly sessions (last 8 weeks) with a rising accuracy/independence trend,
+// so EVERY student's Progress view has data to chart. Grouped one file per (week,
+// teacher) — each holds that teacher's whole class — so per-student sessions on the
+// same date/teacher don't overwrite each other.
 function buildProgressSessions(students: Student[], goals: Goal[]): SessionMetadata[] {
   const today = startOfDay(new Date());
-  const featured = ["s_001", "s_006", "s_011"];
+  const byTeacher = new Map<string, Student[]>();
+  for (const s of students) {
+    const list = byTeacher.get(s.teacherId) ?? [];
+    list.push(s);
+    byTeacher.set(s.teacherId, list);
+  }
   const out: SessionMetadata[] = [];
-  for (const studentId of featured) {
-    const student = students.find((s) => s.id === studentId);
-    const goal = goals.find((g) => g.studentId === studentId);
-    if (!student || !goal) continue;
-    for (let i = 0; i < 8; i++) {
-      const total = 10;
-      const noSupport = Math.min(2 + i, 9);
-      const successful = Math.min(6 + i, total);
-      const minimal = Math.max(0, successful - noSupport);
-      out.push({
-        date: toISODate(addDays(today, -7 * (8 - i))),
-        teacherId: student.teacherId,
-        students: [
-          {
-            studentId,
-            goalIds: [goal.id],
-            mode: "regular",
-            trials: [
-              {
-                goalId: goal.id,
-                verb: goal.measuredVerb,
-                noun: goal.measuredNoun,
-                total: String(total),
-                rows: [
-                  { level: "no support", types: [], count: String(noSupport) },
-                  { level: "minimal", types: ["verbal"], count: String(minimal) },
-                ],
-                failed: "",
-              },
-            ],
-          },
-        ],
-      });
+  for (let i = 0; i < 8; i++) {
+    const date = toISODate(addDays(today, -7 * (8 - i)));
+    for (const [teacherId, roster] of byTeacher) {
+      const entries: SessionMetadata["students"] = [];
+      for (const s of roster) {
+        const goal = goals.find((g) => g.studentId === s.id);
+        if (!goal) continue;
+        // A per-student offset so the class isn't an identical curve.
+        const base = s.id.charCodeAt(s.id.length - 1) % 3;
+        const total = 10;
+        const noSupport = Math.min(2 + i + base, 9);
+        const successful = Math.min(5 + i + base, total);
+        const minimal = Math.max(0, successful - noSupport);
+        entries.push({
+          studentId: s.id,
+          goalIds: [goal.id],
+          mode: "regular",
+          trials: [
+            {
+              goalId: goal.id,
+              verb: goal.measuredVerb,
+              noun: goal.measuredNoun,
+              total: String(total),
+              rows: [
+                { level: "no support", types: [], count: String(noSupport) },
+                { level: "minimal", types: ["verbal"], count: String(minimal) },
+              ],
+              failed: "",
+            },
+          ],
+        });
+      }
+      if (entries.length) out.push({ date, teacherId, students: entries });
     }
   }
   return out;
