@@ -39,5 +39,8 @@ export const StorageKeys = {
   // "1" when the demo was entered in minimal mode (one sample student) — used by
   // the first-run tour so it shows a single populated student, not the full set.
   demoMinimal: "demo_minimal",
+  // Version of the seed dataset currently in the sandbox — bumped when the seed
+  // changes so existing sandboxes re-seed instead of keeping stale data.
+  demoSeedVersion: "demo_seed_version",
   githubTokenSavedOn: "github_token_saved_on",
 } as const;

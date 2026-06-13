@@ -320,22 +320,33 @@ async function writeSeed(client: DataClient, minimal: boolean): Promise<void> {
 
 const isMinimal = () => storage.get(StorageKeys.demoMinimal) === "1";
 
-// Seed the sandbox. The full demo is idempotent (preserves a visitor's edits
-// across reloads); the minimal first-run-tour demo is always re-seeded fresh
-// (it's transient — entered for the tour, exited when it ends).
+// Bump this whenever the seed data changes (new students, dates, schedule, …) so
+// existing sandboxes re-seed on the next load instead of keeping stale data.
+const SEED_VERSION = "3";
+
+// Seed the sandbox. The full demo preserves a visitor's edits across reloads while
+// the seed version is unchanged, and re-seeds when it changes (or on first use).
+// The minimal first-run-tour demo is always re-seeded fresh (transient).
 export async function seedDemoFs(client: DataClient): Promise<void> {
   const minimal = isMinimal();
   if (minimal) {
     clearDemoFs();
     await writeSeed(client, true);
+    storage.set(StorageKeys.demoSeedVersion, SEED_VERSION);
     return;
   }
-  if (await client.readFile("data/term.json")) return;
+  const upToDate =
+    (await client.readFile("data/term.json")) &&
+    storage.get(StorageKeys.demoSeedVersion) === SEED_VERSION;
+  if (upToDate) return;
+  clearDemoFs();
   await writeSeed(client, false);
+  storage.set(StorageKeys.demoSeedVersion, SEED_VERSION);
 }
 
 // Wipe the sandbox and re-seed it (the "Reset demo" action).
 export async function resetDemoFs(client: DataClient): Promise<void> {
   clearDemoFs();
   await writeSeed(client, isMinimal());
+  storage.set(StorageKeys.demoSeedVersion, SEED_VERSION);
 }
