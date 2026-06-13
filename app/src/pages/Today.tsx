@@ -231,7 +231,7 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate, on
         {tokenRenewalDue && (
           <Banner
             variant="warning"
-            icon="alert-circle"
+            icon="github"
             action={
               <button
                 className="button button--small"
@@ -244,8 +244,7 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate, on
               </button>
             }
           >
-            Time for your yearly access-token renewal. Ask Mara for a new token, or make your own,
-            then paste it in Settings → Keys.
+            Annual GitHub data token refresh is due. Ask Mara, or make your own via the link in Settings.
           </Banner>
         )}
         {autoArchiveNotice && (
