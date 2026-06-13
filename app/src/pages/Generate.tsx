@@ -294,6 +294,10 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
   // which key the run needs. Held in state (seeded from the saved pref) so that
   // switching it mid-session — e.g. from the regenerate modal — takes effect on
   // the next run immediately; `changeModel` also persists it as her preference.
+  // True when she arrived by clicking Generate on a Today session (a deep-link
+  // target), so we offer a "← Back to Today". Captured at mount — `target` is then
+  // consumed. Direct visits via the nav tab don't get the back link.
+  const [cameFromToday] = useState(() => !!target);
   const [pipelineId, setPipelineIdState] = useState(getPipelineId);
   const changeModel = (id: PipelineId) => {
     setPipelineIdState(id);
@@ -970,6 +974,17 @@ export function Generate({ onNavigate, target, onTargetConsumed, onReviewIep }: 
   return (
     <div className="shell">
       <Nav current="generate" onNavigate={onNavigate} />
+      {cameFromToday && (
+        <div style={{ marginBottom: "0.75rem" }}>
+          <button
+            className="button button--ghost button--small"
+            onClick={() => onNavigate("today")}
+            style={{ padding: 0, color: "var(--color-text-secondary)" }}
+          >
+            ← Back to Today
+          </button>
+        </div>
+      )}
       {creditBanner}
 
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: "1rem" }}>
