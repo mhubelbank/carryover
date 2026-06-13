@@ -19,6 +19,10 @@ interface Props {
   onOpenStudent: (studentId: string, view?: "detail" | "goals" | "iep-review") => void;
   onOpenTeacher: (teacherId: string) => void;
   onGenerate: (date: string, teacherId: string, studentIds: string[], timeSlot?: string) => void;
+  onGenerateDay: (
+    date: string,
+    sessions: { teacherId: string; timeSlot: string; studentIds: string[] }[],
+  ) => void;
   onStartNewTerm: () => void;
 }
 
@@ -37,7 +41,7 @@ const emptyBoxStyle: CSSProperties = {
   fontSize: 14,
 };
 
-export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate, onStartNewTerm }: Props) {
+export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate, onGenerateDay, onStartNewTerm }: Props) {
   const { state, client, teacherById, studentById, saveStudents, saveTerm, autoArchiveNotice, undoFinishTerm, dismissAutoArchiveNotice } = useTerm();
   const [selected, setSelected] = useState<Date>(() => toWeekday(startOfDay(new Date())));
   const [busy, setBusy] = useState(false);
@@ -391,7 +395,7 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate, on
         <div style={emptyBoxStyle}>No sessions scheduled for {weekdayName(selected)}.</div>
       ) : (
         <>
-          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 10 }}>
             <button
               className="button button--small"
               onClick={() => setClosure(true)}
@@ -399,6 +403,13 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate, on
             >
               <Icon name="x" size={13} />
               No school today
+            </button>
+            <button
+              className="button button--small button--primary"
+              onClick={() => onGenerateDay(selectedIso, sessions)}
+            >
+              <Icon name="notebook" size={13} />
+              Write today's notes
             </button>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -621,7 +632,7 @@ function IepDateChanger({
   );
 }
 
-function buildSessions(
+export function buildSessions(
   schedule: { teacherId: string; dayOfWeek: string; timeSlot: string; studentId: string }[],
   weekday: string,
 ): Session[] {

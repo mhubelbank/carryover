@@ -140,10 +140,10 @@ const PASS_LABEL: Record<Pass, string> = {
 
 // How many students' note pipelines run at once. Each pipeline is 3 sequential
 // API calls; a small cap keeps total in-flight requests under rate limits.
-const GENERATE_CONCURRENCY = 4;
+export const GENERATE_CONCURRENCY = 4;
 
 // Run `worker` over `items` with a fixed concurrency cap.
-async function runPool<T>(items: T[], concurrency: number, worker: (item: T) => Promise<void>): Promise<void> {
+export async function runPool<T>(items: T[], concurrency: number, worker: (item: T) => Promise<void>): Promise<void> {
   let next = 0;
   const run = async (): Promise<void> => {
     const i = next++;
@@ -157,7 +157,7 @@ async function runPool<T>(items: T[], concurrency: number, worker: (item: T) => 
 // A session's variety instruction rotates by week (so a teacher's students that
 // day read consistently while the same student's note differs week to week). The
 // rotation logic + text live in domain/notes (varietyNote), shared with the eval.
-function buildVarietyNote(date: string): string {
+export function buildVarietyNote(date: string): string {
   const d = parseDate(date);
   if (!d) return "";
   const week = Math.floor(mondayOf(d).getTime() / (7 * 86_400_000));
@@ -174,7 +174,7 @@ interface Props {
   onReviewIep?: (studentId: string) => void;
 }
 
-interface StudentState {
+export interface StudentState {
   included: boolean;
   absent: boolean;
   // Regular: per-activity inputs aligned to `activities` indices.
@@ -190,7 +190,7 @@ interface StudentState {
   captures: Record<string, Record<string, string | boolean | string[]>>;
 }
 
-interface ResultRow {
+export interface ResultRow {
   studentId: string;
   name: string;
   absent: boolean;
@@ -206,7 +206,7 @@ interface ResultRow {
 
 // Activity inputs start empty; the student's session defaults are applied only
 // when she clicks "Use" in the form (opt-in, not auto-populated).
-function blankRegularInput(): ActivityInput {
+export function blankRegularInput(): ActivityInput {
   return {
     goals: [],
     goalDetails: [],
@@ -221,14 +221,14 @@ function blankRegularInput(): ActivityInput {
   };
 }
 
-function blankActivity(): ActivityDef {
+export function blankActivity(): ActivityDef {
   return { activityId: "", additionalInfo: "", segmentName: "", domains: [] };
 }
 
 // In-progress Generate form, auto-saved to localStorage so it survives a refresh.
 // Small + synchronous (restored in useState initializers); the bulkier generated
 // note narrative lives in IndexedDB (clients/noteCache.ts) instead.
-interface FormDraft {
+export interface FormDraft {
   date: string;
   teacherId: string;
   timeSlot: string;
@@ -263,10 +263,10 @@ const FORM_SNAPSHOT_PREFIX = "generate_form_snapshot_v4";
 function formSnapshotKey(date: string, teacherId: string, timeSlot: string): string {
   return `${FORM_SNAPSHOT_PREFIX}|${date}|${teacherId}|${timeSlot}`;
 }
-function saveFormSnapshot(d: FormDraft): void {
+export function saveFormSnapshot(d: FormDraft): void {
   storage.set(formSnapshotKey(d.date, d.teacherId, d.timeSlot), JSON.stringify(d));
 }
-function loadFormSnapshot(date: string, teacherId: string, timeSlot: string): FormDraft | null {
+export function loadFormSnapshot(date: string, teacherId: string, timeSlot: string): FormDraft | null {
   try {
     const s = storage.get(formSnapshotKey(date, teacherId, timeSlot));
     return s ? (JSON.parse(s) as FormDraft) : null;
@@ -275,7 +275,7 @@ function loadFormSnapshot(date: string, teacherId: string, timeSlot: string): Fo
   }
 }
 
-function blankNews(): NewsFieldValues {
+export function blankNews(): NewsFieldValues {
   return {
     pragmatic: {
       maintainedAttention: { enabled: false, qualityLevel: "", promptLevel: "" },
@@ -2917,7 +2917,7 @@ function CreditBanner({ provider, otherOut }: { provider: Provider; otherOut: bo
   );
 }
 
-function ResultsView({
+export function ResultsView({
   date,
   timeSlot,
   results,
@@ -3480,7 +3480,7 @@ function buildAllNotes(dateLabel: string, timeSlot: string, results: ResultRow[]
 
 // Every base-form trial verb across these students, for one batched conjugation
 // call at generation time. baseForm() normalizes any legacy past-tense entries.
-function collectTrialVerbs(states: StudentState[]): string[] {
+export function collectTrialVerbs(states: StudentState[]): string[] {
   return states.flatMap((st) =>
     (st.regular ?? []).flatMap((inp) => (inp.trials?.entries ?? []).map((e) => baseForm(e.verb))),
   );
@@ -3490,7 +3490,7 @@ function collectTrialVerbs(states: StudentState[]): string[] {
 // measured" fields the clinician populated this session (keyed by goalId). Stores
 // the base-form verb. Returns the updated full goals list if anything changed, or
 // null when there's nothing to persist.
-function goalsWithMeasuredFromTrials(goals: Goal[], states: StudentState[]): Goal[] | null {
+export function goalsWithMeasuredFromTrials(goals: Goal[], states: StudentState[]): Goal[] | null {
   const updates = new Map<string, { verb: string; noun: string }>();
   for (const st of states) {
     for (const inp of st.regular ?? []) {
@@ -3525,7 +3525,7 @@ function effectivePronouns(p: string): string {
 // Deterministic post-generation warnings shown on the result card: a wrong-gender
 // pronoun, or a prompting/redirection level/type the session set that a pass
 // dropped from the note. Each entry is a full message; empty array = clean.
-function noteWarnings(final: string, pronouns: string, st: StudentState): string[] {
+export function noteWarnings(final: string, pronouns: string, st: StudentState): string[] {
   const out: string[] = [];
   const pron = pronounMismatches(final, pronouns);
   if (pron.length > 0) {
@@ -3543,7 +3543,7 @@ function noteWarnings(final: string, pronouns: string, st: StudentState): string
   return out;
 }
 
-function buildContext(
+export function buildContext(
   mode: Mode,
   teacher: Teacher,
   student: Student,
@@ -3619,7 +3619,7 @@ function buildContext(
   });
 }
 
-function buildSessionMetadata(
+export function buildSessionMetadata(
   date: string,
   teacherId: string,
   mode: Mode,

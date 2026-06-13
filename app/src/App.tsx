@@ -18,6 +18,7 @@ import { Teachers } from "./pages/Teachers";
 import { Activities } from "./pages/Activities";
 import { Schedule } from "./pages/Schedule";
 import { Generate } from "./pages/Generate";
+import { GenerateDay } from "./pages/GenerateDay";
 import { NewTermWizard } from "./pages/NewTermWizard";
 
 function Router() {
@@ -61,6 +62,11 @@ function Pages() {
   const [openTeacherId, setOpenTeacherId] = useState<string | null>(null);
   const [generateTarget, setGenerateTarget] = useState<
     { date: string; teacherId: string; studentIds: string[]; timeSlot?: string } | null
+  >(null);
+  // Full-takeover batch "write today's notes" stepper, launched from Today with
+  // the day's already-computed sessions.
+  const [dayTarget, setDayTarget] = useState<
+    { date: string; sessions: { teacherId: string; timeSlot: string; studentIds: string[] }[] } | null
   >(null);
   // When true, the new-term wizard is open over the normal app (launched from
   // Settings with existing data). The empty/first-run case renders it directly.
@@ -178,6 +184,13 @@ function Pages() {
     },
     [pushPage],
   );
+  const openGenerateDay = useCallback(
+    (date: string, sessions: { teacherId: string; timeSlot: string; studentIds: string[] }[]) => {
+      if (!confirmNavAway()) return;
+      setDayTarget({ date, sessions });
+    },
+    [],
+  );
 
   // Persistent demo strip, shown above every page while in the sandbox.
   const demoBanner = demoMode ? <DemoBanner /> : null;
@@ -242,6 +255,24 @@ function Pages() {
   }
   if (state.status === "empty") return <NewTermWizard onNavigate={nav} />;
 
+  // Batch "write today's notes" stepper takes over the whole view when open.
+  if (dayTarget && state.status === "ready")
+    return (
+      <>
+        <GenerateDay
+          date={dayTarget.date}
+          sessions={dayTarget.sessions}
+          onClose={() => setDayTarget(null)}
+          onNavigate={nav}
+          onReviewIep={(id) => {
+            setDayTarget(null);
+            openStudent(id, "iep-review");
+          }}
+        />
+        {overlay}
+      </>
+    );
+
   let content: ReactNode;
   switch (page) {
     case "students":
@@ -282,6 +313,7 @@ function Pages() {
           onOpenStudent={openStudent}
           onOpenTeacher={openTeacher}
           onGenerate={openGenerate}
+          onGenerateDay={openGenerateDay}
           onStartNewTerm={() => setNewTerm(true)}
         />
       );
