@@ -37,20 +37,19 @@ export function singlePromptingActivityTypes(regular: ActivityInput[]): string[]
   return withTypes.length === 1 ? withTypes[0]!.promptingType : [];
 }
 
-// The note's prompting clause must name EVERY type the activity set — models (even
-// the premium drafter) sometimes condense three types to two, silently dropping
-// clinical data. If exactly one "…prompting" clause is present and a required type
-// is missing from the note, rebuild that clause's type list to all required types
-// in canonical order (Oxford-joined), preserving any leading level word. Scoped to
-// a SINGLE clause so it never mis-attributes a type in a multi-activity note;
-// otherwise it's a no-op and the missing-support warning still flags it.
+// The note's prompting clause must name EXACTLY the types the activity set — models
+// (even the premium drafter) not only drop a type (three condensed to two) but also
+// substitute/hallucinate them (writing "verbal and visual" when the input was
+// "tactile"). If exactly one "…prompting" clause is present and its type list
+// differs from the activity's, rebuild it to the activity's exact types in canonical
+// order (Oxford-joined), preserving any leading level word. Scoped to a SINGLE
+// clause so it never mis-attributes a type in a multi-activity note; otherwise it's
+// a no-op and the missing-support warning still flags it.
 export function repairPromptingTypes(note: string, requiredTypes: string[]): string {
   const required = PROMPTING_TYPES.filter((t) =>
     requiredTypes.some((r) => r.trim().toLowerCase() === t),
   );
-  if (required.length < 2) return note;
-  const missing = required.filter((t) => !new RegExp(`\\b${t}\\b`, "i").test(note));
-  if (missing.length === 0) return note;
+  if (required.length === 0) return note;
   const typeAlt = PROMPTING_TYPES.join("|");
   const levelAlt = PROMPTING_LEVELS.filter((l) => l !== "no")
     .map((l) => l.replace(/ /g, "\\s+"))
@@ -62,6 +61,11 @@ export function repairPromptingTypes(note: string, requiredTypes: string[]): str
   const matches = [...note.matchAll(clauseRe)];
   if (matches.length !== 1) return note; // 0 or ambiguous → leave it for the warning
   const m = matches[0]!;
+  // The types the model actually wrote in the clause.
+  const current = (m[2]!.match(new RegExp(typeAlt, "gi")) ?? []).map((s) => s.toLowerCase());
+  // Already exactly the required set (order-independent) → nothing to fix.
+  const want = new Set<string>(required);
+  if (current.length === want.size && current.every((t) => want.has(t))) return note;
   const level = m[1] ?? "";
   const replacement = `${level}${oxfordJoin(required)} prompting`;
   return note.slice(0, m.index!) + replacement + note.slice(m.index! + m[0].length);

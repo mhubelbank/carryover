@@ -74,8 +74,21 @@ describe("repairPromptingTypes", () => {
     expect(repairPromptingTypes(note, ["verbal", "visual", "tactile"])).toBe(note);
   });
 
-  it("is a no-op for fewer than two required types", () => {
+  it("replaces hallucinated/substituted types with the activity's exact single type (the Angel case)", () => {
+    const note =
+      "Angel watched the broadcast and completed a worksheet, given verbal and visual prompting and regular redirection to task.";
+    const out = repairPromptingTypes(note, ["tactile"]);
+    expect(out).toContain("given tactile prompting and regular redirection to task");
+    expect(out).not.toMatch(/verbal|visual/);
+  });
+
+  it("is a no-op when the single type already matches", () => {
+    const note = "Sam sorted the cards given tactile prompting.";
+    expect(repairPromptingTypes(note, ["tactile"])).toBe(note);
+  });
+
+  it("is a no-op when no required types are given", () => {
     const note = "Sam sorted the cards given verbal prompting.";
-    expect(repairPromptingTypes(note, ["verbal"])).toBe(note);
+    expect(repairPromptingTypes(note, [])).toBe(note);
   });
 });
