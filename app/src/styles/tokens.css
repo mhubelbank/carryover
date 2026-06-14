@@ -10,6 +10,8 @@
   /* Teal accent — IEP review, kept distinct from info (generation), success,
      warning, danger, and the birthday purple. */
   --color-background-accent: #ddf0ec;
+  /* Birthday event (purple) — theme-aware so dark mode isn't a bright pastel. */
+  --color-background-birthday: #f3ecfc;
 
   --color-text-primary: #1a1a19;
   --color-text-secondary: #5f5e5a;
@@ -19,6 +21,7 @@
   --color-text-warning: #633806;
   --color-text-danger: #791f1f;
   --color-text-accent: #0a5249;
+  --color-text-birthday: #6b3fa0;
 
   --color-border-tertiary: rgba(0, 0, 0, 0.1);
   --color-border-secondary: rgba(0, 0, 0, 0.2);
@@ -28,6 +31,9 @@
   --color-border-warning: #fac775;
   --color-border-danger: #f7c1c1;
   --color-border-accent: #aedcd4;
+  --color-border-birthday: #e1d5f5;
+  /* Diagonal stripes marking the dateless "Usual" schedule template. */
+  --color-stripe: rgba(0, 0, 0, 0.04);
 
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
@@ -50,6 +56,8 @@
   --color-background-warning: #2e2510;
   --color-background-danger: #331717;
   --color-background-accent: #133029;
+  /* Darker, translucent purple in dark mode (was a glaring bright pastel). */
+  --color-background-birthday: rgba(150, 112, 210, 0.16);
 
   --color-text-primary: #eceae6;
   --color-text-secondary: #b0ada5;
@@ -59,6 +67,7 @@
   --color-text-warning: #e0b066;
   --color-text-danger: #e88a8a;
   --color-text-accent: #6fc6bb;
+  --color-text-birthday: #c5abe8;
 
   --color-border-tertiary: rgba(255, 255, 255, 0.1);
   --color-border-secondary: rgba(255, 255, 255, 0.18);
@@ -68,6 +77,9 @@
   --color-border-warning: #6b5320;
   --color-border-danger: #7a3636;
   --color-border-accent: #2f5d55;
+  --color-border-birthday: rgba(150, 112, 210, 0.34);
+  /* Lighter (white-based) so the stripes read against the dark page. */
+  --color-stripe: rgba(255, 255, 255, 0.07);
 
   color-scheme: dark;
 }

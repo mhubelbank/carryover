@@ -34,9 +34,9 @@ export const EVENT_STYLE: Record<CalendarEvent["kind"], EventStyle> = {
     label: "Last day",
   },
   birthday: {
-    bg: "#f3ecfc",
-    color: "#6b3fa0",
-    border: "#e1d5f5",
+    bg: "var(--color-background-birthday)",
+    color: "var(--color-text-birthday)",
+    border: "var(--color-border-birthday)",
     icon: "cake",
     label: "Birthday",
   },

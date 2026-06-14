@@ -321,7 +321,7 @@ export function ScheduleGrid({
           display: "flex",
           alignItems: "stretch",
           backgroundImage: templateStripes
-            ? "repeating-linear-gradient(45deg, rgba(0,0,0,0.04), rgba(0,0,0,0.04) 6px, transparent 6px, transparent 12px)"
+            ? "repeating-linear-gradient(45deg, var(--color-stripe), var(--color-stripe) 6px, transparent 6px, transparent 12px)"
             : undefined,
           borderRadius: "var(--border-radius-md)",
         }}

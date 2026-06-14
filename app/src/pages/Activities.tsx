@@ -766,11 +766,11 @@ function CatalogTable({
                 <td style={{ padding: "8px", fontWeight: 500 }}>
                   {r.name || <span style={{ color: "var(--color-text-tertiary)" }}>(unnamed)</span>}
                 </td>
-                <td style={{ padding: "8px", whiteSpace: "nowrap" }}>
+                <td style={{ padding: "8px", verticalAlign: "top" }}>
                   {r.pills.length === 0 ? (
                     <span style={{ color: "var(--color-text-tertiary)" }}>{r.emptyText}</span>
                   ) : (
-                    <span style={{ display: "inline-flex", gap: 4 }}>
+                    <span style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                       {r.pills.map((p, i) => (
                         <span
                           key={i}
