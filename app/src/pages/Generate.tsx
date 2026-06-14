@@ -3162,7 +3162,7 @@ export function ResultsView({
                     className="button button--small"
                     onClick={() => onToggleDrafts(r.studentId)}
                   >
-                    {r.showDrafts ? "Hide drafts" : "Show drafts"}
+                    {r.showDrafts ? "Hide draft" : "Show draft"}
                   </button>
                   <button
                     className="button button--small"
@@ -3217,16 +3217,12 @@ export function ResultsView({
                 ))}
               {r.showDrafts && (
                 <div style={{ marginTop: 10, fontSize: 12, color: "var(--color-text-secondary)" }}>
+                  {/* Only the first (draft) pass is shown — the review pass is the
+                      final note above, so listing it separately just duplicates it. */}
                   <details>
-                    <summary>Draft pass</summary>
+                    <summary>Initial draft (before review)</summary>
                     <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit" }}>
                       {demoMode ? DEMO_PASS_NOTE : r.result.draft}
-                    </pre>
-                  </details>
-                  <details>
-                    <summary>Review pass</summary>
-                    <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit" }}>
-                      {demoMode ? DEMO_PASS_NOTE : r.result.reviewed}
                     </pre>
                   </details>
                 </div>
