@@ -13,7 +13,7 @@ import { formatLong, parseDate, weekdayName } from "../domain/dates";
 import { slotStartMinutes } from "../domain/schedule";
 import { activityOptionsForGenerate } from "../domain/activity";
 import { resolveRoles } from "../domain/role";
-import { absentNote, type ActivityDef } from "../domain/generate";
+import { absentNote, singlePromptingActivityTypes, type ActivityDef } from "../domain/generate";
 import { MAX_TOKENS_BY_MODE, conjugatePastForms, generateNote, loadPromptSet, type PromptSet } from "../domain/notes";
 import { buildPostProcess } from "../domain/captures";
 import { displayName, isActiveOn, type Student } from "../domain/student";
@@ -597,6 +597,7 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }
           feedbackRules,
           goldenExamples,
           varietyNote,
+          requiredPromptingTypes: singlePromptingActivityTypes(t.st.regular),
         });
         updateResult(t.student.id, {
           result,
@@ -760,6 +761,7 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }
           feedbackRules,
           goldenExamples,
           varietyNote,
+          requiredPromptingTypes: singlePromptingActivityTypes(t.st.regular),
           onPhase: (pass) => updateResult(t.student.id, { regenPhase: pass }),
         });
         updateResult(t.student.id, {

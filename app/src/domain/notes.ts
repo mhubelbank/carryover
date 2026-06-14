@@ -4,6 +4,7 @@ import type { DataClient } from "../clients/github";
 import type { Mode } from "./teacher";
 import { dropSelfCorrection, splitConcessive, normalizeAcronyms, fixClinicalSpelling, streamlineLostClinicalDetail, stripLeakedReasoning } from "./text";
 import { limitMissSemicolons, spliceTrials } from "./trial";
+import { repairPromptingTypes } from "./generate";
 
 // Token ceilings ported from her existing TSX files (bump if she sees truncation).
 export const MAX_TOKENS_BY_MODE: Record<Mode, number> = {
@@ -246,6 +247,10 @@ export interface GenerateOptions {
   // Deterministic per-teacher post-processing applied to the final note text
   // (e.g. Robin's Spanish-support sentence). No API call.
   postProcess?: (finalNote: string) => string;
+  // The prompting types the note's single prompting activity set — used to
+  // deterministically restore any type the model dropped (see repairPromptingTypes).
+  // Empty/omitted = no repair (multi-activity or no prompting).
+  requiredPromptingTypes?: string[];
   // Fired before each pass starts, so callers can show generation progress.
   onPhase?: (pass: Pass) => void;
 }
@@ -485,8 +490,13 @@ export async function generateNote(
   const note = limitMissSemicolons(
     spliceTrials(finalSource.trim(), replacements).replace(/\s*\n\s*/g, " "),
   );
+  // Deterministically restore any prompting type the model dropped (verbal/visual
+  // but not tactile) — exact clinical data shouldn't depend on the model copying it.
+  const repaired = repairPromptingTypes(note, opts.requiredPromptingTypes ?? []);
   // Post-processing (e.g. a teacher append), then force acronym casing ("wh" → "WH").
-  const final = normalizeAcronyms(fixClinicalSpelling(opts.postProcess ? opts.postProcess(note) : note));
+  const final = normalizeAcronyms(
+    fixClinicalSpelling(opts.postProcess ? opts.postProcess(repaired) : repaired),
+  );
 
   return { draft, reviewed, final };
 }

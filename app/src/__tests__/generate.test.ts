@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { regularContext, type RenderedActivity } from "../domain/generate";
+import { regularContext, repairPromptingTypes, type RenderedActivity } from "../domain/generate";
 import { trialToken } from "../domain/trial";
 import type { Teacher } from "../domain/teacher";
 
@@ -45,5 +45,37 @@ describe("regularContext trial tokenization", () => {
     expect(ctx.trialReplacements).toEqual({
       [trialToken(0)]: "Sam correctly answered WH questions 6/10 given minimal verbal prompting.",
     });
+  });
+});
+
+describe("repairPromptingTypes", () => {
+  it("restores a dropped type into the single prompting clause (the Angel case)", () => {
+    const note =
+      "Angel watched the broadcast and completed a worksheet, given verbal and visual prompting with regular redirection to task. He was alert throughout.";
+    const out = repairPromptingTypes(note, ["verbal", "visual", "tactile"]);
+    expect(out).toContain("given verbal, visual, and tactile prompting with regular redirection to task");
+  });
+
+  it("preserves a leading level word", () => {
+    const note = "Sam sorted the cards given minimal verbal and tactile prompting.";
+    expect(repairPromptingTypes(note, ["verbal", "visual", "tactile"])).toContain(
+      "given minimal verbal, visual, and tactile prompting.",
+    );
+  });
+
+  it("is a no-op when all required types are present", () => {
+    const note = "Sam sorted the cards given verbal, visual, and tactile prompting.";
+    expect(repairPromptingTypes(note, ["verbal", "visual", "tactile"])).toBe(note);
+  });
+
+  it("does nothing when there are two prompting clauses (ambiguous attribution)", () => {
+    const note =
+      "Sam read a passage given verbal and visual prompting. He then sorted cards given verbal and visual prompting.";
+    expect(repairPromptingTypes(note, ["verbal", "visual", "tactile"])).toBe(note);
+  });
+
+  it("is a no-op for fewer than two required types", () => {
+    const note = "Sam sorted the cards given verbal prompting.";
+    expect(repairPromptingTypes(note, ["verbal"])).toBe(note);
   });
 });

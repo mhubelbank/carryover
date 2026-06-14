@@ -58,6 +58,7 @@ import {
   newsContext,
   regularContext,
   resolveRolePhrase,
+  singlePromptingActivityTypes,
   type ActivityDef,
   type ActivityInput,
   type NewsFieldValues,
@@ -807,6 +808,7 @@ export function Generate({ onNavigate, target, onTargetConsumed, onBackToToday, 
           feedbackRules,
           goldenExamples,
           varietyNote,
+          requiredPromptingTypes: singlePromptingActivityTypes(st.regular),
         });
         updateResult(student.id, { result, warnings: noteWarnings(result.final, effectivePronouns(student.pronouns), st) });
         clearOutOfCredits(pipeline.provider); // a successful run proves credits are back
@@ -932,6 +934,7 @@ export function Generate({ onNavigate, target, onTargetConsumed, onBackToToday, 
           feedbackRules,
           goldenExamples,
           varietyNote,
+          requiredPromptingTypes: singlePromptingActivityTypes(st!.regular),
           onPhase: (pass) => updateResult(id, { regenPhase: pass }),
         });
         updateResult(id, {
@@ -994,7 +997,7 @@ export function Generate({ onNavigate, target, onTargetConsumed, onBackToToday, 
 
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: "1rem" }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 500, margin: 0 }}>Generate notes (one-off)</h1>
+          <h1 style={{ fontSize: 22, fontWeight: 500, margin: 0 }}>Generate a note</h1>
           <p style={{ margin: "4px 0 0 0", color: "var(--color-text-secondary)", fontSize: 14, display: "flex", alignItems: "center", gap: 7 }}>
             {teacher && (
               <span

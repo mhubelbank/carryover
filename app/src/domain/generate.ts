@@ -18,6 +18,55 @@ export const PROMPTING_LEVELS = [
 // qualitative checklist and the structured trial rows can't drift apart.
 export const PROMPTING_TYPES = TRIAL_SUPPORT_TYPES;
 
+// Oxford-join: [] → ""; [a] → "a"; [a,b] → "a and b"; [a,b,c] → "a, b, and c".
+function oxfordJoin(parts: string[]): string {
+  if (parts.length <= 1) return parts[0] ?? "";
+  if (parts.length === 2) return `${parts[0]} and ${parts[1]}`;
+  return `${parts.slice(0, -1).join(", ")}, and ${parts[parts.length - 1]}`;
+}
+
+// The prompting types of the note's SINGLE prompting-bearing activity, or [] when
+// zero or more than one activity carries prompting types. Trial activities carry no
+// qualitative prompting (it lives inside the trial sentence), so they're excluded.
+// Used to deterministically repair a dropped type without risking mis-attribution
+// in a multi-activity note (where we can't tell which clause a type belongs to).
+export function singlePromptingActivityTypes(regular: ActivityInput[]): string[] {
+  const withTypes = (regular ?? []).filter(
+    (a) => !a.trials?.enabled && (a.promptingType?.length ?? 0) > 0,
+  );
+  return withTypes.length === 1 ? withTypes[0]!.promptingType : [];
+}
+
+// The note's prompting clause must name EVERY type the activity set — models (even
+// the premium drafter) sometimes condense three types to two, silently dropping
+// clinical data. If exactly one "…prompting" clause is present and a required type
+// is missing from the note, rebuild that clause's type list to all required types
+// in canonical order (Oxford-joined), preserving any leading level word. Scoped to
+// a SINGLE clause so it never mis-attributes a type in a multi-activity note;
+// otherwise it's a no-op and the missing-support warning still flags it.
+export function repairPromptingTypes(note: string, requiredTypes: string[]): string {
+  const required = PROMPTING_TYPES.filter((t) =>
+    requiredTypes.some((r) => r.trim().toLowerCase() === t),
+  );
+  if (required.length < 2) return note;
+  const missing = required.filter((t) => !new RegExp(`\\b${t}\\b`, "i").test(note));
+  if (missing.length === 0) return note;
+  const typeAlt = PROMPTING_TYPES.join("|");
+  const levelAlt = PROMPTING_LEVELS.filter((l) => l !== "no")
+    .map((l) => l.replace(/ /g, "\\s+"))
+    .join("|");
+  const clauseRe = new RegExp(
+    `((?:${levelAlt})\\s+)?((?:${typeAlt})(?:(?:,\\s+|\\s+and\\s+|,\\s+and\\s+)(?:${typeAlt}))*)\\s+prompting`,
+    "gi",
+  );
+  const matches = [...note.matchAll(clauseRe)];
+  if (matches.length !== 1) return note; // 0 or ambiguous → leave it for the warning
+  const m = matches[0]!;
+  const level = m[1] ?? "";
+  const replacement = `${level}${oxfordJoin(required)} prompting`;
+  return note.slice(0, m.index!) + replacement + note.slice(m.index! + m[0].length);
+}
+
 // Ordered least → most frequent (after "no").
 export const REDIRECTION_LEVELS = ["no", "occasional", "regular", "continuous"] as const;
 
