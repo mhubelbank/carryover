@@ -23,21 +23,21 @@ export const TOUR_STEPS: TourStep[] = [
     key: "intro",
     page: "today",
     title: "Welcome to Carryover",
-    body: "Let's take a quick tour. First the lay of the land, then we'll step into each part. You can skip anytime and replay it later from Settings.",
+    body: "Let's take a quick tour. First an overview, then we'll step into each tab. You can skip anytime and replay it later from Settings.",
   },
   {
     key: "ov-today",
     page: "today",
     target: "nav-today",
     title: "Today",
-    body: "Your daily home base — the students you're seeing today, ready to write up.",
+    body: "Your daily home base. Shows the students you're seeing today, ready to write up.",
   },
   {
     key: "ov-generate",
     page: "today",
     target: "nav-generate",
     title: "Generate",
-    body: "Write notes with the assistant — one session at a time here, or a whole day in one batch from Today.",
+    body: "Write notes with the assistant -- one session at a time, or a whole day in one batch.",
   },
   {
     key: "ov-schedule",
@@ -51,14 +51,14 @@ export const TOUR_STEPS: TourStep[] = [
     page: "today",
     target: "nav-students",
     title: "People",
-    body: "Your students and teachers.",
+    body: "Your tables of students and teachers.",
   },
   {
     key: "ov-settings",
     page: "today",
     target: "nav-settings",
     title: "Settings",
-    body: "Manage your terms, update activities, change the AI model, and export your data.",
+    body: "Manage your terms, update activities, and change the AI model.",
   },
   // --- Deep dive: into each page, left to right ---
   {
