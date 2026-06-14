@@ -104,7 +104,15 @@ const STUDENT_NAMES: [string, string, string][] = [
   ["Felix", "Wong", "he/him"],
 ];
 
-const LANGS = ["English", "English", "English", "Spanish", "Bengali", "Mandarin"];
+// Only a handful of students carry an explicit home language (English is the
+// unstated default), so the "Home language" field's member list stays short and
+// realistic rather than listing every student.
+const HOME_LANGUAGE: Record<number, string> = {
+  2: "Spanish",
+  7: "Bengali",
+  13: "Mandarin",
+  18: "Spanish",
+};
 const MANDATES = ["2:30:2", "2:30:3", "1:45:2", "1:45:3", "3:30:2"];
 
 interface BuiltStudents {
@@ -127,7 +135,8 @@ function buildStudents(): BuiltStudents {
   const students = STUDENT_NAMES.map(([firstName, lastName, pronouns], i) => {
     const id = `s_${String(i + 1).padStart(3, "0")}`;
     const teacherId = `t_${String(Math.floor(i / 4) + 1).padStart(3, "0")}`;
-    const fields: Student["fields"] = { homeLanguage: [LANGS[i % LANGS.length]!] };
+    const fields: Student["fields"] = {};
+    if (HOME_LANGUAGE[i]) fields.homeLanguage = [HOME_LANGUAGE[i]!];
     if (i % 5 === 0) fields.usesAac = true;
 
     let birthday: string;
@@ -325,7 +334,7 @@ const isMinimal = () => storage.get(StorageKeys.demoMinimal) === "1";
 
 // Bump this whenever the seed data changes (new students, dates, schedule, …) so
 // existing sandboxes re-seed on the next load instead of keeping stale data.
-const SEED_VERSION = "4";
+const SEED_VERSION = "5";
 
 // Seed the sandbox. The full demo preserves a visitor's edits across reloads while
 // the seed version is unchanged, and re-seeds when it changes (or on first use).
