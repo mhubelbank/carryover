@@ -261,6 +261,34 @@ function clearFormDraft(): void {
   storage.remove(FORM_DRAFT_KEY);
 }
 
+// A snapshot of a completed results view, persisted so a refresh (or returning to
+// the Generate tab) lands back on the generated notes instead of a fresh form on
+// today. Carries the inputs too, so regenerate still works from the restored view.
+interface ResultsSnapshot {
+  date: string;
+  teacherId: string;
+  timeSlot: string;
+  mode: Mode;
+  activities: ActivityDef[];
+  studentState: Record<string, StudentState>;
+  results: ResultRow[];
+}
+const RESULTS_KEY = "generate_results_v1";
+function loadResultsSnapshot(): ResultsSnapshot | null {
+  try {
+    const s = storage.get(RESULTS_KEY);
+    return s ? (JSON.parse(s) as ResultsSnapshot) : null;
+  } catch {
+    return null;
+  }
+}
+function saveResultsSnapshot(snap: ResultsSnapshot): void {
+  storage.set(RESULTS_KEY, JSON.stringify(snap));
+}
+function clearResultsSnapshot(): void {
+  storage.remove(RESULTS_KEY);
+}
+
 // A per-session snapshot of the form, captured at generation so its inputs can be
 // restored on demand later — the auto-save draft is cleared on generate (a refresh
 // starts fresh), but this survives, keyed by (date · teacher · slot).
@@ -356,7 +384,13 @@ export function Generate({ onNavigate, target, onTargetConsumed, onBackToToday, 
   // Restore an auto-saved in-progress form on a plain mount (refresh), but never
   // over a deep-link target — that's a deliberately fresh session from Today.
   const [initialDraft] = useState<FormDraft | null>(() => (target ? null : loadFormDraft()));
+  // A completed results view persisted across refresh / tab-return (see
+  // ResultsSnapshot). Wins over the form draft; skipped on a deep-link target.
+  const [initialResults] = useState<ResultsSnapshot | null>(() =>
+    target ? null : loadResultsSnapshot(),
+  );
   const [date, setDate] = useState(() => {
+    if (initialResults?.date) return initialResults.date;
     if (initialDraft?.date) return initialDraft.date;
     // Default to today, but clamp into the term so first load lands on a real
     // session day rather than an out-of-term date (e.g. after the term ends).
@@ -369,22 +403,26 @@ export function Generate({ onNavigate, target, onTargetConsumed, onBackToToday, 
     }
     return toISODate(toWeekday(d));
   });
-  const [teacherId, setTeacherId] = useState<string>(() => initialDraft?.teacherId ?? "");
-  const [mode, setMode] = useState<Mode>(() => initialDraft?.mode ?? "regular");
+  const [teacherId, setTeacherId] = useState<string>(
+    () => initialResults?.teacherId ?? initialDraft?.teacherId ?? "",
+  );
+  const [mode, setMode] = useState<Mode>(() => initialResults?.mode ?? initialDraft?.mode ?? "regular");
   const [activities, setActivities] = useState<ActivityDef[]>(
-    () => initialDraft?.activities ?? [blankActivity()],
+    () => initialResults?.activities ?? initialDraft?.activities ?? [blankActivity()],
   );
   const [studentState, setStudentState] = useState<Record<string, StudentState>>(
-    () => initialDraft?.studentState ?? {},
+    () => initialResults?.studentState ?? initialDraft?.studentState ?? {},
   );
-  const [phase, setPhase] = useState<"form" | "running" | "results">("form");
+  const [phase, setPhase] = useState<"form" | "running" | "results">(
+    initialResults ? "results" : "form",
+  );
   useEffect(() => {
     // Scroll to top when the results view appears or we return to the form — but
     // NOT when generation starts ("running" keeps the form visible, so jumping to
     // the top yanks the user away from the Generate button / progress they clicked).
     if (phase !== "running") window.scrollTo(0, 0);
   }, [phase]);
-  const [results, setResults] = useState<ResultRow[]>([]);
+  const [results, setResults] = useState<ResultRow[]>(() => initialResults?.results ?? []);
   const [error, setError] = useState<string | null>(null);
   const [restorable, setRestorable] = useState<CachedNote[]>([]);
   // The form snapshot saved when this session was last generated (if any).
@@ -394,7 +432,19 @@ export function Generate({ onNavigate, target, onTargetConsumed, onBackToToday, 
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
   // The schedule slot this session targets. Drives the default roster and the
   // schedule write-back on generate. Set from the deep-link, or chosen manually.
-  const [timeSlot, setTimeSlot] = useState<string>(() => initialDraft?.timeSlot ?? "");
+  const [timeSlot, setTimeSlot] = useState<string>(
+    () => initialResults?.timeSlot ?? initialDraft?.timeSlot ?? "",
+  );
+  // Persist the results view (with its inputs) so a refresh or returning to the
+  // Generate tab lands back on these notes instead of a fresh form on today. Fires
+  // on completion and on every regenerate (results change). Cleared on Back-to-form
+  // and at the start of a new run.
+  useEffect(() => {
+    if (phase === "results" && results.length > 0) {
+      saveResultsSnapshot({ date, teacherId, timeSlot, mode, activities, studentState, results });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, results]);
   // The selected date's week deviation, if any (else the usual template applies).
   const [weekSchedule, setWeekSchedule] = useState<ScheduleEntry[] | null>(null);
 
@@ -736,6 +786,7 @@ export function Generate({ onNavigate, target, onTargetConsumed, onBackToToday, 
       setError("Select at least one activity.");
       return;
     }
+    clearResultsSnapshot(); // stale results from a prior run shouldn't outlive this one
     setPhase("running");
     setError(null);
     // The all-notes block uses the disambiguated display name (scoped to the
@@ -963,7 +1014,10 @@ export function Generate({ onNavigate, target, onTargetConsumed, onBackToToday, 
         timeSlot={timeSlot}
         results={results}
         error={error}
-        onBack={() => setPhase("form")}
+        onBack={() => {
+          clearResultsSnapshot();
+          setPhase("form");
+        }}
         onNavigate={onNavigate}
         onRegenerate={regenerate}
         pipelineId={pipelineId}
