@@ -773,7 +773,7 @@ function CatalogTable({
                     // Fixed width so the pills form a horizontal row that wraps within
                     // the column, rather than being starved to one-per-line by the
                     // greedy 100%-width Name column beside them.
-                    <span style={{ display: "flex", flexWrap: "wrap", gap: 4, width: 240 }}>
+                    <span style={{ display: "flex", flexWrap: "wrap", gap: 4, width: 300 }}>
                       {r.pills.map((p, i) => (
                         <span
                           key={i}
