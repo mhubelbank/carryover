@@ -103,28 +103,28 @@
   /* Lighter (white-based) so the stripes read against the dark page. */
   --color-stripe: rgba(255, 255, 255, 0.07);
 
-  /* Teacher pills in dark mode: darker, translucent fills with light-tint text
-     (the light-mode pastels were glaring). */
-  --teacher-purple-bg: rgba(150, 145, 235, 0.18);
-  --teacher-purple-text: #c9c4f0;
-  --teacher-blue-bg: rgba(120, 165, 225, 0.18);
-  --teacher-blue-text: #aacbf2;
-  --teacher-teal-bg: rgba(95, 205, 165, 0.16);
-  --teacher-teal-text: #8fdcc0;
-  --teacher-green-bg: rgba(155, 205, 115, 0.16);
-  --teacher-green-text: #bcdf97;
-  --teacher-amber-bg: rgba(235, 180, 90, 0.16);
-  --teacher-amber-text: #e8c47f;
-  --teacher-coral-bg: rgba(230, 150, 125, 0.16);
-  --teacher-coral-text: #edb39e;
-  --teacher-pink-bg: rgba(232, 140, 170, 0.16);
-  --teacher-pink-text: #efb0c6;
-  --teacher-purple-deep-bg: rgba(150, 142, 228, 0.22);
-  --teacher-purple-deep-text: #c4bcf2;
-  --teacher-teal-deep-bg: rgba(75, 195, 155, 0.2);
-  --teacher-teal-deep-text: #7ad9b5;
-  --teacher-amber-deep-bg: rgba(228, 150, 35, 0.22);
-  --teacher-amber-deep-text: #ecb050;
+  /* Teacher pills in dark mode: darker than the light-mode pastels but with enough
+     opacity to read clearly (a softer translucency looked washed out). */
+  --teacher-purple-bg: rgba(150, 145, 235, 0.36);
+  --teacher-purple-text: #d6d2f6;
+  --teacher-blue-bg: rgba(120, 165, 225, 0.36);
+  --teacher-blue-text: #bcd6f6;
+  --teacher-teal-bg: rgba(95, 205, 165, 0.34);
+  --teacher-teal-text: #a6e4cd;
+  --teacher-green-bg: rgba(155, 205, 115, 0.34);
+  --teacher-green-text: #cbe6ab;
+  --teacher-amber-bg: rgba(235, 180, 90, 0.34);
+  --teacher-amber-text: #f0d196;
+  --teacher-coral-bg: rgba(230, 150, 125, 0.34);
+  --teacher-coral-text: #f3c4b3;
+  --teacher-pink-bg: rgba(232, 140, 170, 0.34);
+  --teacher-pink-text: #f4c2d3;
+  --teacher-purple-deep-bg: rgba(150, 142, 228, 0.42);
+  --teacher-purple-deep-text: #d2ccf6;
+  --teacher-teal-deep-bg: rgba(75, 195, 155, 0.4);
+  --teacher-teal-deep-text: #93e1c4;
+  --teacher-amber-deep-bg: rgba(228, 150, 35, 0.42);
+  --teacher-amber-deep-text: #f0bd6a;
 
   color-scheme: dark;
 }
