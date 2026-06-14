@@ -59,16 +59,20 @@ const SELF_CORRECTION = /\b(wait,|let me\b|i need to\b|i'll\b|i should\b|on seco
 
 // Meta-commentary a clinical note never contains: the model leaked its own
 // reasoning/self-critique instead of emitting only the note. Broader than
-// SELF_CORRECTION (which targets first-person "wait, I need to…") — this also
-// catches an "issues to fix" preamble, a bare "Wait —" (em/en dash, the form
-// SELF_CORRECTION's "wait," misses), an "I must/should not …" meta-instruction,
-// an "as an AI/assistant" disclaimer, and a "here is the revised note" preamble.
+// SELF_CORRECTION (which targets first-person "wait, I need to…") — also catches an
+// "issues to fix" preamble, a bare "Wait —" (em/en dash, which "wait," misses), an
+// "I must/should not …" or "I keep …" meta-instruction, an "as an AI" disclaimer,
+// the word "commentary", and a "here is the (corrected) note" / "the note only:"
+// preamble the model prepends before re-emitting the note.
 const LEAK_MARKERS: RegExp[] = [
   /\bissues?\b[^.\n]{0,40}\bneed(?:s|ed)?\b[^.\n]{0,40}\bfix/i,
   /\bI (?:must|should) not\b/i,
+  /\bI keep\b/i,
   /\bWait\b\s*[—–]/,
   /\bas an? (?:AI|assistant|language model)\b/i,
-  /\bhere(?:'s| is) (?:the |a |my )?(?:revised|corrected|rewritten|updated|final) (?:note|version)\b/i,
+  /\bcommentary\b/i,
+  /\bhere(?:'s| is)\b[^.\n]{0,30}\b(?:note|version)\b/i,
+  /\bthe note only\b/i,
 ];
 
 // True when the text contains leaked model reasoning/meta-commentary (see
@@ -88,9 +92,21 @@ export function hasLeakedReasoning(text: string): boolean {
 // residual leak is then surfaced by hasLeakedReasoning in the warnings).
 export function stripLeakedReasoning(text: string): string {
   if (!hasLeakedReasoning(text)) return text;
+  // A leading meta preamble ending in a colon ("Here is the note only:", "I keep
+  // adding commentary. Here is the corrected note:") glues straight onto the note —
+  // strip the preamble up to that colon and keep what follows. Run only when a meta
+  // keyword precedes the colon, so a legitimate "X: Y" never trips it.
+  let t = text
+    .trim()
+    .replace(
+      /^[^:\n]*\b(?:here(?:'s| is)|commentary|the note only|note only|I keep)\b[^:\n]*:\s*/i,
+      "",
+    )
+    .trim();
+  if (!hasLeakedReasoning(t)) return t;
   const noteLike = (s: string) =>
     s.length > 0 && !hasLeakedReasoning(s) && /[.!?]/.test(s) && s.split(/\s+/).length >= 8;
-  const segments = text
+  const segments = t
     .split(/\s*-{3,}\s*/)
     .map((s) => s.trim())
     .filter(Boolean);
@@ -98,7 +114,7 @@ export function stripLeakedReasoning(text: string): string {
   if (cleanSegments.length) return cleanSegments[cleanSegments.length - 1]!;
   // No clean "---"-delimited segment — keep the longest run of consecutive
   // leak-free sentences (the note, with interspersed meta sentences dropped).
-  const sentences = text
+  const sentences = t
     .split(/(?<=[.!?])\s+/)
     .map((s) => s.trim())
     .filter(Boolean);

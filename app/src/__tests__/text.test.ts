@@ -145,6 +145,15 @@ describe("stripLeakedReasoning", () => {
     expect(out.length).toBeLessThan(LEAK_1_10.length);
   });
 
+  it("strips a leading 'here is the note only:' commentary preamble glued to the note", () => {
+    const leak =
+      "I keep adding commentary. Here is the note only: Anasur asked for help on his SGD given minimal gestural prompting and occasional redirection to task. He was engaged throughout the activity.";
+    const out = stripLeakedReasoning(leak);
+    expect(hasLeakedReasoning(out)).toBe(false);
+    expect(out.startsWith("Anasur asked for help on his SGD")).toBe(true);
+    expect(out).not.toMatch(/commentary|Here is the note|I keep/i);
+  });
+
   it("recovers when meta sentences are interspersed without a --- separator", () => {
     const leak =
       'Here is the revised note. Sam read a short passage and answered comprehension questions about it. He answered 3/5 WH questions given minimal verbal prompting. This session built receptive language.';
