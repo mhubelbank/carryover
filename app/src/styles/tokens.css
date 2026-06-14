@@ -35,6 +35,28 @@
   /* Diagonal stripes marking the dateless "Usual" schedule template. */
   --color-stripe: rgba(0, 0, 0, 0.04);
 
+  /* Teacher pill colors — theme-aware so dark mode isn't bright pastel. */
+  --teacher-purple-bg: #cecbf6;
+  --teacher-purple-text: #26215c;
+  --teacher-blue-bg: #b5d4f4;
+  --teacher-blue-text: #0c447c;
+  --teacher-teal-bg: #9fe1cb;
+  --teacher-teal-text: #0f5641;
+  --teacher-green-bg: #c0dd97;
+  --teacher-green-text: #27500a;
+  --teacher-amber-bg: #fac775;
+  --teacher-amber-text: #412402;
+  --teacher-coral-bg: #f5c4b3;
+  --teacher-coral-text: #5a2310;
+  --teacher-pink-bg: #f4c0d1;
+  --teacher-pink-text: #4b1528;
+  --teacher-purple-deep-bg: #afa9ec;
+  --teacher-purple-deep-text: #26215c;
+  --teacher-teal-deep-bg: #5dcaa5;
+  --teacher-teal-deep-text: #0f5641;
+  --teacher-amber-deep-bg: #ef9f27;
+  --teacher-amber-deep-text: #412402;
+
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
@@ -80,6 +102,29 @@
   --color-border-birthday: rgba(150, 112, 210, 0.34);
   /* Lighter (white-based) so the stripes read against the dark page. */
   --color-stripe: rgba(255, 255, 255, 0.07);
+
+  /* Teacher pills in dark mode: darker, translucent fills with light-tint text
+     (the light-mode pastels were glaring). */
+  --teacher-purple-bg: rgba(150, 145, 235, 0.18);
+  --teacher-purple-text: #c9c4f0;
+  --teacher-blue-bg: rgba(120, 165, 225, 0.18);
+  --teacher-blue-text: #aacbf2;
+  --teacher-teal-bg: rgba(95, 205, 165, 0.16);
+  --teacher-teal-text: #8fdcc0;
+  --teacher-green-bg: rgba(155, 205, 115, 0.16);
+  --teacher-green-text: #bcdf97;
+  --teacher-amber-bg: rgba(235, 180, 90, 0.16);
+  --teacher-amber-text: #e8c47f;
+  --teacher-coral-bg: rgba(230, 150, 125, 0.16);
+  --teacher-coral-text: #edb39e;
+  --teacher-pink-bg: rgba(232, 140, 170, 0.16);
+  --teacher-pink-text: #efb0c6;
+  --teacher-purple-deep-bg: rgba(150, 142, 228, 0.22);
+  --teacher-purple-deep-text: #c4bcf2;
+  --teacher-teal-deep-bg: rgba(75, 195, 155, 0.2);
+  --teacher-teal-deep-text: #7ad9b5;
+  --teacher-amber-deep-bg: rgba(228, 150, 35, 0.22);
+  --teacher-amber-deep-text: #ecb050;
 
   color-scheme: dark;
 }

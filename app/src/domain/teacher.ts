@@ -19,17 +19,19 @@ export interface TeacherColor {
   text: string;
 }
 
+// Colors reference theme-aware CSS tokens (see styles/tokens.css) so dark mode
+// renders darker, translucent fills instead of the light-mode pastels.
 export const TEACHER_COLORS: Record<ColorKey, TeacherColor> = {
-  purple: { label: "Purple", bg: "#CECBF6", text: "#26215C" },
-  blue: { label: "Blue", bg: "#B5D4F4", text: "#0C447C" },
-  teal: { label: "Teal", bg: "#9FE1CB", text: "#0F5641" },
-  green: { label: "Green", bg: "#C0DD97", text: "#27500A" },
-  amber: { label: "Amber", bg: "#FAC775", text: "#412402" },
-  coral: { label: "Coral", bg: "#F5C4B3", text: "#5A2310" },
-  pink: { label: "Pink", bg: "#F4C0D1", text: "#4B1528" },
-  "purple-deep": { label: "Purple deep", bg: "#AFA9EC", text: "#26215C" },
-  "teal-deep": { label: "Teal deep", bg: "#5DCAA5", text: "#0F5641" },
-  "amber-deep": { label: "Amber deep", bg: "#EF9F27", text: "#412402" },
+  purple: { label: "Purple", bg: "var(--teacher-purple-bg)", text: "var(--teacher-purple-text)" },
+  blue: { label: "Blue", bg: "var(--teacher-blue-bg)", text: "var(--teacher-blue-text)" },
+  teal: { label: "Teal", bg: "var(--teacher-teal-bg)", text: "var(--teacher-teal-text)" },
+  green: { label: "Green", bg: "var(--teacher-green-bg)", text: "var(--teacher-green-text)" },
+  amber: { label: "Amber", bg: "var(--teacher-amber-bg)", text: "var(--teacher-amber-text)" },
+  coral: { label: "Coral", bg: "var(--teacher-coral-bg)", text: "var(--teacher-coral-text)" },
+  pink: { label: "Pink", bg: "var(--teacher-pink-bg)", text: "var(--teacher-pink-text)" },
+  "purple-deep": { label: "Purple deep", bg: "var(--teacher-purple-deep-bg)", text: "var(--teacher-purple-deep-text)" },
+  "teal-deep": { label: "Teal deep", bg: "var(--teacher-teal-deep-bg)", text: "var(--teacher-teal-deep-text)" },
+  "amber-deep": { label: "Amber deep", bg: "var(--teacher-amber-deep-bg)", text: "var(--teacher-amber-deep-text)" },
 };
 
 // Palette order for the color picker (10 options).
