@@ -104,10 +104,10 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }
     setPipelineId(id);
   };
   const pipeline = resolvePipeline(pipelineId);
+  // Two passes: premium draft → one conservative review (no streamline pass).
   const pipelinePasses = {
     draft: { provider: pipeline.provider, model: pipeline.draft.model },
     review: { provider: pipeline.provider, model: pipeline.review.model },
-    streamline: { provider: pipeline.provider, model: pipeline.streamline.model },
   };
   const providerKey = pipeline.provider === "openai" ? keys?.openaiApiKey : keys?.anthropicApiKey;
   const hasModelKey = providerKey != null && providerKey.length > 0;
@@ -569,7 +569,7 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }
           apiKey,
           collectTrialVerbs(targets.map((t) => t.st)),
           pipeline.provider,
-          pipeline.streamline.model,
+          pipeline.review.model,
         );
 
     await runPool(targets, GENERATE_CONCURRENCY, async (t) => {
@@ -727,7 +727,7 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }
           apiKey,
           collectTrialVerbs(lookups.map((t) => t.st)),
           pipeline.provider,
-          pipeline.streamline.model,
+          pipeline.review.model,
         );
 
     await runPool(lookups, GENERATE_CONCURRENCY, async (t) => {

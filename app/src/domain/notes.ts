@@ -471,18 +471,26 @@ export async function generateNote(
     renderTemplate(prompts.review, { ...ctx, draftNote: draft }) + (feedbackAppend ? `\n\n${feedbackAppend}` : ""),
   );
 
-  opts.onPhase?.("streamline");
-  const streamlined = await callPass(
-    apiKey,
-    "streamline",
-    passModel("streamline").provider,
-    passModel("streamline").model,
-    maxTokens,
-    renderTemplate(prompts.streamline, { ...ctx, draftNote: draft, reviewedNote: reviewed }),
-  );
-  // If the streamline pass dropped clinical detail the review had (a redirection
-  // clause, or all prompting), it regressed — keep the clean review note instead.
-  const finalSource = streamlineLostClinicalDetail(reviewed, streamlined) ? reviewed : streamlined;
+  // The shipping pipelines are TWO-pass (premium draft → one conservative review),
+  // so the streamline pass runs ONLY when a streamline model is configured — which
+  // the pipelines deliberately omit. A single-model run (no `passes`, e.g. an eval)
+  // still streamlines via the fallback model.
+  const streamlineModel: PassModel | undefined = opts.passes ? opts.passes.streamline : fallback;
+  let finalSource = reviewed;
+  if (streamlineModel) {
+    opts.onPhase?.("streamline");
+    const streamlined = await callPass(
+      apiKey,
+      "streamline",
+      streamlineModel.provider,
+      streamlineModel.model,
+      maxTokens,
+      renderTemplate(prompts.streamline, { ...ctx, draftNote: draft, reviewedNote: reviewed }),
+    );
+    // If the streamline pass dropped clinical detail the review had (a redirection
+    // clause, or all prompting), it regressed — keep the clean review note instead.
+    finalSource = streamlineLostClinicalDetail(reviewed, streamlined) ? reviewed : streamlined;
+  }
   // Splice the exact trial sentences back in for any [[TRIAL:n]] tokens the note
   // carried through the passes (regularContext put them there). Collapse any
   // internal line breaks the model inserted — the note is one continuous paragraph.

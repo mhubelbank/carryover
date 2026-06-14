@@ -336,11 +336,11 @@ export function Generate({ onNavigate, target, onTargetConsumed, onBackToToday, 
     setPipelineId(id);
   };
   const pipeline = resolvePipeline(pipelineId);
-  // Per-pass model assignment for the pipeline (premium draft, cheaper cleanup).
+  // Per-pass model assignment for the pipeline. Two passes: premium draft → one
+  // conservative review (no streamline — the review is the final pass).
   const pipelinePassesOpt = {
     draft: { provider: pipeline.provider, model: pipeline.draft.model },
     review: { provider: pipeline.provider, model: pipeline.review.model },
-    streamline: { provider: pipeline.provider, model: pipeline.streamline.model },
   };
   const providerKey = pipeline.provider === "openai" ? keys?.openaiApiKey : keys?.anthropicApiKey;
   const hasModelKey = providerKey != null && providerKey.length > 0;
@@ -841,7 +841,7 @@ export function Generate({ onNavigate, target, onTargetConsumed, onBackToToday, 
           apiKey,
           collectTrialVerbs(pending.map((s) => studentState[s.id]!)),
           pipeline.provider,
-          pipeline.streamline.model,
+          pipeline.review.model,
         );
     await runPool(pending, GENERATE_CONCURRENCY, async (student) => {
       const st = studentState[student.id]!;
@@ -967,7 +967,7 @@ export function Generate({ onNavigate, target, onTargetConsumed, onBackToToday, 
           apiKey,
           collectTrialVerbs(targets.map((t) => t.st!)),
           pipeline.provider,
-          pipeline.streamline.model,
+          pipeline.review.model,
         );
     await runPool(targets, GENERATE_CONCURRENCY, async ({ id, st, student }) => {
       updateResult(id, { regenerating: true, regenPhase: "draft", error: undefined });

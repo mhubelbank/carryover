@@ -110,8 +110,7 @@ export const PIPELINES: Pipeline[] = [
   {
     id: "claude",
     label: "Claude",
-    blurb:
-      "Drafts on Opus (most capable), then cleans up on Sonnet and Haiku to keep cost down. Needs an Anthropic key.",
+    blurb: "Drafts on Opus (most capable), then cleans up on Sonnet. Needs an Anthropic key.",
     provider: "anthropic",
     draft: { model: "claude-opus-4-8", tokens: { input: 6112, output: 91, cached: 5780 } },
     review: { model: "claude-sonnet-4-6", tokens: { input: 2840, output: 61, cached: 0 } },
@@ -120,7 +119,7 @@ export const PIPELINES: Pipeline[] = [
   {
     id: "chatgpt",
     label: "ChatGPT",
-    blurb: "Drafts on GPT-5.5, then cleans up on GPT-5.4 and GPT-5.4-mini. Needs an OpenAI key.",
+    blurb: "Drafts on GPT-5.5, then cleans up on GPT-5.4. Needs an OpenAI key.",
     provider: "openai",
     draft: { model: "gpt-5.5", tokens: { input: 4005, output: 545, cached: 1109 } },
     review: { model: "gpt-5.4", tokens: { input: 2639, output: 51, cached: 0 } },
@@ -130,8 +129,10 @@ export const PIPELINES: Pipeline[] = [
 
 export const DEFAULT_PIPELINE: PipelineId = "claude";
 
-// The three passes in order, for iterating a pipeline's models/tokens.
-export const pipelinePasses = (p: Pipeline): PipelinePass[] => [p.draft, p.review, p.streamline];
+// The passes the app actually runs, for cost iteration. The shipping pipelines are
+// TWO-pass (draft → review); `streamline` is retained on the type only so the
+// price/eval tooling can still measure a three-pass run for comparison.
+export const pipelinePasses = (p: Pipeline): PipelinePass[] => [p.draft, p.review];
 
 // Resolve a saved pipeline id to its record, falling back to the default.
 export function resolvePipeline(id: string): Pipeline {
