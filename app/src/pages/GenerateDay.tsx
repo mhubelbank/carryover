@@ -62,12 +62,16 @@ type ReadyState = "ready" | "partial" | "empty";
 // Readiness from a session's draft (StudentState has no mode field — the draft's
 // mode governs whether news-role or regular-activity entry counts).
 function draftReadiness(draft: SessionDraft): ReadyState {
-  const includedIds = Object.keys(draft.studentState).filter(
-    (id) => draft.studentState[id]?.included && !draft.studentState[id]?.absent,
-  );
-  if (includedIds.length === 0) return "empty";
+  const included = Object.keys(draft.studentState).filter((id) => draft.studentState[id]?.included);
+  if (included.length === 0) return "empty";
+  const nonAbsent = included.filter((id) => !draft.studentState[id]?.absent);
+  const anyAbsent = nonAbsent.length < included.length;
+  // Every included student is absent — the session is complete (it generates absent
+  // notes, which need no input). This is the case the old "non-absent only" filter
+  // wrongly reported as empty.
+  if (nonAbsent.length === 0) return "ready";
   const activeMode = draft.mode;
-  const entered = includedIds.filter((id) => {
+  const entered = nonAbsent.filter((id) => {
     const st = draft.studentState[id]!;
     if (activeMode === "news-day") return !!st.roleId || (st.newsGoalIds?.length ?? 0) > 0;
     return (st.regular ?? []).some(
@@ -79,10 +83,12 @@ function draftReadiness(draft: SessionDraft): ReadyState {
         (a.trials?.entries ?? []).length > 0,
     );
   });
-  if (entered.length === 0) return "empty";
   // Regular mode also needs at least one selected activity to be truly "ready".
   const hasActivity = activeMode === "news-day" || draft.activities.some((a) => a.activityId);
-  if (entered.length === includedIds.length && hasActivity) return "ready";
+  if (entered.length === nonAbsent.length && hasActivity) return "ready";
+  // Nothing entered and nobody absent → empty; otherwise some students are handled
+  // (absent or entered) and some are pending → partial.
+  if (entered.length === 0 && !anyAbsent) return "empty";
   return "partial";
 }
 
@@ -289,20 +295,7 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }
     return m;
   }, [drafts, railSpecs]);
 
-  // Total included, non-absent students across ready, non-locked sessions.
-  const readyCount = useMemo(() => {
-    let n = 0;
-    for (const sp of railSpecs) {
-      const key = sessionKey(sp.teacherId, sp.timeSlot);
-      if (readyByKey[key] !== "ready" || isLocked(key)) continue;
-      const d = drafts[key];
-      if (!d) continue;
-      n += Object.values(d.studentState).filter((st) => st.included && !st.absent).length;
-    }
-    return n;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [readyByKey, drafts, railSpecs, genAt, reactivated]);
-
+  // Ready, non-locked sessions — gates the "Generate all" button and labels it.
   const readySessionCount = useMemo(
     () =>
       railSpecs.filter((sp) => {
@@ -1102,7 +1095,7 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }
           <button
             className="button button--primary"
             onClick={handleGenerateAll}
-            disabled={readyCount === 0 || phase === "running" || (!hasModelKey && !useCanned)}
+            disabled={readySessionCount === 0 || phase === "running" || (!hasModelKey && !useCanned)}
           >
             {phase === "running"
               ? progress
