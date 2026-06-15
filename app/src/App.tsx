@@ -9,6 +9,7 @@ import { ErrorToaster } from "./components/ErrorToaster";
 import { TutorialOverlay } from "./components/Tutorial/TutorialOverlay";
 import { isTutorialDone, markTutorialDone } from "./clients/tutorial";
 import { Nav, type NavPage } from "./components/Nav";
+import { NAV_PAGES, pageFromPath, pathForPage } from "./routes";
 import { storage, StorageKeys } from "./clients/storage";
 import { Welcome } from "./pages/Welcome";
 import { Settings } from "./pages/Settings";
@@ -36,14 +37,6 @@ function Router() {
 // tabs and a refresh stays put. Students/Teachers keep their own list-vs-detail
 // sub-state internally, so detail views are NOT in the URL — Back from a detail
 // returns to the previous tab, not the list. Goals are reached per-student.
-const NAV_PAGES: NavPage[] = ["today", "generate", "students", "teachers", "activities", "schedule", "settings"];
-
-// First path segment → page, if it's a known page (else null).
-function pageFromPath(path: string): NavPage | null {
-  const seg = path.replace(/^\/+/, "").split("/")[0] ?? "";
-  return (NAV_PAGES as string[]).includes(seg) ? (seg as NavPage) : null;
-}
-const pathForPage = (p: NavPage): string => `/${p}`;
 
 function loadStoredPage(): NavPage {
   const v = storage.get(StorageKeys.page);

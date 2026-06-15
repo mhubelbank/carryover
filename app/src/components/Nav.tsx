@@ -1,4 +1,6 @@
 import { Icon } from "./Icon";
+import { AppLink } from "./AppLink";
+import { pathForPage } from "../routes";
 
 export type NavPage =
   | "today"
@@ -45,11 +47,12 @@ export function Nav({ current, onNavigate }: NavProps) {
           // "People" (the Students tab) stays active on the Teachers page too.
           const active = tab.id === current || (tab.id === "students" && current === "teachers");
           return (
-            <button
+            <AppLink
               key={tab.id}
-              data-tour={`nav-${tab.id}`}
+              href={pathForPage(tab.id)}
+              onActivate={() => onNavigate(tab.id)}
+              dataTour={`nav-${tab.id}`}
               className="button button--ghost"
-              onClick={() => onNavigate(tab.id)}
               style={{
                 fontSize: 14,
                 padding: "6px 12px",
@@ -60,15 +63,16 @@ export function Nav({ current, onNavigate }: NavProps) {
               }}
             >
               {tab.label}
-            </button>
+            </AppLink>
           );
         })}
       </div>
-      <button
-        data-tour="nav-settings"
-        className="button button--ghost"
-        onClick={() => onNavigate("settings")}
+      <AppLink
+        href={pathForPage("settings")}
+        onActivate={() => onNavigate("settings")}
+        dataTour="nav-settings"
         title="Settings"
+        className="button button--ghost"
         style={{
           display: "flex",
           alignItems: "center",
@@ -85,7 +89,7 @@ export function Nav({ current, onNavigate }: NavProps) {
       >
         <Icon name="settings" size={18} />
         Settings
-      </button>
+      </AppLink>
     </nav>
   );
 }
