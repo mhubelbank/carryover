@@ -3021,6 +3021,52 @@ function CreditBanner({ provider, otherOut }: { provider: Provider; otherOut: bo
   );
 }
 
+// A disclosure toggle (caret + label) used below each note for the Draft and
+// Progress panels — a dropdown affordance rather than a boxed button. The caret
+// rotates to point down when open.
+function Disclosure({
+  open,
+  label,
+  onToggle,
+}: {
+  open: boolean;
+  label: string;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      onClick={onToggle}
+      aria-expanded={open}
+      style={{
+        alignSelf: "flex-start",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        background: "transparent",
+        border: "none",
+        padding: 0,
+        cursor: "pointer",
+        fontFamily: "inherit",
+        fontSize: 13,
+        color: "var(--color-text-secondary)",
+      }}
+    >
+      <span
+        aria-hidden
+        style={{
+          fontSize: 9,
+          display: "inline-block",
+          transform: open ? "rotate(90deg)" : "none",
+          transition: "transform 0.12s",
+        }}
+      >
+        ▶
+      </span>
+      {label}
+    </button>
+  );
+}
+
 // Per-note progress mini-charts (collapsed under each generated note): for every
 // goal the student logged trials on, the Accuracy and Criterion-met trends over the
 // last 8 sessions, with the just-entered session marked. Built from saved session
@@ -3324,13 +3370,11 @@ export function ResultsView({
                   differently (gray vs accent left-border) so they don't blur together. */}
               {!r.absent && (
                 <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
-                  <button
-                    className="button button--small"
-                    style={{ alignSelf: "flex-start" }}
-                    onClick={() => onToggleDrafts(r.studentId)}
-                  >
-                    {r.showDrafts ? "Hide draft" : "Show draft"}
-                  </button>
+                  <Disclosure
+                    open={!!r.showDrafts}
+                    label="Draft"
+                    onToggle={() => onToggleDrafts(r.studentId)}
+                  />
                   {r.showDrafts && (
                     <div
                       style={{
@@ -3344,17 +3388,18 @@ export function ResultsView({
                           draft adds anything, so that's all we show. */}
                       <div style={{ fontWeight: 500, marginBottom: 3 }}>Initial draft (before review)</div>
                       <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", margin: 0 }}>
-                        {demoMode ? DEMO_PASS_NOTE : r.result.draft}
+                        {demoMode
+                          ? DEMO_PASS_NOTE
+                          : r.result.draft ||
+                            "The note above is the reviewed version — no separate earlier draft was captured."}
                       </pre>
                     </div>
                   )}
-                  <button
-                    className="button button--small"
-                    style={{ alignSelf: "flex-start" }}
-                    onClick={() => toggleProgress(r.studentId)}
-                  >
-                    {openProgress.has(r.studentId) ? "Hide progress" : "Show progress"}
-                  </button>
+                  <Disclosure
+                    open={openProgress.has(r.studentId)}
+                    label="Progress"
+                    onToggle={() => toggleProgress(r.studentId)}
+                  />
                   {openProgress.has(r.studentId) && (
                     <div
                       style={{
