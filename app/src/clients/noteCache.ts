@@ -13,6 +13,9 @@ export interface CachedNote {
   studentId: string;
   studentName: string;
   note: string;
+  // The initial draft pass (before review), for the "Show draft" panel after a
+  // restore. Optional: notes cached before this field existed simply won't offer it.
+  draft?: string;
   generatedAt: number;
 }
 

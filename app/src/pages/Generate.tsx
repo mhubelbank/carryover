@@ -593,6 +593,7 @@ export function Generate({ onNavigate, target, onTargetConsumed, onBackToToday, 
         studentId: r.studentId,
         studentName: r.name,
         note: r.result!.final,
+        draft: r.result!.draft,
         generatedAt: at,
       }));
     void saveNotes(notes);
@@ -634,7 +635,7 @@ export function Generate({ onNavigate, target, onTargetConsumed, onBackToToday, 
         studentId: n.studentId,
         name: n.studentName,
         absent: false,
-        result: { draft: "", reviewed: "", final: n.note },
+        result: { draft: n.draft ?? "", reviewed: "", final: n.note },
       })),
     );
     setPhase("results");
@@ -3370,30 +3371,33 @@ export function ResultsView({
                   differently (gray vs accent left-border) so they don't blur together. */}
               {!r.absent && (
                 <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
-                  <Disclosure
-                    open={!!r.showDrafts}
-                    label="Draft"
-                    onToggle={() => onToggleDrafts(r.studentId)}
-                  />
-                  {r.showDrafts && (
-                    <div
-                      style={{
-                        borderLeft: "2px solid var(--color-border-tertiary)",
-                        paddingLeft: 10,
-                        fontSize: 12,
-                        color: "var(--color-text-secondary)",
-                      }}
-                    >
-                      {/* The review pass is the final note above — only the initial
-                          draft adds anything, so that's all we show. */}
-                      <div style={{ fontWeight: 500, marginBottom: 3 }}>Initial draft (before review)</div>
-                      <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", margin: 0 }}>
-                        {demoMode
-                          ? DEMO_PASS_NOTE
-                          : r.result.draft ||
-                            "The note above is the reviewed version — no separate earlier draft was captured."}
-                      </pre>
-                    </div>
+                  {/* Only offered when a draft exists — notes restored from the
+                      cache before drafts were stored have none. */}
+                  {(demoMode || r.result.draft) && (
+                    <>
+                      <Disclosure
+                        open={!!r.showDrafts}
+                        label="Draft"
+                        onToggle={() => onToggleDrafts(r.studentId)}
+                      />
+                      {r.showDrafts && (
+                        <div
+                          style={{
+                            borderLeft: "2px solid var(--color-border-tertiary)",
+                            paddingLeft: 10,
+                            fontSize: 12,
+                            color: "var(--color-text-secondary)",
+                          }}
+                        >
+                          {/* The review pass is the final note above — only the
+                              initial draft adds anything, so that's all we show. */}
+                          <div style={{ fontWeight: 500, marginBottom: 3 }}>Initial draft (before review)</div>
+                          <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", margin: 0 }}>
+                            {demoMode ? DEMO_PASS_NOTE : r.result.draft}
+                          </pre>
+                        </div>
+                      )}
+                    </>
                   )}
                   <Disclosure
                     open={openProgress.has(r.studentId)}
