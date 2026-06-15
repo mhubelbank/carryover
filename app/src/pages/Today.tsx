@@ -2,6 +2,8 @@ import { useEffect, useState, type CSSProperties } from "react";
 import { Banner } from "../components/Banner";
 import { Icon } from "../components/Icon";
 import { Nav, type NavPage } from "../components/Nav";
+import { AppLink } from "../components/AppLink";
+import { studentHref } from "../routes";
 import { useTerm } from "../context/TermContext";
 import { useAuth } from "../context/AuthContext";
 import { isTokenRenewalDue } from "../domain/tokenRenewal";
@@ -569,9 +571,10 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate, on
                     const isAbsent = !!absentSet?.has(id);
                     const customized = isCustomized(session.teacherId, session.timeSlot, id);
                     return (
-                      <button
+                      <AppLink
                         key={`${id}-${i}`}
-                        onClick={() => onOpenStudent(id)}
+                        href={studentHref(id)}
+                        onActivate={() => onOpenStudent(id)}
                         title={`Open ${student ? fullName(student) : "student"}`}
                         style={{
                           fontSize: 13,
@@ -625,7 +628,7 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate, on
                             <Icon name="pencil" size={12} />
                           </span>
                         )}
-                      </button>
+                      </AppLink>
                     );
                   })}
                 </div>

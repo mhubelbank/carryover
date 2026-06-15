@@ -162,3 +162,11 @@ input[type="radio"] {
   border-color: var(--color-border-secondary);
   box-shadow: var(--shadow-sm, 0 1px 4px rgba(0, 0, 0, 0.12));
 }
+
+/* Subtle "this is a link" affordance for inline app links (student names, etc.):
+   no underline at rest, a faint one on hover/focus so it reads as clickable. */
+.link-affordance:hover,
+.link-affordance:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}

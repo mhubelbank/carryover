@@ -28,6 +28,7 @@ import {
 } from "../domain/data";
 import { studentGoalProgress } from "../domain/progress";
 import { Tip } from "../components/Tip";
+import { StudentLink } from "../components/StudentLink";
 import {
   Metric,
   criterionMetPct,
@@ -187,6 +188,8 @@ interface Props {
   onBackToToday?: (date: string) => void;
   // Open a student's IEP review (soft-block nudge for overdue students).
   onReviewIep?: (studentId: string) => void;
+  // Open a student's detail/goals page (the note's name links to it).
+  onOpenStudent?: (id: string, view?: "detail" | "goals") => void;
 }
 
 export interface StudentState {
@@ -328,7 +331,7 @@ export function blankNews(): NewsFieldValues {
   };
 }
 
-export function Generate({ onNavigate, target, onTargetConsumed, onBackToToday, onReviewIep }: Props) {
+export function Generate({ onNavigate, target, onTargetConsumed, onBackToToday, onReviewIep, onOpenStudent }: Props) {
   const { state, client, saveGoals } = useTerm();
   const { keys, demoMode } = useAuth();
 
@@ -1030,6 +1033,7 @@ export function Generate({ onNavigate, target, onTargetConsumed, onBackToToday, 
           setPhase("form");
         }}
         onNavigate={onNavigate}
+        onOpenStudent={onOpenStudent}
         onRegenerate={regenerate}
         pipelineId={pipelineId}
         onChangeModel={changeModel}
@@ -3152,6 +3156,7 @@ export function ResultsView({
   error,
   onBack,
   onNavigate,
+  onOpenStudent,
   onRegenerate,
   pipelineId,
   onChangeModel,
@@ -3165,6 +3170,7 @@ export function ResultsView({
   error: string | null;
   onBack: () => void;
   onNavigate: (page: NavPage) => void;
+  onOpenStudent?: (id: string, view?: "detail" | "goals") => void;
   onRegenerate: (ids: string[], feedback?: string, saveAsRule?: boolean) => void;
   pipelineId: PipelineId;
   onChangeModel: (id: PipelineId) => void;
@@ -3311,7 +3317,13 @@ export function ResultsView({
                   onChange={(e) => toggleSelected(r.studentId, e.target.checked)}
                 />
               )}
-              {r.name}
+              {onOpenStudent ? (
+                <StudentLink id={r.studentId} onOpen={onOpenStudent}>
+                  {r.name}
+                </StudentLink>
+              ) : (
+                r.name
+              )}
             </span>
             <div style={{ display: "flex", gap: 6 }}>
               <CopyButton text={r.result?.final ?? ""} label="Copy" disabled={!r.result} />

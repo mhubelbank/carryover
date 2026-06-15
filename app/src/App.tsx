@@ -9,7 +9,7 @@ import { ErrorToaster } from "./components/ErrorToaster";
 import { TutorialOverlay } from "./components/Tutorial/TutorialOverlay";
 import { isTutorialDone, markTutorialDone } from "./clients/tutorial";
 import { Nav, type NavPage } from "./components/Nav";
-import { NAV_PAGES, pageFromPath, pathForPage } from "./routes";
+import { NAV_PAGES, pageFromPath, pathForPage, studentHref } from "./routes";
 import { storage, StorageKeys } from "./clients/storage";
 import { Welcome } from "./pages/Welcome";
 import { Settings } from "./pages/Settings";
@@ -47,11 +47,21 @@ function initialPage(): NavPage {
   return pageFromPath(window.location.pathname) ?? loadStoredPage();
 }
 
+// A student deep link (`/students?s=<id>&v=<view>`) → a one-shot detail/goals
+// target, so a refresh or a Cmd-clicked new tab opens straight to that student.
+function studentTargetFromUrl(): { id: string; view: "detail" | "goals" | "iep-review" } | null {
+  if (pageFromPath(window.location.pathname) !== "students") return null;
+  const id = new URLSearchParams(window.location.search).get("s");
+  if (!id) return null;
+  const v = new URLSearchParams(window.location.search).get("v");
+  return { id, view: v === "goals" ? "goals" : "detail" };
+}
+
 function Pages() {
   const [page, setPage] = useState<NavPage>(initialPage);
   const [studentTarget, setStudentTarget] = useState<
     { id: string; view: "detail" | "goals" | "iep-review" } | null
-  >(null);
+  >(studentTargetFromUrl);
   const [openTeacherId, setOpenTeacherId] = useState<string | null>(null);
   const [generateTarget, setGenerateTarget] = useState<
     { date: string; teacherId: string; studentIds: string[]; timeSlot?: string } | null
@@ -115,12 +125,24 @@ function Pages() {
   // Browser Back/Forward → page. Registered once on mount; also normalizes the URL
   // and seeds history state so the first Back has somewhere to return to.
   useEffect(() => {
-    window.history.replaceState({ page: pageRef.current }, "", pathForPage(pageRef.current));
+    // Seed history state, preserving the current URL (incl. a ?s student deep link)
+    // rather than normalizing to the bare page path, which would strip the query.
+    window.history.replaceState(
+      { page: pageRef.current },
+      "",
+      window.location.pathname + window.location.search,
+    );
     const onPop = () => {
       const target = pageFromPath(window.location.pathname) ?? "today";
-      if (target === pageRef.current) return;
+      const st = studentTargetFromUrl();
+      if (target === pageRef.current) {
+        // Same tab — but a back/forward between students changes the deep link.
+        if (target === "students") setStudentTarget(st);
+        return;
+      }
       if (confirmNavAway()) {
         setPage(target);
+        setStudentTarget(target === "students" ? st : null);
       } else {
         // User kept their unsaved work — undo the Back by restoring the URL.
         window.history.pushState({ page: pageRef.current }, "", pathForPage(pageRef.current));
@@ -163,9 +185,15 @@ function Pages() {
     (id: string, view: "detail" | "goals" | "iep-review" = "detail") => {
       if (!confirmNavAway()) return;
       setStudentTarget({ id, view });
-      pushPage("students");
+      setPage("students");
+      // Reflect the student in the URL so Cmd/middle-click and refresh deep-link to
+      // it (iep-review isn't deep-linked — it falls back to the detail URL).
+      const href = studentHref(id, view === "goals" ? "goals" : "detail");
+      if (window.location.pathname + window.location.search !== href) {
+        window.history.pushState({ page: "students" }, "", href);
+      }
     },
-    [pushPage],
+    [],
   );
   const clearOpenTeacher = useCallback(() => setOpenTeacherId(null), []);
   const openTeacher = useCallback(
@@ -276,6 +304,10 @@ function Pages() {
           sessions={dayTarget.sessions}
           onClose={closeDay}
           onNavigate={nav}
+          onOpenStudent={(id, view) => {
+            setDayTarget(null);
+            openStudent(id, view);
+          }}
           onReviewIep={(id) => {
             setDayTarget(null);
             openStudent(id, "iep-review");
@@ -316,6 +348,7 @@ function Pages() {
           onTargetConsumed={clearGenerateTarget}
           onBackToToday={backToToday}
           onReviewIep={(id) => openStudent(id, "iep-review")}
+          onOpenStudent={openStudent}
         />
       );
       break;

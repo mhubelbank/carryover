@@ -98,9 +98,10 @@ interface Props {
   onClose: () => void;
   onNavigate: (page: NavPage) => void;
   onReviewIep?: (studentId: string) => void;
+  onOpenStudent?: (id: string, view?: "detail" | "goals") => void;
 }
 
-export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }: Props) {
+export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep, onOpenStudent }: Props) {
   const { state, client, saveGoals } = useTerm();
   const { keys, demoMode } = useAuth();
 
@@ -788,6 +789,12 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep }
           onClose();
           onNavigate(p);
         }}
+        onOpenStudent={
+          onOpenStudent && ((id, view) => {
+            onClose();
+            onOpenStudent(id, view);
+          })
+        }
         onRegenerate={regenerate}
         pipelineId={pipelineId}
         onChangeModel={changeModel}
