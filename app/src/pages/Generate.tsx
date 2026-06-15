@@ -195,6 +195,11 @@ interface Props {
 export interface StudentState {
   included: boolean;
   absent: boolean;
+  // Monotonic stamp set when a student NOT on this session's schedule is added via
+  // "Add a student". Orders the added cards by when they were added (so they
+  // append to the end in that order) rather than by caseload/name order. Unset for
+  // scheduled students and students who were never manually added.
+  addedSeq?: number;
   // Regular: per-activity inputs aligned to `activities` indices.
   regular: ActivityInput[];
   // News:
@@ -742,9 +747,14 @@ export function Generate({ onNavigate, target, onTargetConsumed, onBackToToday, 
     ...sessionStudentIds
       .map((id) => caseload.find((s) => s.id === id))
       .filter((s): s is Student => s != null && (studentState[s.id]?.included ?? false)),
-    ...caseload.filter(
-      (s) => !sessionStudentIds.includes(s.id) && (studentState[s.id]?.included ?? false),
-    ),
+    ...caseload
+      .filter(
+        (s) => !sessionStudentIds.includes(s.id) && (studentState[s.id]?.included ?? false),
+      )
+      .sort(
+        (a, b) =>
+          (studentState[a.id]?.addedSeq ?? Infinity) - (studentState[b.id]?.addedSeq ?? Infinity),
+      ),
   ];
   // Soft block: surface included students whose IEP review has passed. Generation
   // is NOT prevented — this just nudges her to review (clearing the date there).
@@ -1269,6 +1279,7 @@ export function Generate({ onNavigate, target, onTargetConsumed, onBackToToday, 
         roleOptions={roleOptions}
         activities={activities}
         studentState={studentState}
+        scheduledIds={sessionStudentIds}
         setActivities={setActivities}
         setStudentState={setStudentState}
         disabled={phase === "running"}
@@ -1339,6 +1350,7 @@ export function SessionInputs({
   roleOptions,
   activities,
   studentState,
+  scheduledIds,
   setActivities,
   setStudentState,
   disabled,
@@ -1352,6 +1364,10 @@ export function SessionInputs({
   roleOptions: ReturnType<typeof resolveRoles>;
   activities: ActivityDef[];
   studentState: Record<string, StudentState>;
+  // Schedule order for this session. Cards render scheduled-first (in this
+  // order) then anyone added via "Add a student", so they append to the end
+  // instead of sorting into the middle of the roster.
+  scheduledIds: string[];
   setActivities: Dispatch<SetStateAction<ActivityDef[]>>;
   setStudentState: Dispatch<SetStateAction<Record<string, StudentState>>>;
   disabled: boolean;
@@ -1464,6 +1480,23 @@ export function SessionInputs({
     setActivities((a) => a.map((x, i) => (i === idx ? { ...x, ...patch } : x)));
   }
 
+  // Included students in render order: scheduled ones first (schedule order),
+  // then anyone added via "Add a student" in the order they were added (by
+  // addedSeq), so additions append to the end. Falls back to caseload order for
+  // any extra without a stamp.
+  const scheduledSet = new Set(scheduledIds);
+  const orderedStudents = [
+    ...scheduledIds
+      .map((id) => caseload.find((s) => s.id === id))
+      .filter((s): s is Student => s != null && (studentState[s.id]?.included ?? false)),
+    ...caseload
+      .filter((s) => !scheduledSet.has(s.id) && (studentState[s.id]?.included ?? false))
+      .sort(
+        (a, b) =>
+          (studentState[a.id]?.addedSeq ?? Infinity) - (studentState[b.id]?.addedSeq ?? Infinity),
+      ),
+  ];
+
   return (
     <fieldset
       disabled={disabled}
@@ -1516,9 +1549,7 @@ export function SessionInputs({
       {/* Per-student cards — only the session roster (included students). Others
           are hidden by default and added back via "Add students" below. */}
       {teacher &&
-        caseload
-          .filter((student) => studentState[student.id]?.included)
-          .map((student) => {
+        orderedStudents.map((student) => {
           const st = studentState[student.id];
           if (!st) return null;
           const studentGoals = goals.filter((g) => g.studentId === student.id && !g.archived);
@@ -1652,7 +1683,15 @@ export function SessionInputs({
                 style={{ maxWidth: 220 }}
                 value=""
                 onChange={(e) => {
-                  if (e.target.value) setStudent(e.target.value, { included: true, absent: false });
+                  if (!e.target.value) return;
+                  // Stamp a monotonically increasing seq so this student sorts to
+                  // the end of the added group in add order, not caseload order.
+                  const nextSeq =
+                    Math.max(
+                      0,
+                      ...Object.values(studentState).map((s) => s.addedSeq ?? 0),
+                    ) + 1;
+                  setStudent(e.target.value, { included: true, absent: false, addedSeq: nextSeq });
                 }}
               >
                 <option value="">Choose a student…</option>

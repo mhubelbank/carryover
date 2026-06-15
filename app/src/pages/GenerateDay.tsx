@@ -447,9 +447,13 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep, 
     const scheduled = sp.studentIds
       .map((id) => caseload.find((s) => s.id === id))
       .filter((s): s is Student => s != null && (draft.studentState[s.id]?.included ?? false));
-    const extra = caseload.filter(
-      (s) => !sp.studentIds.includes(s.id) && (draft.studentState[s.id]?.included ?? false),
-    );
+    const extra = caseload
+      .filter((s) => !sp.studentIds.includes(s.id) && (draft.studentState[s.id]?.included ?? false))
+      .sort(
+        (a, b) =>
+          (draft.studentState[a.id]?.addedSeq ?? Infinity) -
+          (draft.studentState[b.id]?.addedSeq ?? Infinity),
+      );
     return [...scheduled, ...extra];
   };
 
@@ -1048,6 +1052,7 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep, 
                 roleOptions={activeRoleOptions}
                 activities={activeDraft.activities}
                 studentState={activeDraft.studentState}
+                scheduledIds={activeSpec?.studentIds ?? []}
                 setActivities={setActivities}
                 setStudentState={setStudentState}
                 disabled={phase === "running"}

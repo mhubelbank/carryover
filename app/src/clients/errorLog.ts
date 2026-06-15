@@ -170,7 +170,16 @@ export function installGlobalErrorHandlers(): void {
   if (installed) return;
   installed = true;
   window.addEventListener("error", (e) => {
-    recordError({ kind: "error", error: e.error ?? e.message });
+    // Cross-origin scripts (and several Safari cases) null out `e.error` and
+    // report only the opaque "Script error." For those, keep whatever source
+    // location the ErrorEvent still exposes so the entry is at least traceable;
+    // a real same-origin error carries its own stack via `e.error`.
+    if (e.error) {
+      recordError({ kind: "error", error: e.error });
+    } else {
+      const where = e.filename ? ` (${e.filename}:${e.lineno ?? 0}:${e.colno ?? 0})` : " (cross-origin / no source — likely a browser extension)";
+      recordError({ kind: "error", error: `${e.message || "Script error."}${where}` });
+    }
   });
   window.addEventListener("unhandledrejection", (e) => {
     recordError({ kind: "unhandledrejection", error: e.reason });
