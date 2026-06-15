@@ -1,6 +1,7 @@
 // Per-goal trial progress over time, derived from saved session metadata. Pure
 // (no I/O) so it's easy to test. Powers the student Progress view.
 import type { SessionMetadata } from "./session";
+import { PROMPTING_LEVELS } from "./generate";
 
 const num = (s: string) => {
   const n = parseInt(s, 10);
@@ -88,6 +89,51 @@ export function studentGoalProgress(
         };
       });
     out.set(goalId, { goalId, points });
+  }
+  return out;
+}
+
+// Independence proxy (0–100) from a qualitative prompting level — higher = more
+// independent. Mirrors the PROMPTING_LEVELS order ("no" prompting = fully
+// independent → "one to one para support" = most support). null if unrecognized.
+export function qualIndependencePct(level: string): number | null {
+  const i = (PROMPTING_LEVELS as readonly string[]).indexOf(level);
+  if (i < 0) return null;
+  const max = PROMPTING_LEVELS.length - 1;
+  return max <= 0 ? 100 : Math.round((1 - i / max) * 100);
+}
+
+export interface QualSupportPoint {
+  date: string;
+  supportPct: number; // independence proxy from the prompting level (higher = better)
+}
+
+// Per-goal qualitative support trend from sessions logged WITHOUT trials, so a
+// goal worked only with qualitative prompting still shows a progress line.
+export function studentQualSupport(
+  sessions: SessionMetadata[],
+  studentId: string,
+): Map<string, QualSupportPoint[]> {
+  const byGoal = new Map<string, Map<string, number>>(); // goalId -> date -> supportPct
+  for (const session of sessions) {
+    const entry = session.students.find((s) => s.studentId === studentId);
+    if (!entry?.quals) continue;
+    for (const q of entry.quals) {
+      const pct = qualIndependencePct(q.promptLevel);
+      if (pct == null) continue;
+      const dates = byGoal.get(q.goalId) ?? new Map<string, number>();
+      dates.set(session.date, pct); // one qual per goal per session
+      byGoal.set(q.goalId, dates);
+    }
+  }
+  const out = new Map<string, QualSupportPoint[]>();
+  for (const [goalId, dates] of byGoal) {
+    out.set(
+      goalId,
+      [...dates.entries()]
+        .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
+        .map(([date, supportPct]) => ({ date, supportPct })),
+    );
   }
   return out;
 }

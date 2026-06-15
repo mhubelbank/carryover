@@ -12,6 +12,10 @@ export interface SessionStudentEntry {
   // for longitudinal progress data). Note text is still not stored. Absent/empty
   // when no trials were taken.
   trials?: TrialEntry[];
+  // Per-goal QUALITATIVE support for activities logged WITHOUT trials — the
+  // most-supportive prompting level used, as an independence proxy. Lets non-trial
+  // sessions still feed the progress charts and report cards. One entry per goal.
+  quals?: { goalId: string; promptLevel: string }[];
 }
 
 export interface SessionMetadata {

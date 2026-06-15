@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { studentGoalProgress, overallTrend } from "../domain/progress";
+import { studentGoalProgress, overallTrend, qualIndependencePct, studentQualSupport } from "../domain/progress";
 import type { SessionMetadata } from "../domain/session";
 import type { TrialEntry, TrialSupportRow } from "../domain/trial";
 
@@ -42,6 +42,30 @@ describe("overallTrend", () => {
     ];
     expect(overallTrend(studentGoalProgress(sessions, "s1"))).toEqual([
       { date: "2026-05-01", accuracyPct: 50, independencePct: 30 },
+    ]);
+  });
+});
+
+describe("qualIndependencePct", () => {
+  it("maps prompting levels to an independence proxy (no=100 … para=0)", () => {
+    expect(qualIndependencePct("no")).toBe(100);
+    expect(qualIndependencePct("minimal")).toBe(75);
+    expect(qualIndependencePct("moderate")).toBe(50);
+    expect(qualIndependencePct("significant")).toBe(25);
+    expect(qualIndependencePct("one to one para support")).toBe(0);
+    expect(qualIndependencePct("bogus")).toBeNull();
+  });
+});
+
+describe("studentQualSupport", () => {
+  it("builds a per-goal support trend from non-trial (qual) sessions", () => {
+    const sessions: SessionMetadata[] = [
+      { date: "2026-05-01", teacherId: "t1", students: [{ studentId: "s1", goalIds: ["g1"], mode: "regular", quals: [{ goalId: "g1", promptLevel: "moderate" }] }] },
+      { date: "2026-05-08", teacherId: "t1", students: [{ studentId: "s1", goalIds: ["g1"], mode: "regular", quals: [{ goalId: "g1", promptLevel: "minimal" }] }] },
+    ];
+    expect(studentQualSupport(sessions, "s1").get("g1")).toEqual([
+      { date: "2026-05-01", supportPct: 50 },
+      { date: "2026-05-08", supportPct: 75 },
     ]);
   });
 });

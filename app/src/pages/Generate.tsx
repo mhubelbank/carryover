@@ -26,7 +26,7 @@ import {
   writeSessionMetadata,
   writeWeekSchedule,
 } from "../domain/data";
-import { studentGoalProgress } from "../domain/progress";
+import { studentGoalProgress, studentQualSupport } from "../domain/progress";
 import { Tip } from "../components/Tip";
 import { StudentLink } from "../components/StudentLink";
 import {
@@ -3090,11 +3090,19 @@ function StudentProgress({
     const prog = studentGoalProgress(sessions, studentId);
     return [...prog.values()].filter((gp) => gp.points.length > 0);
   }, [sessions, studentId]);
+  // Goals worked only QUALITATIVELY (no trials) — charted as a support/independence
+  // trend so trials aren't the only way to see progress.
+  const qualGoals = useMemo(() => {
+    const trialIds = new Set(withData.map((gp) => gp.goalId));
+    return [...studentQualSupport(sessions, studentId).entries()].filter(
+      ([gid, pts]) => pts.length > 0 && !trialIds.has(gid),
+    );
+  }, [sessions, studentId, withData]);
 
-  if (withData.length === 0) {
+  if (withData.length === 0 && qualGoals.length === 0) {
     return (
       <p style={{ fontSize: 12, color: "var(--color-text-tertiary)", margin: 0 }}>
-        No trial data yet — log trials on a goal to track progress here.
+        No data yet — log trials or prompting on a goal to track progress here.
       </p>
     );
   }
@@ -3141,6 +3149,33 @@ function StudentProgress({
             </div>
             <span style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>
               {pts.length} session{pts.length === 1 ? "" : "s"}
+            </span>
+          </div>
+        );
+      })}
+      {qualGoals.map(([goalId, allPts]) => {
+        const goal = goals.find((g) => g.id === goalId);
+        const pts = allPts.slice(-8);
+        const last = pts[pts.length - 1]!;
+        const prev = pts[pts.length - 2];
+        const markers = [{ atIndex: pts.length - 1, color: "var(--color-text-primary)" }];
+        return (
+          <div key={goalId} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <Tip tip={goal?.shortTermGoal || goal?.shortName || "Goal"} underline>
+              <span style={{ fontSize: 13, fontWeight: 500 }}>{goal?.shortName || "Goal"}</span>
+            </Tip>
+            <Metric
+              name="Support"
+              color={INDEPENDENCE_COLOR}
+              values={pts.map((p) => p.supportPct)}
+              latest={last.supportPct}
+              delta={last.supportPct - (prev?.supportPct ?? last.supportPct)}
+              single={pts.length < 2}
+              hint="Independence from the prompting level used (higher = less support needed). Log trials for accuracy too."
+              markers={markers}
+            />
+            <span style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>
+              {pts.length} session{pts.length === 1 ? "" : "s"} · from prompting (no trials)
             </span>
           </div>
         );
@@ -3948,9 +3983,38 @@ export function buildSessionMetadata(
           : st.regular.flatMap((r) =>
               r.trials?.enabled ? (r.trials.entries ?? []).filter(trialEntryStarted) : [],
             );
-      return trials.length > 0
-        ? { studentId: s.id, goalIds, mode, trials }
-        : { studentId: s.id, goalIds, mode };
+      // Per-goal QUALITATIVE support: for activities WITHOUT trials, the
+      // most-supportive prompting level used per goal (an independence proxy so
+      // qualitative sessions still chart). Goals already covered by trials are
+      // skipped — the precise trial data wins.
+      const trialGoalIds = new Set(trials.map((t) => t.goalId).filter(Boolean));
+      const qualByGoal = new Map<string, number>(); // goalId -> max (most-supportive) level index
+      if (mode !== "news-day") {
+        for (const r of st.regular) {
+          if (r.trials?.enabled) continue;
+          let idx = -1;
+          for (const l of r.promptingLevel) {
+            const i = (PROMPTING_LEVELS as readonly string[]).indexOf(l);
+            if (i > idx) idx = i;
+          }
+          if (idx < 0) continue;
+          for (const gid of r.goals) {
+            if (!gid || trialGoalIds.has(gid)) continue;
+            qualByGoal.set(gid, Math.max(qualByGoal.get(gid) ?? -1, idx));
+          }
+        }
+      }
+      const quals = [...qualByGoal.entries()].map(([goalId, i]) => ({
+        goalId,
+        promptLevel: PROMPTING_LEVELS[i]!,
+      }));
+      return {
+        studentId: s.id,
+        goalIds,
+        mode,
+        ...(trials.length > 0 ? { trials } : {}),
+        ...(quals.length > 0 ? { quals } : {}),
+      };
     }),
   };
 }
