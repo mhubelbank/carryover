@@ -313,7 +313,7 @@ function Pages() {
       content = <Activities onNavigate={nav} onOpenStudent={openStudent} />;
       break;
     case "schedule":
-      content = <Schedule onNavigate={nav} onOpenStudent={openStudent} />;
+      content = <Schedule onNavigate={nav} onOpenStudent={openStudent} onOpenDay={backToToday} />;
       break;
     case "generate":
       content = (

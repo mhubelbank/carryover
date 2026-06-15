@@ -54,6 +54,9 @@ export interface ScheduleGridProps {
   // Calendar-event chips per weekday column (index 0 = Monday).
   weeklyEvents?: CalendarEvent[][];
   onOpenStudent?: (studentId: string) => void;
+  // Open Today on a specific day (the day-column headers become buttons). Only in
+  // week mode (a dateless template column has no date to open).
+  onOpenDay?: (iso: string) => void;
   // Faint diagonal stripes marking the dateless "Usual" template.
   templateStripes?: boolean;
 }
@@ -74,6 +77,7 @@ export function ScheduleGrid({
   templateCells,
   weeklyEvents,
   onOpenStudent,
+  onOpenDay,
   templateStripes = false,
 }: ScheduleGridProps) {
   const weekMode = weekDate != null;
@@ -362,31 +366,59 @@ export function ScheduleGrid({
           const dimmed = outOfTerm || isClosed;
           return (
             <div key={day} style={{ flex: 1, minWidth: 0 }}>
-              <div
-                style={{
+              {(() => {
+                // In week mode the header is a button that opens Today on that day;
+                // in dateless template mode it's a plain label (no date to open).
+                const openable = !!(columnDate && onOpenDay);
+                const inner = (
+                  <>
+                    <span
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 500,
+                        color: dimmed
+                          ? "var(--color-text-tertiary)"
+                          : "var(--color-text-secondary)",
+                      }}
+                    >
+                      {day}
+                    </span>
+                    {columnDate && (
+                      <span style={{ fontSize: 10, color: "var(--color-text-tertiary)" }}>
+                        {formatShort(columnDate)}
+                      </span>
+                    )}
+                  </>
+                );
+                const baseStyle: CSSProperties = {
                   height: HEADER_PX,
+                  width: "100%",
                   display: "flex",
                   flexDirection: "column",
                   alignItems: "center",
                   justifyContent: "center",
                   lineHeight: 1.1,
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 500,
-                    color: dimmed ? "var(--color-text-tertiary)" : "var(--color-text-secondary)",
-                  }}
-                >
-                  {day}
-                </span>
-                {columnDate && (
-                  <span style={{ fontSize: 10, color: "var(--color-text-tertiary)" }}>
-                    {formatShort(columnDate)}
-                  </span>
-                )}
-              </div>
+                };
+                return openable ? (
+                  <button
+                    onClick={() => onOpenDay!(toISODate(columnDate!))}
+                    title={`Open ${formatShort(columnDate!)} in Today`}
+                    style={{
+                      ...baseStyle,
+                      border: "none",
+                      background: "transparent",
+                      cursor: "pointer",
+                      fontFamily: "inherit",
+                      padding: 0,
+                      borderRadius: "var(--border-radius-md)",
+                    }}
+                  >
+                    {inner}
+                  </button>
+                ) : (
+                  <div style={baseStyle}>{inner}</div>
+                );
+              })()}
 
               {maxEventsPerDay > 0 && (
                 <div

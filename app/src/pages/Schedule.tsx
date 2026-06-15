@@ -25,6 +25,8 @@ import { dayEvents } from "../domain/events";
 interface Props {
   onNavigate: (page: NavPage) => void;
   onOpenStudent: (studentId: string, view?: "detail" | "goals") => void;
+  // Open Today on a specific day (week-view day headers click through to it).
+  onOpenDay: (iso: string) => void;
 }
 
 // Past-week snapshots when saving a Usual change are bounded to this many
@@ -33,7 +35,7 @@ interface Props {
 // note generation that far back is rare.
 const USUAL_LOOKBACK_WEEKS = 4;
 
-export function Schedule({ onNavigate, onOpenStudent }: Props) {
+export function Schedule({ onNavigate, onOpenStudent, onOpenDay }: Props) {
   const { state, client, teacherById, studentById, saveSchedule, saveTerm } = useTerm();
   const [draft, setDraft] = useState<ScheduleEntry[]>(() =>
     state.status === "ready" ? state.data.schedule.map(cloneEntry) : [],
@@ -403,6 +405,7 @@ export function Schedule({ onNavigate, onOpenStudent }: Props) {
         templateCells={templateCells}
         weeklyEvents={weeklyEvents}
         onOpenStudent={onOpenStudent}
+        onOpenDay={onOpenDay}
         templateStripes={weekKey === null}
       />
 
