@@ -21,10 +21,20 @@ import {
   loadFeedbackRules,
   loadGoldenExamples,
   loadSession,
+  loadSessions,
   loadWeekSchedule,
   writeSessionMetadata,
   writeWeekSchedule,
 } from "../domain/data";
+import { studentGoalProgress } from "../domain/progress";
+import { Tip } from "../components/Tip";
+import {
+  Metric,
+  criterionMetPct,
+  ACCURACY_COLOR,
+  ACCURACY_DEF,
+  INDEPENDENCE_COLOR,
+} from "../components/GoalScorecard";
 import {
   formatLong,
   formatShort,
@@ -3011,6 +3021,83 @@ function CreditBanner({ provider, otherOut }: { provider: Provider; otherOut: bo
   );
 }
 
+// Per-note progress mini-charts (collapsed under each generated note): for every
+// goal the student logged trials on, the Accuracy and Criterion-met trends over the
+// last 8 sessions, with the just-entered session marked. Built from saved session
+// metadata (which includes the session just generated). Trial-only — qualitative
+// sessions don't produce points yet.
+function StudentProgress({
+  studentId,
+  sessions,
+  goals,
+}: {
+  studentId: string;
+  sessions: SessionMetadata[];
+  goals: Goal[];
+}) {
+  const withData = useMemo(() => {
+    const prog = studentGoalProgress(sessions, studentId);
+    return [...prog.values()].filter((gp) => gp.points.length > 0);
+  }, [sessions, studentId]);
+
+  if (withData.length === 0) {
+    return (
+      <p style={{ fontSize: 12, color: "var(--color-text-tertiary)", margin: 0 }}>
+        No trial data yet — log trials on a goal to track progress here.
+      </p>
+    );
+  }
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      {withData.map((gp) => {
+        const goal = goals.find((g) => g.id === gp.goalId);
+        const pts = gp.points.slice(-8);
+        const last = pts[pts.length - 1]!;
+        const prev = pts[pts.length - 2];
+        const level = goal?.targetLevel || "no support";
+        const target = goal?.targetPercent ?? 0;
+        // Dashed marker on the last point — the session just generated.
+        const markers = [{ atIndex: pts.length - 1, color: "var(--color-text-primary)" }];
+        return (
+          <div key={gp.goalId} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <Tip tip={goal?.shortTermGoal || goal?.shortName || "Goal"} underline>
+              <span style={{ fontSize: 13, fontWeight: 500 }}>{goal?.shortName || "Goal"}</span>
+            </Tip>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
+              <Metric
+                name="Accuracy"
+                color={ACCURACY_COLOR}
+                values={pts.map((p) => p.accuracyPct)}
+                latest={last.accuracyPct}
+                delta={last.accuracyPct - (prev?.accuracyPct ?? last.accuracyPct)}
+                single={pts.length < 2}
+                hint={ACCURACY_DEF}
+                markers={markers}
+              />
+              <Metric
+                name="Criterion-met"
+                color={INDEPENDENCE_COLOR}
+                values={pts.map((p) => criterionMetPct(p, level))}
+                latest={criterionMetPct(last, level)}
+                delta={
+                  criterionMetPct(last, level) -
+                  (prev ? criterionMetPct(prev, level) : criterionMetPct(last, level))
+                }
+                single={pts.length < 2}
+                hint={`Correct at ${level} support or better ÷ total — toward the goal's ${target}% target`}
+                markers={markers}
+              />
+            </div>
+            <span style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>
+              {pts.length} session{pts.length === 1 ? "" : "s"}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function ResultsView({
   date,
   timeSlot,
@@ -3047,6 +3134,31 @@ export function ResultsView({
   // draft/review passes show an explanatory note instead of real pass text.
   const { demoMode } = useAuth();
   const DEMO_PASS_NOTE = "This response was generated with template logic only, no LLM calls.";
+  // Goals + saved session history (incl. the session just generated) for the
+  // per-note "Show progress" charts. Loaded once; the trends are read-only here.
+  const { state: termState, client } = useTerm();
+  const goals = termState.status === "ready" ? termState.data.goals : [];
+  const [sessions, setSessions] = useState<SessionMetadata[]>([]);
+  useEffect(() => {
+    if (!client) return;
+    let cancelled = false;
+    loadSessions(client)
+      .then((s) => {
+        if (!cancelled) setSessions(s);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [client]);
+  // Which notes have their progress charts expanded (local to this results view).
+  const [openProgress, setOpenProgress] = useState<Set<string>>(() => new Set());
+  const toggleProgress = (id: string) =>
+    setOpenProgress((s) => {
+      const next = new Set(s);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
   // The student ids being regenerated-with-feedback (modal open when non-null);
   // a single id for a per-note Regenerate, many for a bulk selection.
   const [regenTargets, setRegenTargets] = useState<string[] | null>(null);
@@ -3157,22 +3269,14 @@ export function ResultsView({
             <div style={{ display: "flex", gap: 6 }}>
               <CopyButton text={r.result?.final ?? ""} label="Copy" disabled={!r.result} />
               {!r.absent && (
-                <>
-                  <button
-                    className="button button--small"
-                    onClick={() => onToggleDrafts(r.studentId)}
-                  >
-                    {r.showDrafts ? "Hide draft" : "Show draft"}
-                  </button>
-                  <button
-                    className="button button--small"
-                    onClick={() => setRegenTargets([r.studentId])}
-                    disabled={r.regenerating}
-                    style={{ whiteSpace: "nowrap" }}
-                  >
-                    {r.regenerating ? `${PASS_LABEL[r.regenPhase ?? "draft"]}…` : "Regenerate"}
-                  </button>
-                </>
+                <button
+                  className="button button--small"
+                  onClick={() => setRegenTargets([r.studentId])}
+                  disabled={r.regenerating}
+                  style={{ whiteSpace: "nowrap" }}
+                >
+                  {r.regenerating ? `${PASS_LABEL[r.regenPhase ?? "draft"]}…` : "Regenerate"}
+                </button>
               )}
             </div>
           </div>
@@ -3215,16 +3319,52 @@ export function ResultsView({
                     <Icon name="alert-circle" size={13} /> {w}
                   </p>
                 ))}
-              {r.showDrafts && (
-                <div style={{ marginTop: 10, fontSize: 12, color: "var(--color-text-secondary)" }}>
-                  {/* Only the first (draft) pass is shown — the review pass is the
-                      final note above, so listing it separately just duplicates it. */}
-                  <details>
-                    <summary>Initial draft (before review)</summary>
-                    <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit" }}>
-                      {demoMode ? DEMO_PASS_NOTE : r.result.draft}
-                    </pre>
-                  </details>
+              {/* Toggles live BELOW the note. Show draft first; its panel (if open)
+                  renders, then Show progress below that. The two panels are styled
+                  differently (gray vs accent left-border) so they don't blur together. */}
+              {!r.absent && (
+                <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+                  <button
+                    className="button button--small"
+                    style={{ alignSelf: "flex-start" }}
+                    onClick={() => onToggleDrafts(r.studentId)}
+                  >
+                    {r.showDrafts ? "Hide draft" : "Show draft"}
+                  </button>
+                  {r.showDrafts && (
+                    <div
+                      style={{
+                        borderLeft: "2px solid var(--color-border-tertiary)",
+                        paddingLeft: 10,
+                        fontSize: 12,
+                        color: "var(--color-text-secondary)",
+                      }}
+                    >
+                      {/* The review pass is the final note above — only the initial
+                          draft adds anything, so that's all we show. */}
+                      <div style={{ fontWeight: 500, marginBottom: 3 }}>Initial draft (before review)</div>
+                      <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", margin: 0 }}>
+                        {demoMode ? DEMO_PASS_NOTE : r.result.draft}
+                      </pre>
+                    </div>
+                  )}
+                  <button
+                    className="button button--small"
+                    style={{ alignSelf: "flex-start" }}
+                    onClick={() => toggleProgress(r.studentId)}
+                  >
+                    {openProgress.has(r.studentId) ? "Hide progress" : "Show progress"}
+                  </button>
+                  {openProgress.has(r.studentId) && (
+                    <div
+                      style={{
+                        borderLeft: "2px solid var(--color-border-accent)",
+                        paddingLeft: 10,
+                      }}
+                    >
+                      <StudentProgress studentId={r.studentId} sessions={sessions} goals={goals} />
+                    </div>
+                  )}
                 </div>
               )}
             </>

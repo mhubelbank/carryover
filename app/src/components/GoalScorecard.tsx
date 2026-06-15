@@ -6,6 +6,7 @@ import type { GoalProgress, GoalSessionPoint } from "../domain/progress";
 import { TRIAL_SUPPORT_LEVELS, TRIAL_SUPPORT_TYPES } from "../domain/trial";
 import { Icon } from "./Icon";
 import { PROMPT_TYPE_ICON } from "./promptSymbols";
+import { Tip } from "./Tip";
 
 export interface Target {
   percent: number; // 0 = unset
@@ -298,25 +299,22 @@ export function Metric({
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
       <div style={{ width: 120 }}>
-        <div
-          style={{ fontSize: 12, color: "var(--color-text-secondary)", cursor: hint ? "help" : undefined }}
-          title={hint}
-        >
-          {name}
-        </div>
+        <Tip tip={hint ?? ""}>
+          <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>{name}</span>
+        </Tip>
         <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
           <span style={{ fontSize: 22, fontWeight: 500 }}>{latest}%</span>
           {!single && delta !== 0 && (
-            <span
-              title="Change since the previous session (percentage points)"
-              style={{
-                fontSize: 12,
-                cursor: "help",
-                color: delta > 0 ? "var(--color-text-success)" : "var(--color-text-danger)",
-              }}
-            >
-              {delta > 0 ? "▲" : "▼"} {Math.abs(delta)} pts
-            </span>
+            <Tip tip="Change since the previous session (percentage points)">
+              <span
+                style={{
+                  fontSize: 12,
+                  color: delta > 0 ? "var(--color-text-success)" : "var(--color-text-danger)",
+                }}
+              >
+                {delta > 0 ? "▲" : "▼"} {Math.abs(delta)} pts
+              </span>
+            </Tip>
           )}
         </div>
       </div>
