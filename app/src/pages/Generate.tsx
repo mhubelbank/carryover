@@ -3384,7 +3384,8 @@ export function ResultsView({
             style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}
           >
             <span style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 15, fontWeight: 500 }}>
-              {!r.absent && r.result && (
+              {/* Batch-select checkbox only when there's more than one note to pick among. */}
+              {selectable.length > 1 && !r.absent && r.result && (
                 <input
                   type="checkbox"
                   checked={selected.has(r.studentId)}
