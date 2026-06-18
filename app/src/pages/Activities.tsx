@@ -12,7 +12,6 @@ import { roleRefCounts } from "../domain/role";
 import { isValidFieldKey, studentFieldRefCounts, type StudentField } from "../domain/studentField";
 import { teacherColor, type Activity, type Role, type Teacher } from "../domain/teacher";
 import { fullName, type Student } from "../domain/student";
-import { StudentLink } from "../components/StudentLink";
 
 interface Pill {
   label: string;
@@ -115,13 +114,19 @@ export function Activities({ onNavigate, onOpenStudent }: Props) {
     teachers,
     state.data.activities,
   );
-  const sfBaseKeys = new Set(sfBase.map((f) => f.key));
+  // A just-added field with nothing entered yet shouldn't count as an unsaved
+  // change (or block saving other edits) — treat fully-blank fields as absent.
+  const fieldHasContent = (f: StudentField) =>
+    f.label.trim() !== "" || (f.options ?? []).some((o) => o.trim() !== "");
   const actsDirty = JSON.stringify(acts) !== JSON.stringify(actsBase);
   const rolesDirty = JSON.stringify(roles) !== JSON.stringify(rolesBase);
-  const sfDirty = JSON.stringify(sf) !== JSON.stringify(sfBase);
+  const sfDirty = JSON.stringify(sf.filter(fieldHasContent)) !== JSON.stringify(sfBase);
   const teachersDirty = JSON.stringify(teachers) !== JSON.stringify(teachersBase);
   const studentsDirty = JSON.stringify(students) !== JSON.stringify(studentsBase);
   const dirty = actsDirty || rolesDirty || sfDirty || teachersDirty || studentsDirty;
+  // Live validation so the Save button is disabled (with the reason shown) while
+  // anything is invalid — not only caught after a click.
+  const validationError = dirty ? firstError(buildCleaned()) : null;
   const dupActNames = duplicateNames(acts.map((a) => a.name));
   const dupRoleNames = duplicateNames(roles.map((r) => r.name));
   // Active people, name-sorted — the assignable candidates in each detail's
@@ -235,8 +240,9 @@ export function Activities({ onNavigate, onOpenStudent }: Props) {
       ss.map((s) => (s.id === studentId ? { ...s, fields: { ...s.fields, [key]: value } } : s)),
     );
 
-  async function handleSave() {
-    setError(null);
+  // Trim/normalize the three catalogs (blank student fields are dropped — see
+  // fieldHasContent). Shared by the validation gate and the save.
+  function buildCleaned() {
     const cleanedActs = acts.map((a) => {
       const name = a.name.trim();
       if (!a.perStudentOptions) return { ...a, name };
@@ -252,7 +258,7 @@ export function Activities({ onNavigate, onOpenStudent }: Props) {
       };
     });
     const cleanedRoles = roles.map((r) => ({ ...r, name: r.name.trim(), phrase: r.phrase.trim() }));
-    const cleanedFields: StudentField[] = sf.map((f) => {
+    const cleanedFields: StudentField[] = sf.filter(fieldHasContent).map((f) => {
       const label = f.label.trim();
       // Derive the key from the label when left blank, so typing only a label
       // is enough to save a new field.
@@ -266,67 +272,55 @@ export function Activities({ onNavigate, onOpenStudent }: Props) {
           : {}),
       };
     });
-    // Block the save on any unnamed item rather than silently dropping it.
-    if (cleanedActs.some((a) => a.name === "")) {
-      setError("Every activity needs a name.");
-      return;
-    }
-    // Per-student options, when enabled, need a label and at least one option;
-    // a non-empty wording template must reference both tokens (bare or filtered,
-    // e.g. `{options | join: "; "}`) or the chosen options / additional info
-    // silently won't appear in the note.
+    return { cleanedActs, cleanedRoles, cleanedFields };
+  }
+
+  // The first blocking validation message, or null when everything is saveable.
+  // Drives BOTH the disabled Save button and handleSave, so an invalid catalog
+  // (e.g. an unnamed activity) can never be saved.
+  function firstError({
+    cleanedActs,
+    cleanedRoles,
+    cleanedFields,
+  }: ReturnType<typeof buildCleaned>): string | null {
+    if (cleanedActs.some((a) => a.name === "")) return "Every activity needs a name.";
+    // Per-student options, when enabled, need a label, at least one option, and a
+    // wording template referencing both {options} and {info}.
     for (const a of cleanedActs) {
       const pso = a.perStudentOptions;
       if (!pso) continue;
-      if (pso.label === "") {
-        setError(`"${a.name}" per-student options: a label is required.`);
-        return;
-      }
-      if (pso.options.length === 0) {
-        setError(`"${a.name}" per-student options: add at least one option.`);
-        return;
-      }
-      // The template is what folds the selection into the note; without it the
-      // checklist renders but never affects the wording (a silent no-op).
-      if (pso.template === "") {
-        setError(`"${a.name}" per-student options: add the note wording.`);
-        return;
-      }
+      if (pso.label === "") return `"${a.name}" per-student options: a label is required.`;
+      if (pso.options.length === 0) return `"${a.name}" per-student options: add at least one option.`;
+      if (pso.template === "") return `"${a.name}" per-student options: add the note wording.`;
       if (!/\{\s*options\b/.test(pso.template) || !/\{\s*info\b/.test(pso.template)) {
-        setError(
-          `"${a.name}" per-student options: the note wording must include both {options} and {info}.`,
-        );
-        return;
+        return `"${a.name}" per-student options: the note wording must include both {options} and {info}.`;
       }
     }
-    if (cleanedRoles.some((r) => r.name === "")) {
-      setError("Every news role needs a name.");
-      return;
-    }
-    if (cleanedFields.some((f) => f.label === "")) {
-      setError("Every student field needs a name.");
-      return;
-    }
-    // A dropdown field with no options renders no choices on the Students page —
-    // a dead field. Mirrors the per-student-options rule above.
+    if (cleanedRoles.some((r) => r.name === "")) return "Every news role needs a name.";
+    if (cleanedFields.some((f) => f.label === "")) return "Every student field needs a name.";
     const emptySelect = cleanedFields.find((f) => f.type === "select" && (f.options ?? []).length === 0);
-    if (emptySelect) {
-      setError(`Dropdown field "${emptySelect.label}" needs at least one option.`);
-      return;
-    }
+    if (emptySelect) return `Dropdown field "${emptySelect.label}" needs at least one option.`;
     for (const f of cleanedFields) {
       if (!isValidFieldKey(f.key)) {
-        setError(
-          `Rename "${f.label}" — its auto-generated key "${f.key}" matches a built-in field name.`,
-        );
-        return;
+        return `Rename "${f.label}" — its auto-generated key "${f.key}" matches a built-in field name.`;
       }
     }
     const keys = cleanedFields.map((f) => f.key);
     if (new Set(keys).size !== keys.length) {
-      setError("Two student fields generate the same key — give them more distinct names.");
+      return "Two student fields generate the same key — give them more distinct names.";
+    }
+    return null;
+  }
+
+  async function handleSave() {
+    setError(null);
+    const cleaned = buildCleaned();
+    const ve = firstError(cleaned);
+    if (ve) {
+      setError(ve);
       return;
     }
+    const { cleanedActs, cleanedRoles, cleanedFields } = cleaned;
     setSaving(true);
     try {
       if (actsDirty) await saveActivities(cleanedActs);
@@ -570,7 +564,6 @@ export function Activities({ onNavigate, onOpenStudent }: Props) {
         {f ? (
           <StudentFieldDetail
             field={f}
-            keyEditable={!sfBaseKeys.has(f.key)}
             members={
               !f.key ? (
                 <p style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>
@@ -587,7 +580,6 @@ export function Activities({ onNavigate, onOpenStudent }: Props) {
                   }))}
                   onAdd={(sid) => setStudentFieldValue(f.key, sid, true)}
                   onRemove={(sid) => setStudentFieldValue(f.key, sid, false)}
-                  onOpen={onOpenStudent}
                 />
               ) : (
                 <MembersPicker
@@ -600,7 +592,6 @@ export function Activities({ onNavigate, onOpenStudent }: Props) {
                   }))}
                   onAdd={(sid) => onOpenStudent(sid)}
                   onRemove={(sid) => setStudentFieldValue(f.key, sid, [])}
-                  onOpen={onOpenStudent}
                 />
               )
             }
@@ -632,8 +623,9 @@ export function Activities({ onNavigate, onOpenStudent }: Props) {
       {dirty && (
         <SaveBar
           message="Unsaved changes"
-          problem={error}
+          problem={error ?? validationError}
           saving={saving}
+          saveDisabled={!!validationError}
           onDiscard={discard}
           onSave={handleSave}
         />
@@ -1002,45 +994,26 @@ function RoleDetail({
 
 function StudentFieldDetail({
   field,
-  keyEditable,
   members,
   onChange,
   onDelete,
 }: {
   field: StudentField;
-  keyEditable: boolean;
   members?: ReactNode;
   onChange: (patch: Partial<StudentField>) => void;
   onDelete: () => void;
 }) {
   return (
     <div className="card" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <div>
-          <label className="label">Label (shown on the Students page)</label>
-          <input
-            className="input"
-            value={field.label}
-            onChange={(e) => onChange({ label: e.target.value })}
-          />
-        </div>
-        <div>
-          {/* The key is auto-derived from the label for new fields and fixed once
-              saved (it's the CSV header and {student.key} reference). */}
-          <label className="label">Key {keyEditable ? "(auto-generated)" : "(fixed)"}</label>
-          <div
-            className="input"
-            style={{
-              fontFamily: "ui-monospace, monospace",
-              fontSize: 13,
-              color: "var(--color-text-tertiary)",
-              display: "flex",
-              alignItems: "center",
-            }}
-          >
-            {keyEditable ? slugKey(field.label) || "set a label →" : field.key}
-          </div>
-        </div>
+      {/* The internal key (CSV header, {student.key} token) is auto-derived from
+          the label — not surfaced; she only manages the label. */}
+      <div>
+        <label className="label">Label (shown on the Students page)</label>
+        <input
+          className="input"
+          value={field.label}
+          onChange={(e) => onChange({ label: e.target.value })}
+        />
       </div>
       <div style={{ maxWidth: 200 }}>
         <label className="label">Type</label>
@@ -1072,21 +1045,19 @@ function StudentFieldDetail({
 // Assign/unassign who uses a catalog item: current members show as removable
 // pills, and an "add" dropdown lists everyone not yet assigned. `onAdd` either
 // toggles membership directly (teachers, toggle fields) or opens the person to
-// set a value (multi-select fields). `onOpen` makes a member pill's name a link.
+// set a value (multi-select fields).
 function MembersPicker({
   title,
   addLabel,
   candidates,
   onAdd,
   onRemove,
-  onOpen,
 }: {
   title: string;
   addLabel: string;
   candidates: { id: string; name: string; member: boolean; bg?: string; text?: string }[];
   onAdd: (id: string) => void;
   onRemove: (id: string) => void;
-  onOpen?: (id: string) => void;
 }) {
   const members = candidates.filter((c) => c.member);
   const nonMembers = candidates.filter((c) => !c.member);
@@ -1110,13 +1081,7 @@ function MembersPicker({
                 fontWeight: 500,
               }}
             >
-              {onOpen ? (
-                <StudentLink id={m.id} onOpen={(id) => onOpen(id)} style={{ color: "inherit" }}>
-                  {m.name}
-                </StudentLink>
-              ) : (
-                <span>{m.name}</span>
-              )}
+              <span>{m.name}</span>
               <button
                 onClick={() => onRemove(m.id)}
                 title="Remove"

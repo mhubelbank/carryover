@@ -38,7 +38,7 @@ export function ErrorToaster() {
         bottom: 16,
         margin: "0 auto",
         width: "calc(100% - 3rem)",
-        maxWidth: "calc(880px - 3rem)",
+        maxWidth: "calc(920px - 3rem)",
         zIndex: 1000,
         padding: "10px 16px",
         background: "var(--color-background-danger)",

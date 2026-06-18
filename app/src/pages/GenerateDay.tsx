@@ -850,7 +850,7 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep, 
       {/* Centered to the app's usual content width, on the usual page background. */}
       <div
         style={{
-          maxWidth: 880,
+          maxWidth: 920,
           margin: "0 auto",
           minHeight: "100vh",
           display: "flex",

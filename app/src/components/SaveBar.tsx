@@ -4,7 +4,7 @@ import { Icon } from "./Icon";
 
 // Floating "unsaved changes" bar, fixed to the bottom of the viewport (so it
 // stays visible on long pages, not just when scrolled to the end) with a muted
-// amber tint. Centered and width-matched to the .shell content (max-width 880,
+// amber tint. Centered and width-matched to the .shell content (max-width 968,
 // 1.5rem side padding). Shared across every page that has a save flow. `extra`
 // slots a control before the buttons (e.g. the Schedule "Apply from" date).
 export function SaveBar({
@@ -42,7 +42,7 @@ export function SaveBar({
         bottom: 16,
         margin: "0 auto",
         width: "calc(100% - 3rem)",
-        maxWidth: "calc(880px - 3rem)",
+        maxWidth: "calc(920px - 3rem)",
         zIndex: 50,
         padding: "10px 16px",
         background: "var(--color-background-warning)",
