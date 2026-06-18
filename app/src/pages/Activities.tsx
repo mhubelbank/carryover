@@ -317,14 +317,14 @@ export function Activities({ onNavigate, onOpenStudent }: Props) {
     for (const f of cleanedFields) {
       if (!isValidFieldKey(f.key)) {
         setError(
-          `Invalid field key "${f.key}". Use letters, numbers, and underscore (no spaces/dots), not a reserved name.`,
+          `Rename "${f.label}" — its auto-generated key "${f.key}" matches a built-in field name.`,
         );
         return;
       }
     }
     const keys = cleanedFields.map((f) => f.key);
     if (new Set(keys).size !== keys.length) {
-      setError("Two student fields share a key — keys must be unique.");
+      setError("Two student fields generate the same key — give them more distinct names.");
       return;
     }
     setSaving(true);
@@ -1025,29 +1025,21 @@ function StudentFieldDetail({
           />
         </div>
         <div>
-          <label className="label">Key {keyEditable ? "" : "(fixed)"}</label>
-          {keyEditable ? (
-            <input
-              className="input"
-              style={{ fontFamily: "ui-monospace, monospace", fontSize: 13 }}
-              placeholder="e.g. language"
-              value={field.key}
-              onChange={(e) => onChange({ key: e.target.value })}
-            />
-          ) : (
-            <div
-              className="input"
-              style={{
-                fontFamily: "ui-monospace, monospace",
-                fontSize: 13,
-                color: "var(--color-text-tertiary)",
-                display: "flex",
-                alignItems: "center",
-              }}
-            >
-              {field.key}
-            </div>
-          )}
+          {/* The key is auto-derived from the label for new fields and fixed once
+              saved (it's the CSV header and {student.key} reference). */}
+          <label className="label">Key {keyEditable ? "(auto-generated)" : "(fixed)"}</label>
+          <div
+            className="input"
+            style={{
+              fontFamily: "ui-monospace, monospace",
+              fontSize: 13,
+              color: "var(--color-text-tertiary)",
+              display: "flex",
+              alignItems: "center",
+            }}
+          >
+            {keyEditable ? slugKey(field.label) || "set a label →" : field.key}
+          </div>
         </div>
       </div>
       <div style={{ maxWidth: 200 }}>

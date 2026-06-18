@@ -32,7 +32,7 @@ export class ErrorBoundary extends Component<Props, State> {
           <p style={{ color: "var(--color-text-secondary)", fontSize: 14, margin: 0 }}>
             The app hit an unexpected error and stopped this screen. Your data is safe — nothing
             is generated or saved without you. Reload to continue; if it keeps happening, open
-            Settings → Diagnostics and send the report to whoever set this up for you.
+            Settings → Diagnostics and send the report to the developer.
           </p>
           <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
             <button className="button" onClick={() => location.reload()}>
