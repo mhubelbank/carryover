@@ -31,11 +31,13 @@ export function StudentGoals({
   studentId,
   expandGoalId,
   onBack,
+  onViewReport,
   onNavigate,
 }: {
   studentId: string;
   expandGoalId?: string;
   onBack: () => void;
+  onViewReport: () => void;
   onNavigate: (page: NavPage) => void;
 }) {
   const [adding, setAdding] = useState<{ ltg: string } | null>(null);
@@ -55,6 +57,7 @@ export function StudentGoals({
       expandGoalId={expandGoalId}
       onBack={onBack}
       onAdd={(ltg) => setAdding({ ltg })}
+      onViewReport={onViewReport}
       onNavigate={onNavigate}
     />
   );
@@ -65,12 +68,14 @@ function GoalsView({
   expandGoalId,
   onBack,
   onAdd,
+  onViewReport,
   onNavigate,
 }: {
   studentId: string;
   expandGoalId?: string;
   onBack: () => void;
   onAdd: (ltg: string) => void;
+  onViewReport: () => void;
   onNavigate: (page: NavPage) => void;
 }) {
   const { state, teacherById, studentById, client, saveGoals, termHistory } = useTerm();
@@ -529,6 +534,17 @@ function GoalsView({
           onClick={() => setShowArchived((v) => !v)}
         >
           {showArchived ? "Hide" : "Show"} {archivedCount} archived
+        </button>
+      )}
+
+      {draft.length > 0 && (
+        <button
+          className="button button--primary"
+          style={{ width: "100%", marginTop: 32, justifyContent: "center" }}
+          onClick={onViewReport}
+        >
+          <Icon name="notebook" size={16} />
+          Generate progress report
         </button>
       )}
 

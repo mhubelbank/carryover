@@ -27,6 +27,7 @@ import {
 } from "../domain/generate";
 import { StudentGoals } from "./Goals";
 import { IepReview as IepReviewScreen } from "./IepReview";
+import { ProgressReport } from "./ProgressReport";
 import { StudentAvatar, firstGrapheme } from "../components/StudentAvatar";
 
 interface Props {
@@ -42,6 +43,7 @@ type View =
   | { kind: "detail"; id: string }
   | { kind: "goals"; id: string; expand?: string }
   | { kind: "iep-review"; id: string }
+  | { kind: "report"; id: string }
   | { kind: "create"; student: Student };
 
 export function Students({ onNavigate, target, onTargetConsumed }: Props) {
@@ -101,12 +103,22 @@ export function Students({ onNavigate, target, onTargetConsumed }: Props) {
       );
     }
   }
+  if (view.kind === "report") {
+    return (
+      <ProgressReport
+        studentId={view.id}
+        onBack={() => go({ kind: "goals", id: view.id })}
+        onNavigate={onNavigate}
+      />
+    );
+  }
   if (view.kind === "goals") {
     return (
       <StudentGoals
         studentId={view.id}
         expandGoalId={view.expand}
         onBack={() => go({ kind: "detail", id: view.id })}
+        onViewReport={() => go({ kind: "report", id: view.id })}
         onNavigate={onNavigate}
       />
     );

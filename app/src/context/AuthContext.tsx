@@ -1,6 +1,7 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
 import { storage, StorageKeys } from "../clients/storage";
 import { clearNotes } from "../clients/noteCache";
+import { clearReports } from "../clients/reportCache";
 
 
 export const REPO_CONFIG = {
@@ -99,6 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // shouldn't survive a sign-out on a shared device.
         storage.clear();
         void clearNotes().catch(() => {});
+        void clearReports().catch(() => {});
         setKeys(null);
         setTestMode(false);
         setGithubTokenSavedOn(null);
@@ -117,6 +119,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         storage.remove(StorageKeys.demoFs);
         storage.remove(StorageKeys.demoMinimal);
         void clearNotes().catch(() => {});
+        void clearReports().catch(() => {});
         setDemoMode(false);
       },
       githubTokenSavedOn,

@@ -29,6 +29,7 @@ import { loadPromptSet } from "../domain/notes";
 import { triggerDownload, downloadText, zipStore } from "../clients/download";
 import { buildXlsx } from "../clients/xlsx";
 import { clearNotes, getAllNotes } from "../clients/noteCache";
+import { clearReports } from "../clients/reportCache";
 import { loadThemePref, setThemePref, type ThemePref } from "../clients/theme";
 import { getErrorLog, clearErrorLog, errorLogText, errorMailto, type ErrorReport } from "../clients/errorLog";
 import { backupJson, csvBundleEntries, recentNotesTxt, termSlug, workbookSheets } from "../domain/export";
@@ -1139,7 +1140,7 @@ function ResetSection({ onSignOut, onTestMode }: { onSignOut: () => void; onTest
 
       <ResetRow
         title="Reset session cache"
-        description="Clears generated notes cached in this browser. Doesn't affect saved data."
+        description="Clears generated notes and progress reports cached in this browser. Doesn't affect saved data."
         action={
           confirming === "cache" ? (
             <div style={{ display: "flex", gap: 6 }}>
@@ -1150,6 +1151,7 @@ function ResetSection({ onSignOut, onTestMode }: { onSignOut: () => void; onTest
                 className="button button--small"
                 onClick={() => {
                   void clearNotes();
+                  void clearReports();
                   setConfirming(null);
                 }}
               >

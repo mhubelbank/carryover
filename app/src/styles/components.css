@@ -170,3 +170,61 @@ input[type="radio"] {
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+
+/* A clickable student name (e.g. on a generated note). Reads as interactive at
+   rest via a faint dotted underline, which firms up on hover/focus. Uses
+   border-bottom (not text-decoration) because AppLink sets text-decoration:none
+   inline, which a class can't override. */
+.student-link {
+  border-bottom: 1px dotted var(--color-text-tertiary);
+  padding-bottom: 1px;
+}
+.student-link:hover,
+.student-link:focus-visible {
+  border-bottom-style: solid;
+  border-bottom-color: var(--color-text-secondary);
+}
+
+/* Printing a progress report (ProgressReport.tsx). Isolate the .report-doc on the
+   page, hide all app chrome (.no-print + everything else), and force the light
+   token palette so dark-mode text stays legible on white paper. */
+@media print {
+  :root,
+  :root[data-theme="dark"] {
+    --color-background-primary: #ffffff;
+    --color-background-secondary: #f5f4ee;
+    --color-background-tertiary: #efeee7;
+    --color-text-primary: #1a1a19;
+    --color-text-secondary: #5f5e5a;
+    --color-text-tertiary: #888780;
+    --color-text-info: #0c447c;
+    --color-text-success: #27500a;
+    --color-text-warning: #633806;
+    --color-text-danger: #791f1f;
+    --color-border-tertiary: rgba(0, 0, 0, 0.1);
+  }
+  /* Reveal only the report: hide everything, then re-show the report subtree. */
+  body * {
+    visibility: hidden !important;
+  }
+  .report-doc,
+  .report-doc * {
+    visibility: visible !important;
+  }
+  .report-doc {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .report-group,
+  .report-goal {
+    break-inside: avoid;
+  }
+  @page {
+    margin: 1.5cm;
+  }
+}
