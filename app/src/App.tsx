@@ -9,7 +9,7 @@ import { ErrorToaster } from "./components/ErrorToaster";
 import { TutorialOverlay } from "./components/Tutorial/TutorialOverlay";
 import { isTutorialDone, markTutorialDone } from "./clients/tutorial";
 import { Nav, type NavPage } from "./components/Nav";
-import { NAV_PAGES, pageFromPath, pathForPage, studentHref } from "./routes";
+import { NAV_PAGES, pageFromPath, pathForPage, studentHref, teacherHref } from "./routes";
 import { storage, StorageKeys } from "./clients/storage";
 import { Welcome } from "./pages/Welcome";
 import { Settings } from "./pages/Settings";
@@ -57,12 +57,19 @@ function studentTargetFromUrl(): { id: string; view: "detail" | "goals" | "iep-r
   return { id, view: v === "goals" ? "goals" : "detail" };
 }
 
+// A teacher deep link (`/teachers?t=<id>`) → the teacher to open, so a refresh or
+// a new tab lands straight on that teacher.
+function teacherTargetFromUrl(): string | null {
+  if (pageFromPath(window.location.pathname) !== "teachers") return null;
+  return new URLSearchParams(window.location.search).get("t");
+}
+
 function Pages() {
   const [page, setPage] = useState<NavPage>(initialPage);
   const [studentTarget, setStudentTarget] = useState<
     { id: string; view: "detail" | "goals" | "iep-review" } | null
   >(studentTargetFromUrl);
-  const [openTeacherId, setOpenTeacherId] = useState<string | null>(null);
+  const [openTeacherId, setOpenTeacherId] = useState<string | null>(teacherTargetFromUrl);
   const [generateTarget, setGenerateTarget] = useState<
     { date: string; teacherId: string; studentIds: string[]; timeSlot?: string } | null
   >(null);
@@ -135,14 +142,17 @@ function Pages() {
     const onPop = () => {
       const target = pageFromPath(window.location.pathname) ?? "today";
       const st = studentTargetFromUrl();
+      const tt = teacherTargetFromUrl();
       if (target === pageRef.current) {
-        // Same tab — but a back/forward between students changes the deep link.
+        // Same tab — but a back/forward between people changes the deep link.
         if (target === "students") setStudentTarget(st);
+        if (target === "teachers") setOpenTeacherId(tt);
         return;
       }
       if (confirmNavAway()) {
         setPage(target);
         setStudentTarget(target === "students" ? st : null);
+        setOpenTeacherId(target === "teachers" ? tt : null);
       } else {
         // User kept their unsaved work — undo the Back by restoring the URL.
         window.history.pushState({ page: pageRef.current }, "", pathForPage(pageRef.current));
@@ -200,9 +210,14 @@ function Pages() {
     (id: string) => {
       if (!confirmNavAway()) return;
       setOpenTeacherId(id);
-      pushPage("teachers");
+      setPage("teachers");
+      // Reflect the teacher in the URL so a refresh / new tab deep-links to it.
+      const href = teacherHref(id);
+      if (window.location.pathname + window.location.search !== href) {
+        window.history.pushState({ page: "teachers" }, "", href);
+      }
     },
-    [pushPage],
+    [],
   );
   const clearGenerateTarget = useCallback(() => setGenerateTarget(null), []);
   const openGenerate = useCallback(

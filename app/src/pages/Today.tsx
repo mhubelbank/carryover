@@ -3,7 +3,7 @@ import { Banner } from "../components/Banner";
 import { Icon } from "../components/Icon";
 import { Nav, type NavPage } from "../components/Nav";
 import { AppLink } from "../components/AppLink";
-import { studentHref } from "../routes";
+import { studentHref, teacherHref } from "../routes";
 import { useTerm } from "../context/TermContext";
 import { useAuth } from "../context/AuthContext";
 import { isTokenRenewalDue } from "../domain/tokenRenewal";
@@ -506,22 +506,21 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate, on
                       {session.timeSlot}
                     </span>
                     <span style={{ color: "var(--color-text-tertiary)" }}>·</span>
-                    <button
-                      onClick={() => onOpenTeacher(session.teacherId)}
-                      title={`Open ${teacher?.name ?? "teacher"}`}
+                    <AppLink
+                      href={teacherHref(session.teacherId)}
+                      onActivate={() => onOpenTeacher(session.teacherId)}
+                      newTab
+                      title={`Open ${teacher?.name ?? "teacher"} in a new tab`}
                       style={{
                         fontSize: 14,
                         fontWeight: 500,
                         fontFamily: "inherit",
-                        background: "none",
-                        border: "none",
-                        padding: 0,
                         cursor: "pointer",
                         color: "var(--color-text-primary)",
                       }}
                     >
                       {teacher?.name ?? "Unknown"}
-                    </button>
+                    </AppLink>
                     {allGenerated && (
                       <span
                         style={{
@@ -575,7 +574,8 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate, on
                         key={`${id}-${i}`}
                         href={studentHref(id)}
                         onActivate={() => onOpenStudent(id)}
-                        title={`Open ${student ? fullName(student) : "student"}`}
+                        newTab
+                        title={`Open ${student ? fullName(student) : "student"} in a new tab`}
                         style={{
                           fontSize: 13,
                           fontFamily: "inherit",

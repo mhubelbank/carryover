@@ -2,9 +2,9 @@ import type { CSSProperties, ReactNode } from "react";
 import { AppLink } from "./AppLink";
 import { studentHref } from "../routes";
 
-// An inline link to a student's page. Plain click opens the detail in-app;
-// Cmd/middle-click opens it in a new tab (so a note and a student can be viewed
-// side by side). Subtly afforded — underlines on hover.
+// An inline link to a student's page. Always opens in a NEW tab (so a note and a
+// student page can sit side by side) — see AppLink newTab. Afforded as clickable
+// at rest with a dotted underline that turns solid on hover/focus (.student-link).
 export function StudentLink({
   id,
   view = "detail",
@@ -22,7 +22,8 @@ export function StudentLink({
     <AppLink
       href={studentHref(id, view)}
       onActivate={() => onOpen(id, view)}
-      className="link-affordance"
+      newTab
+      className="student-link"
       style={{ cursor: "pointer", ...style }}
     >
       {children}

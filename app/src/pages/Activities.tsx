@@ -12,6 +12,7 @@ import { roleRefCounts } from "../domain/role";
 import { isValidFieldKey, studentFieldRefCounts, type StudentField } from "../domain/studentField";
 import { teacherColor, type Activity, type Role, type Teacher } from "../domain/teacher";
 import { fullName, type Student } from "../domain/student";
+import { StudentLink } from "../components/StudentLink";
 
 interface Pill {
   label: string;
@@ -1118,13 +1119,9 @@ function MembersPicker({
               }}
             >
               {onOpen ? (
-                <button
-                  onClick={() => onOpen(m.id)}
-                  title="Open"
-                  style={{ background: "none", border: "none", cursor: "pointer", color: "inherit", padding: 0, font: "inherit" }}
-                >
+                <StudentLink id={m.id} onOpen={(id) => onOpen(id)} style={{ color: "inherit" }}>
                   {m.name}
-                </button>
+                </StudentLink>
               ) : (
                 <span>{m.name}</span>
               )}

@@ -25,3 +25,9 @@ export function pageFromPath(path: string): NavPage | null {
 export function studentHref(id: string, view: "detail" | "goals" = "detail"): string {
   return `/students?s=${encodeURIComponent(id)}${view === "goals" ? "&v=goals" : ""}`;
 }
+
+// Deep link to a teacher's detail. App reads `?t=<id>` on the teachers page at
+// load/popstate (mirrors studentHref).
+export function teacherHref(id: string): string {
+  return `/teachers?t=${encodeURIComponent(id)}`;
+}
