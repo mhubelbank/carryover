@@ -29,6 +29,7 @@ import {
   type TermData,
 } from "../domain/data";
 import { archiveKey } from "../domain/term";
+import { buildSessions } from "./Today";
 import { studentGoalProgress, studentQualSupport } from "../domain/progress";
 import { Tip } from "../components/Tip";
 import { StudentLink } from "../components/StudentLink";
@@ -53,6 +54,7 @@ import {
 import {
   scheduleFingerprint,
   setCellRoster,
+  slotStartMinutes,
   sortedTimeSlots,
   type ScheduleEntry,
   type Weekday,
@@ -180,6 +182,11 @@ export function buildVarietyNote(date: string): string {
   return weekVarietyNote(week);
 }
 
+// Sentinel time-slot meaning "every session this teacher has today". Teachers do
+// the same activity across the day, so this lets her write a teacher's whole day
+// in one form (shared activities, the union of all slots' students).
+const ALL_SLOTS = "All sessions";
+
 interface Props {
   onNavigate: (page: NavPage) => void;
   // Prefill date/teacher and pin the included student list (deep-link from
@@ -193,6 +200,12 @@ interface Props {
   onReviewIep?: (studentId: string) => void;
   // Open a student's detail/goals page (the note's name links to it).
   onOpenStudent?: (id: string, view?: "detail" | "goals") => void;
+  // Switch to the batch "whole day" view for the chosen date (carries the day's
+  // sessions; the date determines the term, same as here).
+  onGenerateDay?: (
+    date: string,
+    sessions: { teacherId: string; timeSlot: string; studentIds: string[] }[],
+  ) => void;
 }
 
 export interface StudentState {
@@ -339,7 +352,7 @@ export function blankNews(): NewsFieldValues {
   };
 }
 
-export function Generate({ onNavigate, target, onTargetConsumed, onBackToToday, onReviewIep, onOpenStudent }: Props) {
+export function Generate({ onNavigate, target, onTargetConsumed, onBackToToday, onReviewIep, onOpenStudent, onGenerateDay }: Props) {
   const { state, client, saveGoals, termHistory } = useTerm();
   const { keys, demoMode } = useAuth();
 
@@ -603,15 +616,35 @@ export function Generate({ onNavigate, target, onTargetConsumed, onBackToToday, 
     () => !!genData && (genData.term.closures ?? []).includes(date),
     [genData, date],
   );
-  const timeSlotOptions = useMemo(
-    () =>
-      teacher && weekday && inTerm && !isClosure
-        ? sortedTimeSlots(
-            effectiveSchedule.filter((e) => e.teacherId === teacher.id && e.dayOfWeek === weekday),
-          )
-        : [],
-    [effectiveSchedule, teacher, weekday, inTerm, isClosure],
+  // All of this day's scheduled sessions (across teachers) — drives the "write the
+  // whole day at once" bridge to the batch view. Empty out of term / on closures.
+  const daySessions = useMemo(
+    () => (weekday && inTerm && !isClosure ? buildSessions(effectiveSchedule, weekday) : []),
+    [effectiveSchedule, weekday, inTerm, isClosure],
   );
+  // studentId -> their time slot(s) for this teacher/day, shown next to the name in
+  // "All sessions" mode (where the roster spans slots). Joined if a student recurs.
+  const slotByStudent = useMemo(() => {
+    if (!teacher || !weekday) return {} as Record<string, string>;
+    const slots: Record<string, string[]> = {};
+    for (const e of effectiveSchedule) {
+      if (e.teacherId !== teacher.id || e.dayOfWeek !== weekday) continue;
+      (slots[e.studentId] ??= []).push(e.timeSlot);
+    }
+    const out: Record<string, string> = {};
+    for (const [id, list] of Object.entries(slots)) {
+      out[id] = [...new Set(list)].sort((a, b) => slotStartMinutes(a) - slotStartMinutes(b)).join(", ");
+    }
+    return out;
+  }, [teacher, weekday, effectiveSchedule]);
+  const timeSlotOptions = useMemo(() => {
+    if (!(teacher && weekday && inTerm && !isClosure)) return [];
+    const slots = sortedTimeSlots(
+      effectiveSchedule.filter((e) => e.teacherId === teacher.id && e.dayOfWeek === weekday),
+    );
+    // Offer "All sessions" first when the teacher has more than one slot that day.
+    return slots.length >= 2 ? [ALL_SLOTS, ...slots] : slots;
+  }, [effectiveSchedule, teacher, weekday, inTerm, isClosure]);
   // A session requires a scheduled slot for the chosen teacher on an in-term,
   // non-closure day — no ad-hoc sessions here (she adds the slot on the Schedule).
   // The activities/roster and generate action are hidden when there's no session.
@@ -620,12 +653,20 @@ export function Generate({ onNavigate, target, onTargetConsumed, onBackToToday, 
     const d = parseDate(date);
     if (!teacher || !weekday || !timeSlot || !d) return [];
     const byId = new Map(caseload.map((s) => [s.id, s] as const));
-    return effectiveSchedule
-      .filter(
-        (e) => e.teacherId === teacher.id && e.dayOfWeek === weekday && e.timeSlot === timeSlot,
-      )
-      .map((e) => e.studentId)
-      .filter((id) => byId.has(id) && isActiveOn(byId.get(id)!, d));
+    // "All sessions" = the union of every slot the teacher has that day (deduped,
+    // in schedule order); otherwise just the chosen slot.
+    const ids: string[] = [];
+    const seen = new Set<string>();
+    for (const e of effectiveSchedule) {
+      if (e.teacherId !== teacher.id || e.dayOfWeek !== weekday) continue;
+      if (timeSlot !== ALL_SLOTS && e.timeSlot !== timeSlot) continue;
+      if (seen.has(e.studentId)) continue;
+      if (byId.has(e.studentId) && isActiveOn(byId.get(e.studentId)!, d)) {
+        seen.add(e.studentId);
+        ids.push(e.studentId);
+      }
+    }
+    return ids;
   }, [effectiveSchedule, teacher, weekday, timeSlot, caseload, date]);
 
   // Load the selected date's week deviation (falls back to the template).
@@ -1017,10 +1058,10 @@ export function Generate({ onNavigate, target, onTargetConsumed, onBackToToday, 
 
     // Write the final roster back to this session's schedule cell, diverging the
     // week from the usual template (or reverting the deviation if it converges
-    // back). Skipped when there's no slot, or in past-term mode (the live schedule
-    // template belongs to the current term and must not be rewritten).
+    // back). Skipped when there's no single slot ("All sessions" spans many), or
+    // in past-term mode (the live schedule template belongs to the current term).
     const day = parseDate(date);
-    if (!pastMode && timeSlot && day) {
+    if (!pastMode && timeSlot && timeSlot !== ALL_SLOTS && day) {
       try {
         const wk = toISODate(mondayOf(day));
         const wd = weekdayName(day) as Weekday;
@@ -1283,7 +1324,13 @@ export function Generate({ onNavigate, target, onTargetConsumed, onBackToToday, 
           borderTop: `4px solid ${teacherColor(teacher?.color).bg}`,
         }}
       >
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "14px 20px" }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: `1fr 1fr 1fr 1fr${onGenerateDay && daySessions.length > 0 ? " auto" : ""}`,
+            gap: "14px 20px",
+          }}
+        >
           <div>
             <label className="label">Date</label>
             <input
@@ -1340,8 +1387,25 @@ export function Generate({ onNavigate, target, onTargetConsumed, onBackToToday, 
               ))}
             </select>
           </div>
+          {/* Bridge to the batch view: do every session this day at once (the date
+              carries over, so the term does too). Sits in-row, bottom-aligned with
+              the inputs. */}
+          {onGenerateDay && daySessions.length > 0 && (
+            <div style={{ display: "flex", alignItems: "flex-end" }}>
+              <button
+                className="button button--small button--primary"
+                style={{ whiteSpace: "nowrap" }}
+                onClick={() => onGenerateDay(date, daySessions)}
+                title="Write every session this day at once"
+              >
+                <Icon name="notebook" size={13} /> Batch
+              </button>
+            </div>
+          )}
         </div>
       </div>
+
+      
 
       {/* No session for the chosen date/teacher — explain why (mirrors Today). A
           session needs a scheduled slot, so this also covers an in-term weekday
@@ -1389,6 +1453,7 @@ export function Generate({ onNavigate, target, onTargetConsumed, onBackToToday, 
         activities={activities}
         studentState={studentState}
         scheduledIds={sessionStudentIds}
+        slotByStudent={timeSlot === ALL_SLOTS ? slotByStudent : undefined}
         setActivities={setActivities}
         setStudentState={setStudentState}
         disabled={phase === "running"}
@@ -1460,6 +1525,7 @@ export function SessionInputs({
   activities,
   studentState,
   scheduledIds,
+  slotByStudent,
   setActivities,
   setStudentState,
   disabled,
@@ -1477,6 +1543,9 @@ export function SessionInputs({
   // order) then anyone added via "Add a student", so they append to the end
   // instead of sorting into the middle of the roster.
   scheduledIds: string[];
+  // studentId -> time slot label, shown next to the name when the roster spans
+  // multiple slots ("All sessions" / whole-day). Omitted for a single slot.
+  slotByStudent?: Record<string, string>;
   setActivities: Dispatch<SetStateAction<ActivityDef[]>>;
   setStudentState: Dispatch<SetStateAction<Record<string, StudentState>>>;
   disabled: boolean;
@@ -1703,6 +1772,19 @@ export function SessionInputs({
                     </span>
                   </button>
                   <span style={{ fontSize: 16, fontWeight: 600, color: "var(--color-text-primary)" }}>{fullName(student)}</span>
+                  {slotByStudent?.[student.id] && (
+                    <span
+                      style={{
+                        fontSize: 11,
+                        color: "var(--color-text-secondary)",
+                        background: "var(--color-background-pill)",
+                        padding: "1px 7px",
+                        borderRadius: 999,
+                      }}
+                    >
+                      {slotByStudent[student.id]}
+                    </span>
+                  )}
                   <span style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>
                     {student.pronouns}
                   </span>

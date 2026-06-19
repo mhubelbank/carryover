@@ -364,6 +364,7 @@ function Pages() {
           onBackToToday={backToToday}
           onReviewIep={(id) => openStudent(id, "iep-review")}
           onOpenStudent={openStudent}
+          onGenerateDay={openGenerateDay}
         />
       );
       break;
