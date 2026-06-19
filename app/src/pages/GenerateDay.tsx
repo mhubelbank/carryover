@@ -8,7 +8,8 @@ import { isOutOfCredits } from "../clients/llm";
 import { getPipelineId, setPipelineId } from "../clients/modelPref";
 import { addToBatch, removeFromBatch } from "../clients/batch";
 import { getAllNotes } from "../clients/noteCache";
-import { appendFeedbackRule, loadFeedbackRules, loadGoldenExamples, loadSession, writeSessionMetadata } from "../domain/data";
+import { appendFeedbackRule, loadFeedbackRules, loadGoldenExamples, loadSession, loadTermArchive, writeSessionMetadata, type TermData } from "../domain/data";
+import { archiveKey } from "../domain/term";
 import { formatLong, parseDate, weekdayName } from "../domain/dates";
 import { slotStartMinutes } from "../domain/schedule";
 import { activityOptionsForGenerate } from "../domain/activity";
@@ -45,6 +46,10 @@ interface SessionSpec {
   teacherId: string;
   timeSlot: string;
   studentIds: string[];
+  // The teacher's real time slots that day (a teacher does the same activity for
+  // all of them, so the batch groups them into one entry). Used for batch-store
+  // bookkeeping (add/remove the underlying per-slot refs).
+  slots?: string[];
 }
 
 interface SessionDraft {
@@ -52,6 +57,10 @@ interface SessionDraft {
   activities: ActivityDef[];
   studentState: Record<string, StudentState>;
 }
+
+// The batch groups a teacher's whole day into one entry; this synthetic slot keys
+// that entry (and the cached notes), matching Generate's "All sessions" value.
+const WHOLE_DAY = "All sessions";
 
 const sessionKey = (teacherId: string, timeSlot: string) => `${teacherId}|${timeSlot}`;
 
@@ -102,8 +111,74 @@ interface Props {
 }
 
 export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep, onOpenStudent }: Props) {
-  const { state, client, saveGoals } = useTerm();
+  const { state, client, saveGoals, termHistory } = useTerm();
   const { keys, demoMode } = useAuth();
+
+  // Past-term batches: when the day falls in a finished term, the whole view reads
+  // from that term's frozen archive (genData) instead of the live term — mirrors
+  // Generate. The date is fixed for this view, so the term resolves once.
+  const liveData = state.status === "ready" ? state.data : null;
+  const [pastData, setPastData] = useState<TermData | null>(null);
+  const [pastApprox, setPastApprox] = useState(false);
+  const dateTermKey = useMemo(() => {
+    if (!date) return null;
+    if (liveData && date >= liveData.term.firstDay && date <= liveData.term.lastDay) return null;
+    const past = termHistory.find(
+      (t) => t.firstDay && t.lastDay && date >= t.firstDay && date <= t.lastDay,
+    );
+    return past ? archiveKey(past) : null;
+  }, [date, liveData, termHistory]);
+  const pastMode = dateTermKey !== null;
+  const genData: TermData | null = pastMode ? pastData : liveData;
+  const pastTermLabel = useMemo(
+    () => termHistory.find((t) => archiveKey(t) === dateTermKey)?.label ?? "a previous term",
+    [termHistory, dateTermKey],
+  );
+  useEffect(() => {
+    if (!dateTermKey) {
+      setPastData(null);
+      setPastApprox(false);
+      return;
+    }
+    const entry = termHistory.find((t) => archiveKey(t) === dateTermKey);
+    let cancelled = false;
+    const reconstruct = (): TermData | null =>
+      entry && liveData
+        ? {
+            term: entry,
+            teachers: liveData.teachers,
+            students: liveData.students,
+            goals: liveData.goals,
+            schedule: liveData.schedule,
+            activities: liveData.activities,
+            newsRoles: liveData.newsRoles,
+            studentFields: liveData.studentFields,
+          }
+        : null;
+    setPastData(null);
+    if (!client) {
+      setPastData(reconstruct());
+      setPastApprox(true);
+      return;
+    }
+    loadTermArchive(client, dateTermKey)
+      .then((arch) => {
+        if (cancelled) return;
+        setPastData(arch ?? reconstruct());
+        setPastApprox(!arch);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setPastData(reconstruct());
+        setPastApprox(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // liveData omitted on purpose (read via closure); re-running on live-data
+    // changes would clobber a loaded archive.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateTermKey, client, termHistory]);
 
   const [pipelineId, setPipelineIdState] = useState(getPipelineId);
   const changeModel = (id: PipelineId) => {
@@ -134,11 +209,15 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep, 
       </div>
     ) : null;
 
+  // How the rail is organized: one row per teacher (their whole day, shared
+  // activity — the default, matching her workflow) or one per teacher × slot.
+  const [groupBy, setGroupBy] = useState<"teacher" | "session">("teacher");
+  const byTeacher = groupBy === "teacher";
+
   // Sessions on this day that already have generated notes (in the local cache),
   // keyed by sessionKey → earliest generation timestamp. Drives the "✓ generated"
-  // rail markers and the "restored from generation at …" note. Loaded on mount;
-  // the cache may be wiped (Settings → Reset), in which case generated sessions
-  // simply appear like any other — not a correctness issue.
+  // rail markers and the "restored from generation at …" note. In teacher mode a
+  // note maps to the teacher's WHOLE_DAY key; in session mode to its real slot.
   const [genAt, setGenAt] = useState<Map<string, number>>(new Map());
   useEffect(() => {
     let cancelled = false;
@@ -148,7 +227,7 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep, 
         const m = new Map<string, number>();
         for (const n of all) {
           if (n.date !== date) continue;
-          const k = sessionKey(n.teacherId, n.timeSlot);
+          const k = sessionKey(n.teacherId, byTeacher ? WHOLE_DAY : n.timeSlot);
           const prev = m.get(k);
           m.set(k, prev == null ? n.generatedAt : Math.min(prev, n.generatedAt));
         }
@@ -160,34 +239,63 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep, 
     return () => {
       cancelled = true;
     };
-  }, [date]);
+  }, [date, byTeacher]);
 
-  // The rail shows the sessions she queued for the batch PLUS any already-generated
-  // sessions for the day (so they don't vanish after generation) — the latter
-  // appear disabled with a ✓ until she clicks to re-edit them. Passed-in batch
-  // specs win on roster (they reflect this week's deviations).
+  // Teachers removed from this batch via the rail's × (by teacherId).
+  const [removed, setRemoved] = useState<Set<string>>(new Set());
+
+  // The rail: in "teacher" mode, ONE row per teacher = their whole day (a teacher
+  // does the same activity for every session that day), studentIds = union of
+  // their slots, `slots` = the underlying time slots. In "session" mode, one row
+  // per teacher × slot. Either way only what she added to the batch shows (a cached
+  // note never auto-adds a row); `removed` keys match the row id of the mode.
   const railSpecs = useMemo<SessionSpec[]>(() => {
-    if (state.status !== "ready") return sessions;
-    const day = parseDate(date);
-    const daySessions = day ? buildSessions(state.data.schedule, weekdayName(day)) : [];
-    const byKey = new Map<string, SessionSpec>();
-    for (const sp of daySessions) byKey.set(sessionKey(sp.teacherId, sp.timeSlot), sp);
-    for (const sp of sessions) byKey.set(sessionKey(sp.teacherId, sp.timeSlot), sp);
-    const batchedKeys = new Set(sessions.map((sp) => sessionKey(sp.teacherId, sp.timeSlot)));
-    return [...byKey.values()]
-      .filter((sp) => {
-        const k = sessionKey(sp.teacherId, sp.timeSlot);
-        return batchedKeys.has(k) || genAt.has(k);
+    const day = genData ? parseDate(date) : null;
+    const daySessions = genData && day ? buildSessions(genData.schedule, weekdayName(day)) : [];
+
+    if (!byTeacher) {
+      const byKey = new Map<string, SessionSpec>();
+      for (const sp of daySessions)
+        byKey.set(sessionKey(sp.teacherId, sp.timeSlot), { ...sp, slots: [sp.timeSlot] });
+      for (const sp of sessions)
+        byKey.set(sessionKey(sp.teacherId, sp.timeSlot), { ...sp, slots: [sp.timeSlot] });
+      const batchedKeys = new Set(sessions.map((sp) => sessionKey(sp.teacherId, sp.timeSlot)));
+      return [...byKey.values()]
+        .filter((sp) => batchedKeys.has(sessionKey(sp.teacherId, sp.timeSlot)) && !removed.has(sessionKey(sp.teacherId, sp.timeSlot)))
+        .sort((a, b) => slotStartMinutes(a.timeSlot) - slotStartMinutes(b.timeSlot));
+    }
+
+    // Per-teacher accumulators: union of students, real slots, earliest start.
+    type Acc = { students: string[]; slots: string[]; start: number };
+    const acc = new Map<string, Acc>();
+    const bump = (teacherId: string, timeSlot: string, studentIds: string[]) => {
+      const a = acc.get(teacherId) ?? { students: [], slots: [], start: Infinity };
+      for (const id of studentIds) if (!a.students.includes(id)) a.students.push(id);
+      if (!a.slots.includes(timeSlot)) a.slots.push(timeSlot);
+      a.start = Math.min(a.start, slotStartMinutes(timeSlot));
+      acc.set(teacherId, a);
+    };
+    for (const sp of daySessions) bump(sp.teacherId, sp.timeSlot, sp.studentIds);
+    for (const sp of sessions) bump(sp.teacherId, sp.timeSlot, sp.studentIds);
+
+    const batchedTeachers = new Set(sessions.map((sp) => sp.teacherId));
+    const teacherIds = [...acc.keys()].filter(
+      (tid) => batchedTeachers.has(tid) && !removed.has(tid),
+    );
+    return teacherIds
+      .map((tid) => {
+        const a = acc.get(tid)!;
+        return { teacherId: tid, timeSlot: WHOLE_DAY, studentIds: a.students, slots: a.slots };
       })
-      .sort((a, b) => slotStartMinutes(a.timeSlot) - slotStartMinutes(b.timeSlot));
-  }, [state, sessions, date, genAt]);
+      .sort((x, y) => (acc.get(x.teacherId)!.start ?? 0) - (acc.get(y.teacherId)!.start ?? 0));
+  }, [genData, sessions, date, removed, byTeacher]);
 
   // Build per-session drafts, restoring any saved snapshot for the session
   // (date · teacher · slot) and seeding fresh otherwise. Generated sessions keep
   // their snapshot (re-saved at generation), so re-editing restores those inputs.
   const initialDrafts = useMemo<Record<string, SessionDraft>>(() => {
-    if (state.status !== "ready") return {};
-    const { students: allStudents, teachers } = state.data;
+    if (!genData) return {};
+    const { students: allStudents, teachers } = genData;
     const day = parseDate(date);
     const out: Record<string, SessionDraft> = {};
     for (const sp of railSpecs) {
@@ -195,7 +303,7 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep, 
       const key = sessionKey(sp.teacherId, sp.timeSlot);
       const snap = loadFormSnapshot(date, sp.teacherId, sp.timeSlot);
       const caseload = allStudents.filter(
-        (s) => !s.archived && s.teacherId === sp.teacherId && (!day || isActiveOn(s, day)),
+        (s) => (pastMode || !s.archived) && s.teacherId === sp.teacherId && (!day || isActiveOn(s, day)),
       );
       const defaultMode: Mode = teacher?.modes[0] ?? "regular";
       if (snap) {
@@ -217,7 +325,7 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep, 
       out[key] = { mode: defaultMode, activities: [blankActivity()], studentState };
     }
     return out;
-  }, [state, railSpecs, date]);
+  }, [genData, railSpecs, date, pastMode]);
 
   const [drafts, setDrafts] = useState<Record<string, SessionDraft>>(initialDrafts);
   // Merge in new drafts (e.g. generated sessions once the cache loads) without
@@ -228,8 +336,17 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep, 
   useEffect(() => window.scrollTo(0, 0), []);
 
   const [activeKey, setActiveKey] = useState<string>(() =>
-    sessions.length ? sessionKey(sessions[0]!.teacherId, sessions[0]!.timeSlot) : "",
+    sessions.length ? sessionKey(sessions[0]!.teacherId, WHOLE_DAY) : "",
   );
+  // Keep the active row valid as the rail changes (mode toggle, removal): if the
+  // current key isn't in the rail, snap to the first row.
+  useEffect(() => {
+    if (railSpecs.length === 0) return;
+    const keys = new Set(railSpecs.map((sp) => sessionKey(sp.teacherId, sp.timeSlot)));
+    if (!keys.has(activeKey)) {
+      setActiveKey(sessionKey(railSpecs[0]!.teacherId, railSpecs[0]!.timeSlot));
+    }
+  }, [railSpecs, activeKey]);
 
   const [phase, setPhase] = useState<"form" | "running" | "results">("form");
   const [results, setResults] = useState<ResultRow[]>([]);
@@ -266,9 +383,19 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep, 
   };
 
   if (state.status !== "ready") return null;
-  const { students: allStudents, goals, teachers } = state.data;
-  const catalog = state.data.activities;
-  const roleCatalog = state.data.newsRoles;
+  if (pastMode && !genData) {
+    return (
+      <div style={{ minHeight: "100vh", background: "var(--color-background-tertiary)" }}>
+        <div style={{ maxWidth: 920, margin: "0 auto", padding: "1.5rem" }}>
+          <p style={{ color: "var(--color-text-secondary)", fontSize: 14 }}>Loading term…</p>
+        </div>
+      </div>
+    );
+  }
+  const gd = genData!;
+  const { students: allStudents, goals, teachers } = gd;
+  const catalog = gd.activities;
+  const roleCatalog = gd.newsRoles;
   const day = parseDate(date);
 
   const specByKey = new Map(railSpecs.map((sp) => [sessionKey(sp.teacherId, sp.timeSlot), sp]));
@@ -276,12 +403,31 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep, 
   const activeTeacher = teachers.find((t) => t.id === activeSpec?.teacherId);
   const activeDraft = drafts[activeKey];
 
+  // The active teacher's whole day spans slots, so label each student with theirs.
+  const activeSlotByStudent: Record<string, string> = (() => {
+    if (!activeSpec || !day) return {};
+    const slots: Record<string, string[]> = {};
+    const add = (timeSlot: string, ids: string[]) =>
+      ids.forEach((id) => (slots[id] ??= []).push(timeSlot));
+    for (const sp of buildSessions(gd.schedule, weekdayName(day))) {
+      if (sp.teacherId === activeSpec.teacherId) add(sp.timeSlot, sp.studentIds);
+    }
+    for (const sp of sessions) {
+      if (sp.teacherId === activeSpec.teacherId) add(sp.timeSlot, sp.studentIds);
+    }
+    const out: Record<string, string> = {};
+    for (const [id, list] of Object.entries(slots)) {
+      out[id] = [...new Set(list)].sort((a, b) => slotStartMinutes(a) - slotStartMinutes(b)).join(", ");
+    }
+    return out;
+  })();
+
   // A generated session stays "locked" (disabled, ✓) until she clicks to re-edit it.
   const isLocked = (key: string) => genAt.has(key) && !reactivated.has(key);
 
   const caseloadFor = (teacherId: string) =>
     allStudents.filter(
-      (s) => !s.archived && s.teacherId === teacherId && (!day || isActiveOn(s, day)),
+      (s) => (pastMode || !s.archived) && s.teacherId === teacherId && (!day || isActiveOn(s, day)),
     );
 
   // Per-session readiness across the rail. Locked (generated, not re-edited)
@@ -296,16 +442,22 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep, 
     return m;
   }, [drafts, railSpecs]);
 
-  // Ready, non-locked sessions — gates the "Generate all" button and labels it.
-  const readySessionCount = useMemo(
-    () =>
-      railSpecs.filter((sp) => {
-        const key = sessionKey(sp.teacherId, sp.timeSlot);
-        return readyByKey[key] === "ready" && !isLocked(key);
-      }).length,
+  // Pending = sessions still to generate (not already generated/locked); ready =
+  // those of them with enough input. The button only fires when ALL pending are
+  // ready (she removes any she's skipping with the rail ×); otherwise it shows
+  // progress toward that and stays disabled.
+  const { readySessionCount, pendingSessionCount } = useMemo(() => {
+    let ready = 0;
+    let pending = 0;
+    for (const sp of railSpecs) {
+      const key = sessionKey(sp.teacherId, sp.timeSlot);
+      if (isLocked(key)) continue;
+      pending++;
+      if (readyByKey[key] === "ready") ready++;
+    }
+    return { readySessionCount: ready, pendingSessionCount: pending };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [readyByKey, railSpecs, genAt, reactivated],
-  );
+  }, [readyByKey, railSpecs, genAt, reactivated]);
 
   const updateActiveDraft = (patch: Partial<SessionDraft>) => {
     if (!activeSpec) return;
@@ -313,7 +465,8 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep, 
     // the rail — so it's included again in the next "Generate all".
     if (isLocked(activeKey)) {
       setReactivated((s) => new Set(s).add(activeKey));
-      addToBatch(date, activeSpec.teacherId, activeSpec.timeSlot);
+      // Re-queue the teacher's underlying slots so it returns on reopen.
+      (activeSpec.slots ?? []).forEach((slot) => addToBatch(date, activeSpec.teacherId, slot));
     }
     // First edit to a just-restored session dismisses the "restored from …" note.
     setRestoredAt((m) => {
@@ -339,6 +492,19 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep, 
     const ts = genAt.get(key);
     if (ts != null) setRestoredAt((m) => new Map(m).set(key, ts));
     setActiveKey(key);
+  };
+
+  // Drop a teacher from this batch (the rail ×): hide them and clear their slots
+  // from the persisted batch so they're skipped. If active, move to another row.
+  const removeSession = (sp: SessionSpec) => {
+    const key = sessionKey(sp.teacherId, sp.timeSlot);
+    (sp.slots ?? []).forEach((slot) => removeFromBatch(date, sp.teacherId, slot));
+    // `removed` is keyed to match railSpecs' filter for the current mode.
+    setRemoved((s) => new Set(s).add(byTeacher ? sp.teacherId : key));
+    if (activeKey === key) {
+      const next = railSpecs.find((r) => sessionKey(r.teacherId, r.timeSlot) !== key);
+      setActiveKey(next ? sessionKey(next.teacherId, next.timeSlot) : "");
+    }
   };
 
   // The form auto-saves as she types (scheduleSave). On close, flush every
@@ -617,23 +783,24 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep, 
 
     // Goal trial-sync across the WHOLE day in ONE write — per-session writes would
     // each start from the base `goals` and clobber earlier sessions' measurements.
-    try {
-      const allStates = readySpecs.flatMap((sp) => {
-        const draft = drafts[sessionKey(sp.teacherId, sp.timeSlot)]!;
-        return includedOf(sp, draft).map((s) => draft.studentState[s.id]!);
-      });
-      const updated = goalsWithMeasuredFromTrials(goals, allStates);
-      if (updated) await saveGoals(updated);
-    } catch {
-      // best effort — the notes are already generated
+    // Skipped in past-term mode (documenting a prior term must not mutate live goals).
+    if (!pastMode) {
+      try {
+        const allStates = readySpecs.flatMap((sp) => {
+          const draft = drafts[sessionKey(sp.teacherId, sp.timeSlot)]!;
+          return includedOf(sp, draft).map((s) => draft.studentState[s.id]!);
+        });
+        const updated = goalsWithMeasuredFromTrials(goals, allStates);
+        if (updated) await saveGoals(updated);
+      } catch {
+        // best effort — the notes are already generated
+      }
     }
 
-    // Per-session: write session metadata (keyed by date+teacher, like the
-    // single-session flow) and refresh the snapshot so a later return restores it.
-    // TODO(v1): schedule roster write-back (Generate's setCellRoster/week-schedule
-    // block) is intentionally skipped here to keep the batch tractable. Note: a
-    // teacher with multiple slots in one day shares one metadata file (date+teacher),
-    // so the last slot wins — same limitation as the single-session flow.
+    // Per-teacher: write session metadata (keyed by date+teacher) and refresh the
+    // snapshot so a later return restores it. The rail is one entry per teacher
+    // (their whole day), so the metadata file is written once — no slot clobber.
+    // Schedule roster write-back is intentionally skipped in the batch flow.
     for (const sp of readySpecs) {
       const draft = drafts[sessionKey(sp.teacherId, sp.timeSlot)]!;
       const included = includedOf(sp, draft);
@@ -654,8 +821,8 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep, 
         studentState: draft.studentState,
         sessionSig,
       });
-      // Generating the batch empties it.
-      removeFromBatch(date, sp.teacherId, sp.timeSlot);
+      // Generating the batch empties it (clear the teacher's underlying slots).
+      (sp.slots ?? []).forEach((slot) => removeFromBatch(date, sp.teacherId, slot));
     }
 
     // Re-lock the just-generated sessions so the rail shows them with a ✓ (and
@@ -869,19 +1036,61 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep, 
         }}
       >
         <h1 style={{ fontSize: 20, fontWeight: 500, margin: 0 }}>
-          Write today's notes — {longDate}
+          {pastMode ? "Write the day's notes" : "Write today's notes"} — {longDate}
         </h1>
-        {/* The form auto-saves, so the X just closes — her inputs are already
-            persisted and she can reopen the day to keep adding. */}
-        <button
-          className="button button--ghost button--small"
-          onClick={flushAndClose}
-          title="Close — your inputs auto-save, so you can come back and keep adding through the day"
-          style={{ padding: 6, color: "var(--color-text-secondary)", display: "flex" }}
-        >
-          <Icon name="x" size={18} />
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+          {/* Organize the rail by teacher (whole day) or by individual session. */}
+          <div
+            style={{
+              display: "inline-flex",
+              border: "0.5px solid var(--color-border-secondary)",
+              borderRadius: "var(--border-radius-md)",
+              overflow: "hidden",
+              fontSize: 12,
+            }}
+          >
+            {(["teacher", "session"] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => {
+                  if (groupBy === m) return;
+                  setGroupBy(m);
+                  setActiveKey("");
+                  setRemoved(new Set());
+                }}
+                style={{
+                  padding: "5px 10px",
+                  border: "none",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  background: groupBy === m ? "var(--color-background-info)" : "transparent",
+                  color: groupBy === m ? "var(--color-text-info)" : "var(--color-text-secondary)",
+                }}
+              >
+                {m === "teacher" ? "By teacher" : "By session"}
+              </button>
+            ))}
+          </div>
+          {/* The form auto-saves, so the X just closes — her inputs are already
+              persisted and she can reopen the day to keep adding. */}
+          <button
+            className="button button--ghost button--small"
+            onClick={flushAndClose}
+            title="Close — your inputs auto-save, so you can come back and keep adding through the day"
+            style={{ padding: 6, color: "var(--color-text-secondary)", display: "flex" }}
+          >
+            <Icon name="x" size={18} />
+          </button>
+        </div>
       </div>
+
+      {pastMode && (
+        <p style={{ padding: "10px 24px 0", margin: 0, fontSize: 13, color: "var(--color-text-warning)" }}>
+          <Icon name="info-circle" size={13} /> Generating for {pastTermLabel} (a previous term) —
+          roster &amp; goals are read-only.
+          {pastApprox ? " Its original schedule is unavailable; choose each session's students." : ""}
+        </p>
+      )}
 
       {creditBanner && <div style={{ padding: "12px 24px 0" }}>{creditBanner}</div>}
 
@@ -904,35 +1113,74 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep, 
             const dot = locked ? GENERATED_DOT : STATUS_DOT[ready];
             const isActive = key === activeKey;
             return (
-              <button
+              <div
                 key={key}
-                onClick={() => (locked ? openGenerated(sp) : setActiveKey(key))}
-                title={locked ? GENERATED_DOT.title : undefined}
+                className="batch-rail-row"
                 style={{
                   display: "flex",
                   alignItems: "center",
-                  gap: 8,
-                  width: "100%",
-                  textAlign: "left",
-                  fontFamily: "inherit",
-                  fontSize: 13,
-                  padding: "8px 10px",
                   marginBottom: 2,
                   borderRadius: "var(--border-radius-md)",
-                  border: "none",
-                  cursor: "pointer",
                   background: isActive ? "var(--color-background-pill)" : "transparent",
-                  color: locked ? "var(--color-text-tertiary)" : "var(--color-text-primary)",
                   borderLeft: `3px solid ${isActive ? teacherColor(teacher?.color).bg : "transparent"}`,
                 }}
               >
-                <span style={{ color: dot.color, width: 14, flexShrink: 0 }} title={dot.title}>
-                  {dot.glyph}
-                </span>
-                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {sp.timeSlot} · {teacher?.name ?? "Unknown"}
-                </span>
-              </button>
+                <button
+                  onClick={() => (locked ? openGenerated(sp) : setActiveKey(key))}
+                  title={locked ? GENERATED_DOT.title : undefined}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    flex: 1,
+                    minWidth: 0,
+                    textAlign: "left",
+                    fontFamily: "inherit",
+                    fontSize: 13,
+                    padding: "8px 10px",
+                    border: "none",
+                    background: "transparent",
+                    cursor: "pointer",
+                    color: locked ? "var(--color-text-tertiary)" : "var(--color-text-primary)",
+                  }}
+                >
+                  <span style={{ color: dot.color, width: 14, flexShrink: 0 }} title={dot.title}>
+                    {dot.glyph}
+                  </span>
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {byTeacher ? (
+                      <>
+                        {teacher?.name ?? "Unknown"}
+                        <span style={{ color: "var(--color-text-tertiary)" }}>
+                          {" "}· {sp.slots?.length ?? 1} session{(sp.slots?.length ?? 1) === 1 ? "" : "s"}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        {sp.timeSlot} · {teacher?.name ?? "Unknown"}
+                      </>
+                    )}
+                  </span>
+                </button>
+                <button
+                  className="batch-rail-remove"
+                  onClick={() => removeSession(sp)}
+                  title="Remove this session from today's batch"
+                  aria-label={`Remove ${teacher?.name ?? "session"} from the batch`}
+                  style={{
+                    flexShrink: 0,
+                    display: "flex",
+                    alignItems: "center",
+                    padding: "6px 8px",
+                    border: "none",
+                    background: "transparent",
+                    cursor: "pointer",
+                    color: "var(--color-text-tertiary)",
+                  }}
+                >
+                  <Icon name="x" size={13} />
+                </button>
+              </div>
             );
           })}
         </div>
@@ -953,7 +1201,10 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep, 
                   aria-hidden
                 />
                 <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>
-                  {activeSpec.timeSlot} · {activeTeacher.name}
+                  {activeTeacher.name}
+                  <span style={{ fontWeight: 400, color: "var(--color-text-tertiary)", fontSize: 14 }}>
+                    {" "}· {activeSpec.timeSlot }
+                  </span>
                 </h2>
                 <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
                   {savedAt && (
@@ -1053,6 +1304,7 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep, 
                 activities={activeDraft.activities}
                 studentState={activeDraft.studentState}
                 scheduledIds={activeSpec?.studentIds ?? []}
+                slotByStudent={byTeacher ? activeSlotByStudent : undefined}
                 setActivities={setActivities}
                 setStudentState={setStudentState}
                 disabled={phase === "running"}
@@ -1107,13 +1359,20 @@ export function GenerateDay({ date, sessions, onClose, onNavigate, onReviewIep, 
           <button
             className="button button--primary"
             onClick={handleGenerateAll}
-            disabled={readySessionCount === 0 || phase === "running" || (!hasModelKey && !useCanned)}
+            disabled={
+              pendingSessionCount === 0 ||
+              readySessionCount < pendingSessionCount ||
+              phase === "running" ||
+              (!hasModelKey && !useCanned)
+            }
           >
             {phase === "running"
               ? progress
-                ? `Generating… ${progress.current} of ${progress.total} done`
+                ? `Generating… ${progress.current} of ${progress.total}`
                 : "Generating…"
-              : `Generate all ready — ${readySessionCount} session${readySessionCount === 1 ? "" : "s"}`}
+              : readySessionCount < pendingSessionCount
+                ? `${readySessionCount}/${pendingSessionCount} sessions ready`
+                : `Generate ${pendingSessionCount} session${pendingSessionCount === 1 ? "" : "s"}`}
           </button>
         </div>
       </div>

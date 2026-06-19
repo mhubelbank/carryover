@@ -154,6 +154,12 @@ input[type="radio"] {
   padding: 1.5rem 1.5rem 5.5rem 1.5rem;
 }
 
+/* Batch rail "remove session" × — faint by default, reddening on hover/focus. */
+.batch-rail-remove:hover,
+.batch-rail-remove:focus-visible {
+  color: var(--color-text-danger) !important;
+}
+
 /* Schedule time-axis blocks: lift a block above its neighbors when hovered or
    focused, so a tightly-packed short block can always be read in full. */
 .schedule-block:hover,
