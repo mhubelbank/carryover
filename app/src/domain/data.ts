@@ -281,7 +281,14 @@ export function upsertTermHistory(history: ArchivedTerm[], term: ArchivedTerm): 
   const next = history.map((t) => {
     if (!sameTerm(t, term)) return t;
     merged = true;
-    return { ...t, ...term, snapshot: term.snapshot ?? t.snapshot };
+    // A new snapshot/archiveKey wins; an existing one is preserved if the incoming
+    // entry lacks it (so a later snapshot-less upsert doesn't drop them).
+    return {
+      ...t,
+      ...term,
+      snapshot: term.snapshot ?? t.snapshot,
+      archiveKey: term.archiveKey ?? t.archiveKey,
+    };
   });
   if (!merged) next.push(term);
   return next;
@@ -304,6 +311,36 @@ export function writeTermHistory(
     "data: update term history",
     sha,
   );
+}
+
+// data/term-archives/<key>.json — a full, self-contained TermData bundle frozen
+// when a term is finished, so the Generate flow can document a past term against
+// its exact roster/goals/schedule/catalogs. Heavy, so loaded lazily (only when a
+// past term is selected), unlike the always-in-memory term-history index.
+const TERM_ARCHIVES_DIR = "data/term-archives";
+
+export function termArchivePath(key: string): string {
+  return `${TERM_ARCHIVES_DIR}/${key}.json`;
+}
+
+export function writeTermArchive(client: DataClient, key: string, data: TermData): Promise<string> {
+  // Overwrite-safe without a sha: archives are written once at finish and keyed by
+  // a stable term identity, so a clobber just re-freezes the same term.
+  return client.writeFile(
+    termArchivePath(key),
+    `${JSON.stringify(data, null, 2)}\n`,
+    "data: archive term for past-term note generation",
+  );
+}
+
+export async function loadTermArchive(client: DataClient, key: string): Promise<TermData | null> {
+  const file = await client.readFile(termArchivePath(key));
+  if (!file) return null;
+  try {
+    return JSON.parse(file.text) as TermData;
+  } catch {
+    return null;
+  }
 }
 
 // Writes teachers.json; returns the new blob sha for the next safe overwrite.

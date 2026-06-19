@@ -81,6 +81,17 @@ export interface TeacherSnapshot {
 // archived before snapshots existed have no `snapshot`.
 export interface ArchivedTerm extends Term {
   snapshot?: TermSnapshot;
+  // Key of the full term archive (data/term-archives/<key>.json) written at
+  // finish, when one exists — lets the Generate term picker load that term's full
+  // roster/goals/schedule/catalogs to document it. Absent for terms finished
+  // before archives existed (the picker reconstructs from live data instead).
+  archiveKey?: string;
+}
+
+// Stable identity for a term's full archive file. A term is identified by its
+// type + first day (they don't change once set).
+export function archiveKey(term: Pick<Term, "termType" | "firstDay">): string {
+  return `${term.termType}_${term.firstDay}`;
 }
 
 // Capture the caseload as it stands at term end. Includes every student on the

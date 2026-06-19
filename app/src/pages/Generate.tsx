@@ -22,10 +22,13 @@ import {
   loadGoldenExamples,
   loadSession,
   loadSessions,
+  loadTermArchive,
   loadWeekSchedule,
   writeSessionMetadata,
   writeWeekSchedule,
+  type TermData,
 } from "../domain/data";
+import { archiveKey } from "../domain/term";
 import { studentGoalProgress, studentQualSupport } from "../domain/progress";
 import { Tip } from "../components/Tip";
 import { StudentLink } from "../components/StudentLink";
@@ -337,8 +340,17 @@ export function blankNews(): NewsFieldValues {
 }
 
 export function Generate({ onNavigate, target, onTargetConsumed, onBackToToday, onReviewIep, onOpenStudent }: Props) {
-  const { state, client, saveGoals } = useTerm();
+  const { state, client, saveGoals, termHistory } = useTerm();
   const { keys, demoMode } = useAuth();
+
+  // Past-term documentation: the form reads from a finished term's frozen archive
+  // (genData) instead of the live term whenever the chosen DATE falls inside that
+  // term — so she can write late notes for it with no extra control. pastApprox =
+  // a reconstructed context (term finished before archives existed). genData,
+  // dateTermKey, and the loader live below, after `date` is declared.
+  const liveData = state.status === "ready" ? state.data : null;
+  const [pastData, setPastData] = useState<TermData | null>(null);
+  const [pastApprox, setPastApprox] = useState(false);
 
   // The model she picked in Settings decides the provider, the API model id, and
   // which key the run needs. Held in state (seeded from the saved pref) so that
@@ -421,6 +433,73 @@ export function Generate({ onNavigate, target, onTargetConsumed, onBackToToday, 
     }
     return toISODate(toWeekday(d));
   });
+
+  // Which term the chosen date belongs to: null = the current/live term (date in
+  // its range, or no finished term covers it); otherwise the archiveKey of the
+  // finished term whose range contains the date. ISO YYYY-MM-DD sorts lexically.
+  const dateTermKey = useMemo(() => {
+    if (!date) return null;
+    if (liveData && date >= liveData.term.firstDay && date <= liveData.term.lastDay) return null;
+    const past = termHistory.find(
+      (t) => t.firstDay && t.lastDay && date >= t.firstDay && date <= t.lastDay,
+    );
+    return past ? archiveKey(past) : null;
+  }, [date, liveData, termHistory]);
+  const pastMode = dateTermKey !== null;
+  const genData: TermData | null = pastMode ? pastData : liveData;
+  const pastTermLabel = useMemo(
+    () => termHistory.find((t) => archiveKey(t) === dateTermKey)?.label ?? "a previous term",
+    [termHistory, dateTermKey],
+  );
+
+  // Load the date's term archive (or reconstruct an approximate one from live data
+  // for terms finished before archives existed). Keyed off the date-derived term.
+  useEffect(() => {
+    if (!dateTermKey) {
+      setPastData(null);
+      setPastApprox(false);
+      return;
+    }
+    const entry = termHistory.find((t) => archiveKey(t) === dateTermKey);
+    let cancelled = false;
+    const reconstruct = (): TermData | null =>
+      entry && liveData
+        ? {
+            term: entry,
+            teachers: liveData.teachers,
+            students: liveData.students,
+            goals: liveData.goals,
+            schedule: liveData.schedule,
+            activities: liveData.activities,
+            newsRoles: liveData.newsRoles,
+            studentFields: liveData.studentFields,
+          }
+        : null;
+    setPastData(null);
+    if (!client) {
+      setPastData(reconstruct());
+      setPastApprox(true);
+      return;
+    }
+    loadTermArchive(client, dateTermKey)
+      .then((arch) => {
+        if (cancelled) return;
+        setPastData(arch ?? reconstruct());
+        setPastApprox(!arch);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setPastData(reconstruct());
+        setPastApprox(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // liveData is intentionally omitted — reconstruct reads the latest via closure;
+    // re-running on every live-data change would clobber a loaded archive.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateTermKey, client, termHistory]);
+
   const [teacherId, setTeacherId] = useState<string>(
     () => initialResults?.teacherId ?? initialDraft?.teacherId ?? "",
   );
@@ -479,21 +558,26 @@ export function Generate({ onNavigate, target, onTargetConsumed, onBackToToday, 
   // teacher/caseload via useMemo and guard inside effects.
   // Generate only operates on active teachers; archived ones don't appear in
   // the picker and the default-teacher seeding skips them.
-  const teachers =
-    state.status === "ready" ? state.data.teachers.filter((t) => !t.archived) : [];
+  // Past mode keeps archived teachers/students (they were the roster then); live
+  // mode hides archived ones.
+  const teachers = genData
+    ? pastMode
+      ? genData.teachers
+      : genData.teachers.filter((t) => !t.archived)
+    : [];
   const teacher = useMemo(() => teachers.find((t) => t.id === teacherId), [teachers, teacherId]);
   const caseload = useMemo(
     () =>
-      state.status === "ready"
-        ? state.data.students.filter((s) => !s.archived && s.teacherId === teacherId)
+      genData
+        ? genData.students.filter((s) => (pastMode || !s.archived) && s.teacherId === teacherId)
         : [],
-    [state, teacherId],
+    [genData, pastMode, teacherId],
   );
 
   // Schedule-driven session: the roster defaults to whoever is scheduled for the
   // chosen (teacher, weekday, time slot); the same cell is written back on
   // generate. Uses the week's deviation if one exists, else the usual template.
-  const templateSchedule: ScheduleEntry[] = state.status === "ready" ? state.data.schedule : [];
+  const templateSchedule: ScheduleEntry[] = genData?.schedule ?? [];
   const effectiveSchedule = weekSchedule ?? templateSchedule;
   const weekKey = useMemo(() => {
     const d = parseDate(date);
@@ -507,17 +591,17 @@ export function Generate({ onNavigate, target, onTargetConsumed, onBackToToday, 
   // doesn't apply outside it, so an out-of-term date shows "No sessions this day".
   const inTerm = useMemo(() => {
     const d = parseDate(date);
-    if (!d || state.status !== "ready") return false;
-    const first = parseDate(state.data.term.firstDay);
-    const last = parseDate(state.data.term.lastDay);
+    if (!d || !genData) return false;
+    const first = parseDate(genData.term.firstDay);
+    const last = parseDate(genData.term.lastDay);
     if (first && d.getTime() < first.getTime()) return false;
     if (last && d.getTime() > last.getTime()) return false;
     return true;
-  }, [date, state]);
+  }, [date, genData]);
   // Days the clinician marked "no school" on the calendar (shared term.closures).
   const isClosure = useMemo(
-    () => state.status === "ready" && (state.data.term.closures ?? []).includes(date),
-    [state, date],
+    () => !!genData && (genData.term.closures ?? []).includes(date),
+    [genData, date],
   );
   const timeSlotOptions = useMemo(
     () =>
@@ -576,12 +660,12 @@ export function Generate({ onNavigate, target, onTargetConsumed, onBackToToday, 
   // pending deep-link target so the two setters don't race in the same commit
   // (last-setter-wins would otherwise clobber the target's teacher).
   useEffect(() => {
-    if (state.status !== "ready") return;
-    if (target) return;
+    if (!genData) return;
+    if (target && !pastMode) return;
     if (teacher) return;
-    const firstActive = state.data.teachers.find((t) => !t.archived);
-    if (firstActive) setTeacherId(firstActive.id);
-  }, [state, teacher, target]);
+    const first = (pastMode ? genData.teachers : genData.teachers.filter((t) => !t.archived))[0];
+    if (first) setTeacherId(first.id);
+  }, [genData, teacher, target, pastMode]);
 
   // Persist generated notes to the local cache (repo never stores narrative), so
   // they survive navigation/refresh and feed the recent-notes export. Re-saves
@@ -710,9 +794,19 @@ export function Generate({ onNavigate, target, onTargetConsumed, onBackToToday, 
   }, [phase, date, teacherId, timeSlot, mode, activities, studentState, sessionSig]);
 
   if (state.status !== "ready") return null;
-  const { students, goals } = state.data;
-  const catalog = state.data.activities;
-  const roleCatalog = state.data.newsRoles;
+  // A past term whose archive is still loading — wait before rendering the form.
+  if (pastMode && !genData) {
+    return (
+      <div className="shell">
+        <Nav current="generate" onNavigate={onNavigate} />
+        <p style={{ color: "var(--color-text-secondary)", fontSize: 14 }}>Loading term…</p>
+      </div>
+    );
+  }
+  const gd = genData!;
+  const { students, goals } = gd;
+  const catalog = gd.activities;
+  const roleCatalog = gd.newsRoles;
   // The activities offered in the dropdown: this teacher's catalog activities
   // plus the reserved ad-hoc "Other".
   const activityOptions = teacher ? activityOptionsForGenerate(teacher, catalog) : [];
@@ -899,11 +993,15 @@ export function Generate({ onNavigate, target, onTargetConsumed, onBackToToday, 
 
     // Sync each goal's measured verb/noun from the trial fields the clinician
     // populated this session. Non-fatal — a failure doesn't invalidate the notes.
-    try {
-      const updatedGoals = goalsWithMeasuredFromTrials(goals, includedStudents.map((s) => studentState[s.id]!));
-      if (updatedGoals) await saveGoals(updatedGoals);
-    } catch {
-      // ignore — the notes are already generated; goal sync is best-effort.
+    // Skipped in past-term mode: documenting a previous term must not mutate the
+    // live goals catalog.
+    if (!pastMode) {
+      try {
+        const updatedGoals = goalsWithMeasuredFromTrials(goals, includedStudents.map((s) => studentState[s.id]!));
+        if (updatedGoals) await saveGoals(updatedGoals);
+      } catch {
+        // ignore — the notes are already generated; goal sync is best-effort.
+      }
     }
 
     // Persist session metadata (goalIds per student, mode). Note text is never stored.
@@ -919,9 +1017,10 @@ export function Generate({ onNavigate, target, onTargetConsumed, onBackToToday, 
 
     // Write the final roster back to this session's schedule cell, diverging the
     // week from the usual template (or reverting the deviation if it converges
-    // back). Skipped when there's no slot (e.g. teacher has none that day).
+    // back). Skipped when there's no slot, or in past-term mode (the live schedule
+    // template belongs to the current term and must not be rewritten).
     const day = parseDate(date);
-    if (timeSlot && day) {
+    if (!pastMode && timeSlot && day) {
       try {
         const wk = toISODate(mondayOf(day));
         const wd = weekdayName(day) as Weekday;
@@ -1151,6 +1250,16 @@ export function Generate({ onNavigate, target, onTargetConsumed, onBackToToday, 
         </div>
       )}
 
+      {/* The chosen date lands in a finished term — quietly note we're documenting
+          it (roster & goals come from that term's archive and aren't editable). */}
+      {pastMode && (
+        <p style={{ margin: "0 0 1rem 0", fontSize: 13, color: "var(--color-text-warning)" }}>
+          <Icon name="info-circle" size={13} /> Generating for {pastTermLabel} (a previous term) —
+          roster &amp; goals are read-only.
+          {pastApprox ? " Its original schedule is unavailable; choose each session's students below." : ""}
+        </p>
+      )}
+
       {/* Lock the whole form while generating so nothing changes mid-run. The
           Generate button + progress sits outside this fieldset, staying clear. */}
       <fieldset
@@ -1241,8 +1350,8 @@ export function Generate({ onNavigate, target, onTargetConsumed, onBackToToday, 
         !hasSession &&
         (() => {
           const d = parseDate(date);
-          const f = parseDate(state.data.term.firstDay);
-          const l = parseDate(state.data.term.lastDay);
+          const f = parseDate(gd.term.firstDay);
+          const l = parseDate(gd.term.lastDay);
           const label = d ? formatLong(d) : "This day";
           return (
             <div
@@ -1251,7 +1360,7 @@ export function Generate({ onNavigate, target, onTargetConsumed, onBackToToday, 
             >
               {!inTerm && d ? (
                 <>
-                  {label} is outside the active {state.data.term.label} term
+                  {label} is outside the {pastMode ? "" : "active "}{gd.term.label} term
                   {f && l ? ` (${formatShort(f)} – ${formatShort(l)})` : ""}.
                 </>
               ) : isClosure ? (

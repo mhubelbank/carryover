@@ -206,6 +206,10 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate, on
     (!lastDay || selectedTime <= lastDay.getTime());
   const selectedIso = toISODate(selected);
   const isClosed = (term.closures ?? []).includes(selectedIso);
+  // Bound day-navigation to the active term (mirrors the Schedule week nav) so
+  // Today stays within the current term; past-term days are reached from Generate.
+  const prevDisabled = !!firstDay && stepWeekday(selected, -1).getTime() < firstDay.getTime();
+  const nextDisabled = !!lastDay && stepWeekday(selected, 1).getTime() > lastDay.getTime();
   // Birthdays / first / last / IEP days falling on the selected date — the same
   // markers the Schedule shows per day-column (shared dayEvents).
   const events = dayEvents(students, selectedIso);
@@ -251,13 +255,21 @@ export function Today({ onNavigate, onOpenStudent, onOpenTeacher, onGenerate, on
           </p>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button className="button button--small" onClick={() => setSelected((d) => stepWeekday(d, -1))}>
+          <button
+            className="button button--small"
+            onClick={() => setSelected((d) => stepWeekday(d, -1))}
+            disabled={prevDisabled}
+          >
             <Icon name="chevron-left" size={14} />
           </button>
           <button className="button button--small" onClick={() => setSelected(toWeekday(now))}>
             Today
           </button>
-          <button className="button button--small" onClick={() => setSelected((d) => stepWeekday(d, 1))}>
+          <button
+            className="button button--small"
+            onClick={() => setSelected((d) => stepWeekday(d, 1))}
+            disabled={nextDisabled}
+          >
             <Icon name="chevron-right" size={14} />
           </button>
         </div>

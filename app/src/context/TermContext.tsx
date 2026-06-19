@@ -24,6 +24,7 @@ import {
   writeStudents,
   writeTeachers,
   writeTerm,
+  writeTermArchive,
   writeTermHistory,
   type FileShas,
   type TermData,
@@ -35,6 +36,7 @@ import type { StudentField } from "../domain/studentField";
 import type { Activity, Role, Teacher } from "../domain/teacher";
 import { startOfDay, toISODate } from "../domain/dates";
 import {
+  archiveKey,
   buildTermSnapshot,
   isAutoArchiveDue,
   type ArchivedTerm,
@@ -195,6 +197,24 @@ export function TermProvider({ children }: { children: ReactNode }) {
     [client],
   );
 
+  // Best-effort write of a term's full archive bundle (data/term-archives/<key>),
+  // so it can later be documented in the Generate past-term mode. Returns the key,
+  // or undefined if it couldn't be written (the term still finishes; the past-term
+  // picker falls back to reconstructing from live data).
+  const writeArchiveBundle = useCallback(
+    async (data: TermData): Promise<string | undefined> => {
+      if (!client) return undefined;
+      const key = archiveKey(data.term);
+      try {
+        await writeTermArchive(client, key, data);
+        return key;
+      } catch {
+        return undefined;
+      }
+    },
+    [client],
+  );
+
   // Core archive: snapshot the live caseload, write it to history, stamp term.json
   // finished, and update sha/state/ref. `notify` raises the undoable banner used
   // by the automatic paths (manual Finish stays silent).
@@ -206,7 +226,10 @@ export function TermProvider({ children }: { children: ReactNode }) {
       const { term, students, teachers, goals } = data;
       const snapshot = buildTermSnapshot(term, students, teachers, goals, finishedOn);
       const finished: Term = { ...term, finishedOn };
-      await persistHistory(upsertTermHistory(termHistoryRef.current, { ...finished, snapshot }));
+      const key = await writeArchiveBundle(data);
+      await persistHistory(
+        upsertTermHistory(termHistoryRef.current, { ...finished, snapshot, archiveKey: key }),
+      );
       const termSha = await writeTerm(client, finished, shasRef.current.term);
       shasRef.current = { ...shasRef.current, term: termSha };
       dataRef.current = { ...data, term: finished };
@@ -221,9 +244,18 @@ export function TermProvider({ children }: { children: ReactNode }) {
 
   const finishTerm = useCallback((finishedOn: string) => doArchive(finishedOn, false), [doArchive]);
 
+  // Used by the new-term wizard to file the outgoing term before the new one is
+  // saved. dataRef still holds the outgoing term's data here, so capture its full
+  // archive bundle (stamped with the key) for past-term generation.
   const archiveTermToHistory = useCallback(
-    (term: ArchivedTerm) => persistHistory(upsertTermHistory(termHistoryRef.current, term)),
-    [persistHistory],
+    async (term: ArchivedTerm) => {
+      const data = dataRef.current;
+      const key = data ? await writeArchiveBundle(data) : undefined;
+      await persistHistory(
+        upsertTermHistory(termHistoryRef.current, { ...term, archiveKey: key ?? term.archiveKey }),
+      );
+    },
+    [persistHistory, writeArchiveBundle],
   );
 
   // Safety net: before the first roster/teacher overwrite once a term is over but
